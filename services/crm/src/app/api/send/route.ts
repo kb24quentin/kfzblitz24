@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getFromAddress } from "@/lib/email";
 
 // This API route processes the email send queue
 // Call it via cron job or manually to send queued emails
@@ -28,7 +29,7 @@ export async function POST() {
             const resend = new Resend(process.env.RESEND_API_KEY);
 
             const result = await resend.emails.send({
-              from: process.env.FROM_EMAIL || "kfzBlitz24 <noreply@kfzblitz24.de>",
+              from: getFromAddress(),
               to: [email.contact.email],
               subject: email.subject,
               html: email.body,

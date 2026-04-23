@@ -14,6 +14,7 @@ export default async function SettingsPage({
 
   const hasResendKey = !!process.env.RESEND_API_KEY;
   const fromEmail = process.env.FROM_EMAIL || "nicht konfiguriert";
+  const fromName = process.env.FROM_NAME?.trim() || "";
   const maskedKey = hasResendKey
     ? process.env.RESEND_API_KEY!.slice(0, 6) + "..." + process.env.RESEND_API_KEY!.slice(-4)
     : "";
@@ -86,7 +87,15 @@ export default async function SettingsPage({
               <div className="bg-primary/10 w-10 h-10 rounded-lg flex items-center justify-center"><Mail className="w-5 h-5 text-primary" /></div>
               <h3 className="font-semibold text-text">Absender</h3>
             </div>
-            <div className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary">{fromEmail}</div>
+            {fromName && (
+              <div className="text-sm font-semibold text-text mb-2">{fromName}</div>
+            )}
+            <div className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary font-mono">{fromEmail}</div>
+            {fromName && (
+              <p className="text-xs text-text-light mt-2">
+                Empfänger sehen: <span className="font-mono">&quot;{fromName}&quot; &lt;{fromEmail}&gt;</span>
+              </p>
+            )}
           </div>
 
           <div className="bg-bg-card rounded-xl border border-border p-6">

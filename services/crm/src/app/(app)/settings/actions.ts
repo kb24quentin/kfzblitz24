@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { getFromAddress } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 
@@ -38,7 +39,7 @@ export async function sendTestEmail(
       .replace(/\n/g, "<br>");
 
     const result = await resend.emails.send({
-      from: process.env.FROM_EMAIL || "noreply@kfzblitz24-group.com",
+      from: getFromAddress(),
       to: [to],
       subject,
       html: `<div style="font-family:system-ui,sans-serif;line-height:1.6;color:#111">${html}</div>`,
