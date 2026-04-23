@@ -77,6 +77,13 @@ export default async function ContactDetailPage({
   const pct = (n: number) =>
     emailStats.sent > 0 ? `${((n / emailStats.sent) * 100).toFixed(0)}%` : "—";
 
+  // All replies from this contact, newest first
+  const replies = await prisma.reply.findMany({
+    where: { contactId: id },
+    orderBy: { receivedAt: "desc" },
+    include: { email: { select: { id: true, subject: true } } },
+  });
+
   const users = await prisma.user.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
@@ -252,6 +259,47 @@ export default async function ContactDetailPage({
             contactEmail={contact.email}
             contactName={`${contact.firstName} ${contact.lastName}`}
           />
+
+          {/* Antworten vom Kunden */}
+          {replies.length > 0 && (
+            <div className="bg-bg-card rounded-xl border border-border p-4">
+              <h3 className="font-semibold text-sm text-text mb-3 flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-primary" />
+                Antworten vom Kunden ({replies.length})
+              </h3>
+              <div className="space-y-2">
+                {replies.map((r) => (
+                  <Link
+                    key={r.id}
+                    href={`/emails/${r.emailId}`}
+                    className="block p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className="text-sm font-medium text-text truncate">
+                        {r.subject ?? "(kein Betreff)"}
+                      </span>
+                      {r.status === "unread" && (
+                        <span className="text-xs bg-primary text-white px-1.5 py-0.5 rounded shrink-0">
+                          neu
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text whitespace-pre-wrap line-clamp-3">
+                      {r.body.length > 200 ? r.body.slice(0, 200) + "…" : r.body}
+                    </p>
+                    <p className="text-xs text-text-light mt-2">
+                      {new Date(r.receivedAt).toLocaleString("de-DE", {
+                        day: "2-digit", month: "2-digit", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}{" "}
+                      · auf:{" "}
+                      <span className="font-medium">{r.email.subject}</span>
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Email Historie */}
           {contact.emails.length > 0 && (
