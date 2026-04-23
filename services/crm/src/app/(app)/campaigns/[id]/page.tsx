@@ -31,6 +31,7 @@ export default async function CampaignDetailPage({
   // Stats
   const sent = emails.filter((e) => e.status !== "queued").length;
   const opened = emails.filter((e) => e.openedAt).length;
+  const clicked = emails.filter((e) => e.clickedAt).length;
   const replied = emails.filter((e) => e.repliedAt).length;
   const bounced = emails.filter((e) => e.status === "bounced").length;
   const queued = emails.filter((e) => e.status === "queued").length;
@@ -43,11 +44,13 @@ export default async function CampaignDetailPage({
         a: {
           sent: variantA.filter((e) => e.status !== "queued").length,
           opened: variantA.filter((e) => e.openedAt).length,
+          clicked: variantA.filter((e) => e.clickedAt).length,
           replied: variantA.filter((e) => e.repliedAt).length,
         },
         b: {
           sent: variantB.filter((e) => e.status !== "queued").length,
           opened: variantB.filter((e) => e.openedAt).length,
+          clicked: variantB.filter((e) => e.clickedAt).length,
           replied: variantB.filter((e) => e.repliedAt).length,
         },
       }
@@ -57,7 +60,7 @@ export default async function CampaignDetailPage({
     <CampaignDetail
       campaign={campaign}
       emails={emails}
-      stats={{ sent, opened, replied, bounced, queued, total: emails.length }}
+      stats={{ sent, opened, clicked, replied, bounced, queued, total: emails.length }}
       abStats={abStats}
     />
   );

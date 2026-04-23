@@ -128,9 +128,9 @@ model CampaignContact {
 
 model Email {
   id            String    @id @default(cuid())
-  campaignId    String
+  campaignId    String?
   contactId     String
-  templateId    String
+  templateId    String?
   variant       String?
   subject       String
   body          String
@@ -142,9 +142,9 @@ model Email {
   resendEmailId String?
   createdAt     DateTime  @default(now())
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  template Template @relation(fields: [templateId], references: [id])
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  template Template? @relation(fields: [templateId], references: [id])
   replies  Reply[]
 }
 

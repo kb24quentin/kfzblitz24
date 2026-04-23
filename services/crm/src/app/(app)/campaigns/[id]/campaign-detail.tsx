@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Pause, Send, Mail, MailOpen, MessageSquare, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { Play, Pause, Send, Mail, MailOpen, MessageSquare, AlertTriangle, MousePointerClick } from "lucide-react";
 import { updateCampaignStatus, sendCampaignEmails } from "../actions";
 
 type Props = {
@@ -23,13 +24,14 @@ type Props = {
     variant: string | null;
     sentAt: Date | null;
     openedAt: Date | null;
+    clickedAt: Date | null;
     repliedAt: Date | null;
     contact: { firstName: string; lastName: string; email: string };
   }>;
-  stats: { sent: number; opened: number; replied: number; bounced: number; queued: number; total: number };
+  stats: { sent: number; opened: number; clicked: number; replied: number; bounced: number; queued: number; total: number };
   abStats: {
-    a: { sent: number; opened: number; replied: number };
-    b: { sent: number; opened: number; replied: number };
+    a: { sent: number; opened: number; clicked: number; replied: number };
+    b: { sent: number; opened: number; clicked: number; replied: number };
   } | null;
 };
 
@@ -51,6 +53,8 @@ export function CampaignDetail({ campaign, emails, stats, abStats }: Props) {
 
   const openRate = (sent: number, opened: number) =>
     sent > 0 ? ((opened / sent) * 100).toFixed(1) : "0";
+  const clickRate = (sent: number, clicked: number) =>
+    sent > 0 ? ((clicked / sent) * 100).toFixed(1) : "0";
   const replyRate = (sent: number, replied: number) =>
     sent > 0 ? ((replied / sent) * 100).toFixed(1) : "0";
 
@@ -97,12 +101,13 @@ export function CampaignDetail({ campaign, emails, stats, abStats }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
           { label: "Gesamt", value: stats.total, icon: Mail, color: "text-text" },
           { label: "Gesendet", value: stats.sent, icon: Send, color: "text-accent" },
-          { label: "Geöffnet", value: `${openRate(stats.sent, stats.opened)}%`, icon: MailOpen, color: "text-success" },
-          { label: "Antworten", value: `${replyRate(stats.sent, stats.replied)}%`, icon: MessageSquare, color: "text-primary" },
+          { label: "Open Rate", value: `${openRate(stats.sent, stats.opened)}%`, icon: MailOpen, color: "text-success" },
+          { label: "Click Rate", value: `${clickRate(stats.sent, stats.clicked)}%`, icon: MousePointerClick, color: "text-info" },
+          { label: "Reply Rate", value: `${replyRate(stats.sent, stats.replied)}%`, icon: MessageSquare, color: "text-primary" },
           { label: "Bounced", value: stats.bounced, icon: AlertTriangle, color: "text-danger" },
         ].map((s) => (
           <div key={s.label} className="bg-bg-card rounded-xl border border-border p-4 text-center">
@@ -127,6 +132,7 @@ export function CampaignDetail({ campaign, emails, stats, abStats }: Props) {
                 <div className="space-y-1 text-sm">
                   <p>Gesendet: <span className="font-medium">{variant.data.sent}</span></p>
                   <p>Open Rate: <span className="font-medium">{openRate(variant.data.sent, variant.data.opened)}%</span></p>
+                  <p>Click Rate: <span className="font-medium">{clickRate(variant.data.sent, variant.data.clicked)}%</span></p>
                   <p>Reply Rate: <span className="font-medium">{replyRate(variant.data.sent, variant.data.replied)}%</span></p>
                 </div>
               </div>
@@ -145,19 +151,34 @@ export function CampaignDetail({ campaign, emails, stats, abStats }: Props) {
             <tr className="border-b border-border bg-bg-secondary">
               <th className="text-left p-3 font-medium text-text-light">Kontakt</th>
               <th className="text-left p-3 font-medium text-text-light">Betreff</th>
-              <th className="text-left p-3 font-medium text-text-light">Variante</th>
+              <th className="text-left p-3 font-medium text-text-light">Var</th>
               <th className="text-left p-3 font-medium text-text-light">Status</th>
+              <th className="text-center p-3 font-medium text-text-light">
+                <MailOpen className="w-3.5 h-3.5 inline" />
+              </th>
+              <th className="text-center p-3 font-medium text-text-light">
+                <MousePointerClick className="w-3.5 h-3.5 inline" />
+              </th>
               <th className="text-left p-3 font-medium text-text-light">Gesendet</th>
             </tr>
           </thead>
           <tbody>
             {emails.map((email) => (
-              <tr key={email.id} className="border-b border-border last:border-0 hover:bg-bg-secondary/50">
+              <tr
+                key={email.id}
+                className="border-b border-border last:border-0 hover:bg-bg-secondary/50 cursor-pointer"
+              >
                 <td className="p-3 font-medium">
-                  {email.contact.firstName} {email.contact.lastName}
-                  <p className="text-xs text-text-light">{email.contact.email}</p>
+                  <Link href={`/emails/${email.id}`} className="block">
+                    {email.contact.firstName} {email.contact.lastName}
+                    <p className="text-xs text-text-light">{email.contact.email}</p>
+                  </Link>
                 </td>
-                <td className="p-3 text-text-light truncate max-w-[200px]">{email.subject}</td>
+                <td className="p-3 text-text-light truncate max-w-[200px]">
+                  <Link href={`/emails/${email.id}`} className="block hover:text-text">
+                    {email.subject}
+                  </Link>
+                </td>
                 <td className="p-3">
                   {email.variant && (
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -169,17 +190,28 @@ export function CampaignDetail({ campaign, emails, stats, abStats }: Props) {
                 </td>
                 <td className="p-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    email.status === "sent" ? "bg-green-100 text-green-700"
+                    email.status === "sent" || email.status === "delivered" ? "bg-green-100 text-green-700"
                     : email.status === "opened" ? "bg-blue-100 text-blue-700"
+                    : email.status === "replied" ? "bg-purple-100 text-purple-700"
                     : email.status === "bounced" ? "bg-red-100 text-red-700"
-                    : email.status === "queued" ? "bg-gray-100 text-gray-700"
                     : "bg-gray-100 text-gray-700"
                   }`}>
                     {email.status}
                   </span>
                 </td>
+                <td className="p-3 text-center text-xs text-text-light">
+                  {email.openedAt ? "✓" : "–"}
+                </td>
+                <td className="p-3 text-center text-xs text-text-light">
+                  {email.clickedAt ? "✓" : "–"}
+                </td>
                 <td className="p-3 text-text-light text-xs">
-                  {email.sentAt ? new Date(email.sentAt).toLocaleDateString("de-DE") : "–"}
+                  {email.sentAt
+                    ? new Date(email.sentAt).toLocaleString("de-DE", {
+                        day: "2-digit", month: "2-digit", year: "2-digit",
+                        hour: "2-digit", minute: "2-digit",
+                      })
+                    : "–"}
                 </td>
               </tr>
             ))}

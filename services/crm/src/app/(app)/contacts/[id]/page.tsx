@@ -5,9 +5,11 @@ import Link from "next/link";
 import {
   ArrowLeft, Edit, Mail, Phone, Building2, MapPin, Tag,
   Calendar, User, Clock, AlertCircle, CheckCircle,
+  Send, Eye, MousePointerClick, MessageSquare,
 } from "lucide-react";
 import { ActivityTimeline } from "./activity-timeline";
 import { ReminderForm } from "./reminder-form";
+import { SendEmailForm } from "./send-email-form";
 import { StatusSelect, PrioritySelect, AssignSelect } from "./contact-actions";
 import { completeReminder } from "./actions";
 
@@ -60,6 +62,20 @@ export default async function ContactDetailPage({
   });
 
   if (!contact) notFound();
+
+  // Aggregate email stats across all of this contact's emails
+  const allEmails = await prisma.email.findMany({
+    where: { contactId: id },
+    select: { status: true, openedAt: true, clickedAt: true, repliedAt: true },
+  });
+  const emailStats = {
+    sent: allEmails.filter((e) => e.status !== "queued").length,
+    opened: allEmails.filter((e) => e.openedAt).length,
+    clicked: allEmails.filter((e) => e.clickedAt).length,
+    replied: allEmails.filter((e) => e.repliedAt).length,
+  };
+  const pct = (n: number) =>
+    emailStats.sent > 0 ? `${((n / emailStats.sent) * 100).toFixed(0)}%` : "—";
 
   const users = await prisma.user.findMany({
     where: { active: true },
@@ -217,25 +233,78 @@ export default async function ContactDetailPage({
             <ReminderForm contactId={id} />
           </div>
 
-          {/* Emails */}
+          {/* Email Stats */}
+          {emailStats.sent > 0 && (
+            <div className="bg-bg-card rounded-xl border border-border p-4">
+              <h3 className="font-semibold text-sm text-text mb-3">Email-Statistik</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <StatTile icon={Send} color="text-accent" label="Versendet" value={String(emailStats.sent)} />
+                <StatTile icon={Eye} color="text-success" label="Geöffnet" value={`${emailStats.opened} (${pct(emailStats.opened)})`} />
+                <StatTile icon={MousePointerClick} color="text-info" label="Geklickt" value={`${emailStats.clicked} (${pct(emailStats.clicked)})`} />
+                <StatTile icon={MessageSquare} color="text-primary" label="Geantwortet" value={`${emailStats.replied} (${pct(emailStats.replied)})`} />
+              </div>
+            </div>
+          )}
+
+          {/* Send direct mail */}
+          <SendEmailForm
+            contactId={id}
+            contactEmail={contact.email}
+            contactName={`${contact.firstName} ${contact.lastName}`}
+          />
+
+          {/* Email Historie */}
           {contact.emails.length > 0 && (
             <div className="bg-bg-card rounded-xl border border-border p-4">
               <h3 className="font-semibold text-sm text-text mb-3">Email-Historie</h3>
               <div className="space-y-2">
                 {contact.emails.map((email) => (
-                  <div key={email.id} className="p-3 bg-bg-secondary rounded-lg">
+                  <Link
+                    key={email.id}
+                    href={`/emails/${email.id}`}
+                    className="block p-3 bg-bg-secondary rounded-lg hover:bg-bg-secondary/70 transition-colors"
+                  >
                     <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${
-                        email.status === "opened" ? "bg-success" : email.status === "bounced" ? "bg-danger" : "bg-info"
-                      }`} />
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          email.status === "opened" || email.status === "delivered"
+                            ? "bg-success"
+                            : email.status === "bounced"
+                            ? "bg-danger"
+                            : email.status === "replied"
+                            ? "bg-primary"
+                            : "bg-info"
+                        }`}
+                      />
                       <span className="text-sm font-medium truncate">{email.subject}</span>
                     </div>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-text-light">
-                      <span>{email.campaign.name}</span>
-                      <span>· {email.status}</span>
-                      {email.sentAt && <span>· {new Date(email.sentAt).toLocaleDateString("de-DE")}</span>}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-text-light">
+                      <span>{email.campaign?.name ?? "Direkt-Mail"}</span>
+                      <span>·</span>
+                      <span>{email.status}</span>
+                      {email.sentAt && (
+                        <>
+                          <span>·</span>
+                          <span>
+                            {new Date(email.sentAt).toLocaleString("de-DE", {
+                              day: "2-digit", month: "2-digit", year: "2-digit",
+                              hour: "2-digit", minute: "2-digit",
+                            })}
+                          </span>
+                        </>
+                      )}
+                      {email.openedAt && (
+                        <span className="inline-flex items-center gap-1 text-success">
+                          · <Eye className="w-3 h-3" /> {new Date(email.openedAt).toLocaleDateString("de-DE")}
+                        </span>
+                      )}
+                      {email.clickedAt && (
+                        <span className="inline-flex items-center gap-1 text-info">
+                          · <MousePointerClick className="w-3 h-3" /> {new Date(email.clickedAt).toLocaleDateString("de-DE")}
+                        </span>
+                      )}
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -248,6 +317,28 @@ export default async function ContactDetailPage({
           <ActivityTimeline activities={contact.activities} contactId={id} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function StatTile({
+  icon: Icon,
+  color,
+  label,
+  value,
+}: {
+  icon: typeof Mail;
+  color: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="p-3 bg-bg-secondary rounded-lg">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon className={`w-3.5 h-3.5 ${color}`} />
+        <span className="text-xs text-text-light">{label}</span>
+      </div>
+      <p className="text-sm font-semibold text-text">{value}</p>
     </div>
   );
 }
