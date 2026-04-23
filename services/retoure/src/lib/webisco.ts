@@ -335,6 +335,39 @@ export async function fetchBelegByNumber(
   return { ok: true, data: result };
 }
 
+/**
+ * Append a free-text Bemerkung to an existing Beleg in Abisco.
+ * Appears in Abisco's document with timestamp + author (webisco user).
+ */
+export async function addBelegBemerkung(
+  cfg: WebiscoConfig,
+  options: {
+    typ?: "auftrag" | "rechnung" | "lieferschein" | "angebot";
+    id: string | number;
+    text: string;
+  }
+): Promise<WebiscoResult<{ ok: true }>> {
+  const typ = options.typ ?? "auftrag";
+  const id = String(options.id).replace(/^[A-Za-z]+/, "");
+  const inner = `<belegbemerkung typ="${typ}" id="${xmlEscape(id)}" text="${xmlEscape(options.text)}"/>`;
+
+  let xml: string;
+  try {
+    xml = await callWebisco(cfg, "belegbemerkung", inner);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  try {
+    const env = parseEnvelope(xml);
+    if (env.error) return { ok: false, error: env.error };
+  } catch (e) {
+    return { ok: false, error: `Parse error: ${e instanceof Error ? e.message : e}` };
+  }
+
+  return { ok: true, data: { ok: true } };
+}
+
 export function getWebiscoConfig(): WebiscoConfig | null {
   const host = process.env.WEBISCO_HOST;
   const username = process.env.WEBISCO_USERNAME;

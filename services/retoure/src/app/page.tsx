@@ -573,6 +573,7 @@ function ReviewStep({
         body: JSON.stringify({
           bestellnummer: beleg.bestellnummer,
           belegnummer: beleg.belegnummer,
+          belegid: beleg.id,
           belegdatum: beleg.belegdatum,
           rechnungsadresse: addr,
           items: selected,

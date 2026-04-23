@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
 import bwipjs from "bwip-js";
+import { addBelegBemerkung, getWebiscoConfig } from "@/lib/webisco";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,12 +30,65 @@ type Item = {
 type Body = {
   bestellnummer?: string;
   belegnummer?: string;
+  belegid?: number;
   belegdatum?: string;
   rechnungsadresse?: Address;
   items: Item[];
   shippingMode: "standard" | "sicher" | "unknown";
   requestDHLLabel?: boolean;
 };
+
+/** Build the free-text Bemerkung that gets written back to Abisco. */
+function buildBemerkungText(body: Body): string {
+  const ts = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${pad(ts.getDate())}.${pad(ts.getMonth() + 1)}.${ts.getFullYear()} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+  const addr = body.rechnungsadresse;
+  const fullName = addr
+    ? [addr.vorname, addr.name].filter(Boolean).join(" ")
+    : "";
+  const lines: string[] = [];
+  lines.push(`RETOURE ANGEMELDET AM: ${stamp}`);
+  lines.push(`Bestellnummer: ${body.bestellnummer ?? "-"}`);
+  if (body.belegdatum) lines.push(`Bestelldatum: ${body.belegdatum}`);
+  lines.push("");
+  if (fullName || addr?.email) {
+    lines.push("KUNDE:");
+    if (fullName) lines.push(`  ${fullName}`);
+    if (addr?.strasse) lines.push(`  ${addr.strasse}`);
+    if (addr?.plz || addr?.ort) lines.push(`  ${[addr?.plz, addr?.ort].filter(Boolean).join(" ")}`);
+    if (addr?.email) lines.push(`  ${addr.email}`);
+    if (addr?.telefon) lines.push(`  Tel: ${addr.telefon}`);
+    lines.push("");
+  }
+  lines.push("ANGEMELDETE ARTIKEL:");
+  let total = 0;
+  for (const it of body.items) {
+    const parts = [
+      `  ${it.menge}x  ${it.artikelnummer ?? "-"}`,
+      it.beschreibung ? `     ${it.beschreibung}` : null,
+      it.hersteller ? `     Hersteller: ${it.hersteller}` : null,
+      `     Grund: ${it.grund}`,
+      it.gesamtpreis_brutto !== undefined
+        ? `     Erstattung: ${it.gesamtpreis_brutto.toFixed(2).replace(".", ",")} EUR`
+        : null,
+    ].filter(Boolean) as string[];
+    lines.push(...parts);
+    if (it.gesamtpreis_brutto) total += it.gesamtpreis_brutto;
+  }
+  if (total > 0) {
+    lines.push("");
+    lines.push(`VORAUSSICHTLICHE ERSTATTUNG: ${total.toFixed(2).replace(".", ",")} EUR`);
+  }
+  lines.push(
+    body.shippingMode === "sicher"
+      ? `VERSAND: Sichere Rückgabe${body.requestDHLLabel ? " (DHL-Label angefordert)" : ""}`
+      : "VERSAND: Standard (Kunde trägt Rücksendekosten)"
+  );
+  lines.push("");
+  lines.push("Eingegangen über: retoure.kfzblitz24-group.com");
+  return lines.join("\n");
+}
 
 async function generateBarcodePng(data: string): Promise<Uint8Array> {
   return await bwipjs.toBuffer({
@@ -301,6 +355,24 @@ export async function POST(req: Request) {
   );
 
   const bytes = await pdf.save();
+
+  // ── Write a Bemerkung back to Abisco (best-effort, non-blocking) ──
+  const cfg = getWebiscoConfig();
+  const belegId = body.belegid ?? body.belegnummer;
+  if (cfg && belegId) {
+    const text = buildBemerkungText(body);
+    const res = await addBelegBemerkung(cfg, {
+      typ: "auftrag",
+      id: belegId,
+      text,
+    });
+    if (res.ok) {
+      console.log(`[retoure] Bemerkung written to Abisco beleg ${belegId}`);
+    } else {
+      console.warn(`[retoure] Bemerkung failed for beleg ${belegId}: ${res.error}`);
+    }
+  }
+
   return new NextResponse(bytes as BodyInit, {
     status: 200,
     headers: {
