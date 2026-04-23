@@ -10,6 +10,7 @@ import {
   Bell,
   Edit,
   Send,
+  Inbox,
 } from "lucide-react";
 import { addComment, logCall } from "./actions";
 
@@ -27,7 +28,8 @@ const typeConfig: Record<string, { icon: typeof MessageSquare; label: string; co
   comment: { icon: MessageSquare, label: "Kommentar", color: "bg-blue-500" },
   status_change: { icon: ArrowRightLeft, label: "Status", color: "bg-accent" },
   call: { icon: Phone, label: "Anruf", color: "bg-success" },
-  email_sent: { icon: Mail, label: "Email", color: "bg-purple-500" },
+  email_sent: { icon: Send, label: "Mail gesendet", color: "bg-purple-500" },
+  reply_received: { icon: Inbox, label: "Antwort erhalten", color: "bg-primary" },
   note: { icon: StickyNote, label: "Notiz", color: "bg-yellow-500" },
   reminder_created: { icon: Bell, label: "Wiedervorlage", color: "bg-info" },
   contact_edited: { icon: Edit, label: "Bearbeitet", color: "bg-gray-500" },

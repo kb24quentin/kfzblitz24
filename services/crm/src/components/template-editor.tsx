@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Save, ArrowLeft, Eye, Code, Variable } from "lucide-react";
 import Link from "next/link";
+import { RichTextEditor, type RichTextEditorHandle } from "./rich-text-editor";
 
 type TemplateData = {
   id?: string;
@@ -42,20 +43,10 @@ export function TemplateEditor({
   const [bodyHtml, setBodyHtml] = useState(template?.bodyHtml || "");
   const [subject, setSubject] = useState(template?.subject || "");
   const [showPreview, setShowPreview] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<RichTextEditorHandle>(null);
 
   const insertVariable = (varName: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = `{{${varName}}}`;
-    const newValue = bodyHtml.slice(0, start) + text + bodyHtml.slice(end);
-    setBodyHtml(newValue);
-    setTimeout(() => {
-      textarea.focus();
-      textarea.selectionStart = textarea.selectionEnd = start + text.length;
-    }, 0);
+    editorRef.current?.insertText(`{{${varName}}}`);
   };
 
   const renderPreview = (text: string) => {
@@ -148,14 +139,15 @@ export function TemplateEditor({
         </div>
 
         {!showPreview ? (
-          <textarea
-            ref={textareaRef}
-            value={bodyHtml}
-            onChange={(e) => setBodyHtml(e.target.value)}
-            rows={16}
-            className="w-full p-4 text-sm font-mono focus:outline-none resize-none"
-            placeholder={`Hallo {{first_name}},\n\nich bin von kfzBlitz24 und wollte mich kurz vorstellen.\n\nWir bieten über 1.000.000 Originalersatzteile zu günstigen Preisen – schnell bestellt und schnell geliefert.\n\nFür {{company}} in {{city}} könnten wir ein interessanter Partner sein.\n\nWürden Sie sich diese Woche 10 Minuten für ein kurzes Gespräch nehmen?\n\nMit freundlichen Grüßen\nkfzBlitz24 Team`}
-          />
+          <div className="p-3">
+            <RichTextEditor
+              ref={editorRef}
+              value={bodyHtml}
+              onChange={setBodyHtml}
+              placeholder="Hallo {{first_name}}, …"
+              minHeight={320}
+            />
+          </div>
         ) : (
           <div className="p-6">
             <div className="mb-4 pb-3 border-b border-border">
@@ -163,10 +155,9 @@ export function TemplateEditor({
               <p className="text-sm font-medium">{renderPreview(subject)}</p>
             </div>
             <div
-              className="prose prose-sm max-w-none text-text whitespace-pre-wrap"
-            >
-              {renderPreview(bodyHtml)}
-            </div>
+              className="prose prose-sm max-w-none text-text"
+              dangerouslySetInnerHTML={{ __html: renderPreview(bodyHtml) }}
+            />
           </div>
         )}
       </div>

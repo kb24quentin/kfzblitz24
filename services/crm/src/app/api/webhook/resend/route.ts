@@ -196,10 +196,19 @@ async function handleInbound(data: ResendEvent["data"]) {
     data: { status: "replied", repliedAt: new Date() },
   });
 
-  // 5. Update contact status
+  // 5. Update contact status + log activity
   await prisma.contact.update({
     where: { id: contact.id },
     data: { status: "replied" },
+  });
+
+  await prisma.activity.create({
+    data: {
+      contactId: contact.id,
+      userId: null,
+      type: "reply_received",
+      content: subject ?? "(ohne Betreff)",
+    },
   });
 
   console.log(`[resend-webhook] inbound: reply ${reply.id} from ${fromEmail} linked to email ${original.id}`);

@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { Send, CheckCircle, XCircle, Mail } from "lucide-react";
 import { sendDirectEmail, type SendDirectEmailResult } from "./actions";
+import { RichTextEditor } from "@/components/rich-text-editor";
 
 const initial: SendDirectEmailResult = { ok: false, message: "" };
 
@@ -17,6 +18,7 @@ export function SendEmailForm({
 }) {
   const [state, formAction, pending] = useActionState(sendDirectEmail, initial);
   const [open, setOpen] = useState(false);
+  const [body, setBody] = useState("");
 
   if (!open) {
     return (
@@ -43,8 +45,9 @@ export function SendEmailForm({
         </button>
       </div>
 
-      <form action={formAction} className="space-y-3" key={state.ok ? "sent" : "draft"}>
+      <form action={formAction} className="space-y-3">
         <input type="hidden" name="contactId" value={contactId} />
+        <input type="hidden" name="body" value={body} />
 
         <div>
           <label className="text-xs font-medium text-text-light mb-1 block">An</label>
@@ -66,19 +69,18 @@ export function SendEmailForm({
 
         <div>
           <label className="text-xs font-medium text-text-light mb-1 block">Inhalt</label>
-          <textarea
-            name="body"
-            required
-            rows={8}
-            placeholder={`Hallo ${contactName.split(" ")[0]},\n\n…`}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 resize-y"
+          <RichTextEditor
+            value={body}
+            onChange={setBody}
+            placeholder={`Hallo ${contactName.split(" ")[0]}, …`}
+            minHeight={180}
           />
         </div>
 
         <div className="flex items-center gap-3">
           <button
             type="submit"
-            disabled={pending}
+            disabled={pending || !body.trim()}
             className="bg-accent text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-light disabled:opacity-50 inline-flex items-center gap-2"
           >
             <Send className="w-4 h-4" /> {pending ? "Sende…" : "Senden"}

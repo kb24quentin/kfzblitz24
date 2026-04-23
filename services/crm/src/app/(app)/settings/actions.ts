@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { getFromAddress } from "@/lib/email";
+import { getFromAddress, wrapEmailHtml, htmlToPlainText } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 
@@ -32,18 +32,13 @@ export async function sendTestEmail(
   try {
     const { Resend } = await import("resend");
     const resend = new Resend(process.env.RESEND_API_KEY);
-    const html = body
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\n/g, "<br>");
 
     const result = await resend.emails.send({
       from: getFromAddress(),
       to: [to],
       subject,
-      html: `<div style="font-family:system-ui,sans-serif;line-height:1.6;color:#111">${html}</div>`,
-      text: body,
+      html: wrapEmailHtml(body),
+      text: htmlToPlainText(body),
     });
 
     if (result.error) {

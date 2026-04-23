@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { getFromAddress } from "@/lib/email";
+import { getFromAddress, wrapEmailHtml, htmlToPlainText } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 
 export type SendDirectEmailResult = { ok: boolean; message: string };
@@ -32,12 +32,7 @@ export async function sendDirectEmail(
     return { ok: false, message: "RESEND_API_KEY ist nicht gesetzt." };
   }
 
-  const html = body
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\n/g, "<br>");
-  const htmlWrapped = `<div style="font-family:system-ui,sans-serif;line-height:1.6;color:#111">${html}</div>`;
+  const htmlWrapped = wrapEmailHtml(body);
 
   let resendId: string | null = null;
   try {
@@ -48,7 +43,7 @@ export async function sendDirectEmail(
       to: [contact.email],
       subject,
       html: htmlWrapped,
-      text: body,
+      text: htmlToPlainText(body),
     });
     if (result.error) {
       return { ok: false, message: `Resend-Fehler: ${result.error.message}` };

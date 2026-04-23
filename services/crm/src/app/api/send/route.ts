@@ -54,10 +54,23 @@ export async function POST() {
             });
           }
 
-          // Update contact status
-          await prisma.contact.updateMany({
-            where: { id: email.contactId, status: "new" },
-            data: { status: "contacted" },
+          // Update contact status + lastContactedAt
+          await prisma.contact.update({
+            where: { id: email.contactId },
+            data: {
+              lastContactedAt: new Date(),
+              ...(email.contact.status === "new" ? { status: "contacted" } : {}),
+            },
+          });
+
+          // Activity log entry — system action (no userId)
+          await prisma.activity.create({
+            data: {
+              contactId: email.contactId,
+              userId: null,
+              type: "email_sent",
+              content: `Kampagne: ${campaign.name} — ${email.subject}`,
+            },
           });
 
           totalSent++;
