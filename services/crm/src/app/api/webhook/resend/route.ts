@@ -146,10 +146,32 @@ function extractInReplyTo(headers: unknown): string | null {
   );
 }
 
+async function fetchInboundBody(emailId: string): Promise<string> {
+  if (!process.env.RESEND_API_KEY) return "";
+  try {
+    const res = await fetch(`https://api.resend.com/emails/inbound/${emailId}`, {
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+    });
+    if (!res.ok) {
+      console.warn(`[resend-webhook] inbound fetch failed: ${res.status}`);
+      return "";
+    }
+    const data = (await res.json()) as { text?: string; html?: string };
+    return (data.text || data.html || "").trim();
+  } catch (e) {
+    console.warn("[resend-webhook] inbound fetch error:", e);
+    return "";
+  }
+}
+
 async function handleInbound(data: ResendEvent["data"]) {
   const fromEmail = extractFromEmail(data.from);
   const subject = data.subject ?? null;
-  const body = (data.text as string) || (data.html as string) || "";
+  // The webhook payload is metadata-only; fetch the actual message body
+  // separately via the Resend API (text > html fallback).
+  const body = data.email_id
+    ? await fetchInboundBody(data.email_id)
+    : (data.text as string) || (data.html as string) || "";
   const inReplyTo = extractInReplyTo(data.headers);
 
   if (!fromEmail) {
