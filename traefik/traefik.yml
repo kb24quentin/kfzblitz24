@@ -33,7 +33,7 @@ providers:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: ${ACME_EMAIL}
+      # Email is set via TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL env var
       storage: /letsencrypt/acme.json
       httpChallenge:
         entryPoint: web
