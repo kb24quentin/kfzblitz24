@@ -99,12 +99,26 @@ export default async function ContactDetailPage({
           <ArrowLeft className="w-5 h-5 text-text-light" />
         </Link>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-text">
               {contact.firstName} {contact.lastName}
             </h1>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${priorityColors[contact.priority]}`}>
               {priorityLabels[contact.priority]}
+            </span>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                contact.outreach === "local"
+                  ? "bg-orange-100 text-orange-700"
+                  : "bg-blue-100 text-blue-700"
+              }`}
+              title={
+                contact.outreach === "local"
+                  ? "Local — wird in Mail-Kampagnen ausgeschlossen"
+                  : "Remote — Mail-Outreach"
+              }
+            >
+              {contact.outreach === "local" ? "Local" : "Remote"}
             </span>
           </div>
           <p className="text-sm text-text-light">

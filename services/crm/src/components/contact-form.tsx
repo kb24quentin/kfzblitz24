@@ -17,6 +17,7 @@ type ContactData = {
   tags?: string;
   priority?: string;
   source?: string;
+  outreach?: string;
   assignedToId?: string | null;
 };
 
@@ -113,6 +114,21 @@ export function ContactForm({
               placeholder="Muenchen"
             />
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Outreach Typ *</label>
+          <select
+            name="outreach"
+            defaultValue={contact?.outreach || "remote"}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+          >
+            <option value="remote">Remote — Mail-Outreach</option>
+            <option value="local">Local — vor Ort besuchen (kein Mail-Versand)</option>
+          </select>
+          <p className="text-xs text-text-light mt-1">
+            &quot;Local&quot; werden in Kampagnen standardmäßig ausgeschlossen damit sie keine Mails bekommen.
+          </p>
         </div>
 
         {contact?.id && (

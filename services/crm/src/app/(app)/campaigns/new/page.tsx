@@ -7,8 +7,16 @@ export default async function NewCampaignPage() {
   const [templates, contacts] = await Promise.all([
     prisma.template.findMany({ orderBy: { name: "asc" } }),
     prisma.contact.findMany({
-      where: { status: { in: ["new", "contacted"] } },
       orderBy: { lastName: "asc" },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        company: true,
+        status: true,
+        outreach: true,
+      },
     }),
   ]);
 

@@ -35,6 +35,7 @@ model Contact {
   tags            String    @default("[]")
   priority        String    @default("medium") // low, medium, high
   source          String    @default("manual") // manual, import, website
+  outreach        String    @default("remote") // remote (mail), local (visit in person — exclude from campaigns)
   assignedToId    String?
   lastContactedAt DateTime?
   createdAt       DateTime  @default(now())
