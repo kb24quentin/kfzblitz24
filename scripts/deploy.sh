@@ -46,14 +46,31 @@ deploy_traefik() {
 
 deploy_service() {
   local svc="$1"
-  local compose_file="services/$svc/docker-compose.$ENV.yml"
-  if [[ ! -f "$compose_file" ]]; then
+  local svc_dir="$REPO_DIR/services/$svc"
+  local compose_file="docker-compose.$ENV.yml"
+  local env_file=".env.$ENV"
+
+  if [[ ! -f "$svc_dir/$compose_file" ]]; then
     echo "  - skip $svc (no $compose_file)"
     return
   fi
+
   echo "==> Deploying $svc ($ENV)"
-  docker compose -p "${svc}_${ENV}" -f "$compose_file" pull
-  docker compose -p "${svc}_${ENV}" -f "$compose_file" up -d
+  cd "$svc_dir"
+
+  local args=(-p "${svc}_${ENV}" -f "$compose_file")
+  if [[ -f "$env_file" ]]; then
+    args+=(--env-file "$env_file")
+  else
+    echo "  ! no $env_file found in $svc_dir (services with secrets will fail)"
+  fi
+
+  # Build (no-op for services without `build:` directive)
+  docker compose "${args[@]}" build --pull
+  # Up: brings up new + recreates if image/config changed
+  docker compose "${args[@]}" up -d --remove-orphans
+
+  cd "$REPO_DIR"
 }
 
 if [[ "$SERVICE" == "traefik" ]]; then

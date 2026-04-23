@@ -1,0 +1,253 @@
+export const dynamic = "force-dynamic";
+import { prisma } from "@/lib/db";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import {
+  ArrowLeft, Edit, Mail, Phone, Building2, MapPin, Tag,
+  Calendar, User, Clock, AlertCircle, CheckCircle,
+} from "lucide-react";
+import { ActivityTimeline } from "./activity-timeline";
+import { ReminderForm } from "./reminder-form";
+import { StatusSelect, PrioritySelect, AssignSelect } from "./contact-actions";
+import { completeReminder } from "./actions";
+
+const statusColors: Record<string, string> = {
+  new: "bg-blue-100 text-blue-700",
+  contacted: "bg-yellow-100 text-yellow-700",
+  replied: "bg-green-100 text-green-700",
+  interested: "bg-emerald-100 text-emerald-700",
+  not_interested: "bg-red-100 text-red-700",
+  customer: "bg-purple-100 text-purple-700",
+};
+
+const priorityColors: Record<string, string> = {
+  low: "bg-gray-100 text-gray-600",
+  medium: "bg-yellow-100 text-yellow-700",
+  high: "bg-red-100 text-red-700",
+};
+
+const priorityLabels: Record<string, string> = {
+  low: "Niedrig", medium: "Mittel", high: "Hoch",
+};
+
+export default async function ContactDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
+  const contact = await prisma.contact.findUnique({
+    where: { id },
+    include: {
+      assignedTo: true,
+      activities: {
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: { user: true },
+      },
+      reminders: {
+        where: { status: { not: "done" } },
+        orderBy: { dueDate: "asc" },
+        include: { user: true },
+      },
+      emails: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: { campaign: true },
+      },
+    },
+  });
+
+  if (!contact) notFound();
+
+  const users = await prisma.user.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+  });
+
+  const tags = JSON.parse(contact.tags || "[]") as string[];
+
+  return (
+    <div className="space-y-6">
+      {/* Back + Header */}
+      <div className="flex items-center gap-4">
+        <Link href="/contacts" className="p-2 hover:bg-bg-card rounded-lg transition-colors">
+          <ArrowLeft className="w-5 h-5 text-text-light" />
+        </Link>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-text">
+              {contact.firstName} {contact.lastName}
+            </h1>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${priorityColors[contact.priority]}`}>
+              {priorityLabels[contact.priority]}
+            </span>
+          </div>
+          <p className="text-sm text-text-light">
+            {contact.company && `${contact.company} · `}{contact.position && `${contact.position} · `}{contact.city}
+          </p>
+        </div>
+        <Link
+          href={`/contacts/${id}/edit`}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-light transition-colors"
+        >
+          <Edit className="w-4 h-4" /> Bearbeiten
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column: Info + Reminders + Emails */}
+        <div className="space-y-4">
+          {/* Controls */}
+          <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-text-light mb-1">Status</label>
+              <StatusSelect contactId={id} currentStatus={contact.status} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-light mb-1">Prioritaet</label>
+              <PrioritySelect contactId={id} currentPriority={contact.priority} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-light mb-1">Zugewiesen an</label>
+              <AssignSelect contactId={id} currentAssignedId={contact.assignedToId} users={users} />
+            </div>
+          </div>
+
+          {/* Contact Info */}
+          <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
+            <h3 className="font-semibold text-sm text-text">Kontaktdaten</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-text-light" />
+                <a href={`mailto:${contact.email}`} className="text-accent hover:underline">{contact.email}</a>
+              </div>
+              {contact.phone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-text-light" />
+                  <a href={`tel:${contact.phone}`} className="hover:text-accent">{contact.phone}</a>
+                </div>
+              )}
+              {contact.company && (
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-text-light" />
+                  <span>{contact.company}{contact.position && ` · ${contact.position}`}</span>
+                </div>
+              )}
+              {contact.city && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-text-light" />
+                  <span>{contact.city}</span>
+                </div>
+              )}
+              {contact.assignedTo && (
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-text-light" />
+                  <span>Zugewiesen: {contact.assignedTo.name}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-text-light" />
+                <span className="text-text-light">Erstellt: {new Date(contact.createdAt).toLocaleDateString("de-DE")}</span>
+              </div>
+              {contact.lastContactedAt && (
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-text-light" />
+                  <span className="text-text-light">Letzter Kontakt: {new Date(contact.lastContactedAt).toLocaleDateString("de-DE")}</span>
+                </div>
+              )}
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-2 border-t border-border">
+                {tags.map((t) => (
+                  <span key={t} className="flex items-center gap-1 text-xs bg-bg-secondary px-2 py-0.5 rounded-full text-text-light">
+                    <Tag className="w-3 h-3" /> {t}
+                  </span>
+                ))}
+              </div>
+            )}
+            {contact.notes && (
+              <div className="pt-2 border-t border-border">
+                <p className="text-xs text-text-light font-medium mb-1">Notizen</p>
+                <p className="text-sm text-text whitespace-pre-wrap">{contact.notes}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Reminders */}
+          <div className="bg-bg-card rounded-xl border border-border p-4">
+            <h3 className="font-semibold text-sm text-text mb-3">Wiedervorlagen</h3>
+            {contact.reminders.length === 0 ? (
+              <p className="text-xs text-text-light mb-3">Keine offenen Wiedervorlagen</p>
+            ) : (
+              <div className="space-y-2 mb-3">
+                {contact.reminders.map((r) => {
+                  const isOverdue = new Date(r.dueDate) < new Date();
+                  return (
+                    <div key={r.id} className={`p-3 rounded-lg text-sm ${isOverdue ? "bg-red-50 border border-red-200" : "bg-bg-secondary"}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-text">{r.title}</span>
+                        <form action={async () => {
+                          "use server";
+                          await completeReminder(r.id, contact.id);
+                        }}>
+                          <button type="submit" className="text-xs px-2 py-1 bg-success/10 text-success rounded-lg hover:bg-success/20 transition-colors font-medium">
+                            Erledigt
+                          </button>
+                        </form>
+                      </div>
+                      {r.description && <p className="text-xs text-text-light mt-1">{r.description}</p>}
+                      <div className="flex items-center gap-2 mt-1">
+                        {isOverdue ? (
+                          <AlertCircle className="w-3 h-3 text-danger" />
+                        ) : (
+                          <Clock className="w-3 h-3 text-text-light" />
+                        )}
+                        <span className={`text-xs ${isOverdue ? "text-danger font-medium" : "text-text-light"}`}>
+                          {new Date(r.dueDate).toLocaleDateString("de-DE")}
+                        </span>
+                        <span className="text-xs text-text-light">· {r.user.name}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <ReminderForm contactId={id} />
+          </div>
+
+          {/* Emails */}
+          {contact.emails.length > 0 && (
+            <div className="bg-bg-card rounded-xl border border-border p-4">
+              <h3 className="font-semibold text-sm text-text mb-3">Email-Historie</h3>
+              <div className="space-y-2">
+                {contact.emails.map((email) => (
+                  <div key={email.id} className="p-3 bg-bg-secondary rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${
+                        email.status === "opened" ? "bg-success" : email.status === "bounced" ? "bg-danger" : "bg-info"
+                      }`} />
+                      <span className="text-sm font-medium truncate">{email.subject}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-text-light">
+                      <span>{email.campaign.name}</span>
+                      <span>· {email.status}</span>
+                      {email.sentAt && <span>· {new Date(email.sentAt).toLocaleDateString("de-DE")}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Activity Timeline */}
+        <div className="lg:col-span-2">
+          <h3 className="font-semibold text-text mb-4">Aktivitaeten</h3>
+          <ActivityTimeline activities={contact.activities} contactId={id} />
+        </div>
+      </div>
+    </div>
+  );
+}
