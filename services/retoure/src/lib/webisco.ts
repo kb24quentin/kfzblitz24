@@ -109,17 +109,23 @@ async function callWebisco(
 ): Promise<string> {
   const body = buildEnvelope(cfg, innerXml);
   const url = `${cfg.host.replace(/\/$/, "")}/${resource}`;
+  if (process.env.WEBISCO_DEBUG === "true") {
+    console.log(`[webisco] → POST ${url}\n${body}`);
+  }
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "text/xml; charset=utf-8" },
     body,
-    // Webisco daemon uses HTTP/1.0, keep things simple
     cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`Webisco HTTP ${res.status} ${res.statusText}`);
   }
-  return await res.text();
+  const text = await res.text();
+  if (process.env.WEBISCO_DEBUG === "true") {
+    console.log(`[webisco] ← ${res.status}\n${text.slice(0, 2000)}`);
+  }
+  return text;
 }
 
 function parseEnvelope(xml: string): { content: Record<string, unknown>; error: string | null } {
