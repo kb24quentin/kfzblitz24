@@ -15,7 +15,7 @@ type Reply = {
   ourResponse: string | null;
   respondedAt: Date | null;
   contact: { id: string; firstName: string; lastName: string; email: string; company: string | null };
-  email: { subject: string; campaign: { name: string } };
+  email: { subject: string; campaign: { name: string } | null };
 };
 
 type Counts = { all: number; unread: number; action_needed: number; resolved: number };
@@ -130,7 +130,7 @@ export function InboxView({
                   : "Gelesen"}
                 </span>
                 <span className="text-xs text-text-light">
-                  {reply.email.campaign.name}
+                  {reply.email.campaign?.name ?? "Direkt-Mail"}
                 </span>
               </div>
             </button>
@@ -159,7 +159,9 @@ export function InboxView({
                   {selectedReply.contact.email} · {selectedReply.contact.company}
                 </p>
                 <p className="text-xs text-text-light mt-1">
-                  Kampagne: {selectedReply.email.campaign.name} · Original: {selectedReply.email.subject}
+                  {selectedReply.email.campaign
+                    ? `Kampagne: ${selectedReply.email.campaign.name}`
+                    : "Direkt-Mail"} · Original: {selectedReply.email.subject}
                 </p>
               </div>
               <div className="flex gap-2">
