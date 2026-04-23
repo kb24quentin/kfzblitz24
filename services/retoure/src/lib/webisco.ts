@@ -41,6 +41,19 @@ export interface BelegPosition {
   einzelgewicht?: number;
 }
 
+export interface Adresse {
+  anrede?: string;
+  vorname?: string;
+  name?: string;
+  strasse?: string;
+  plz?: string;
+  ort?: string;
+  land?: string;
+  email?: string;
+  telefon?: string;
+  handy?: string;
+}
+
 export interface Beleg {
   typ: string;
   id: number;
@@ -53,6 +66,9 @@ export interface Beleg {
   endpreis_netto?: number;
   endpreis_brutto?: number;
   erstellt?: string;
+  mitarbeiter?: string;
+  rechnungsadresse?: Adresse;
+  lieferadresse?: Adresse;
   positionen: BelegPosition[];
 }
 
@@ -256,6 +272,23 @@ export async function fetchBelegByNumber(
 
   const belege = toArray(belegliste["beleg"] as unknown);
 
+  const parseAdresse = (a: unknown): Adresse | undefined => {
+    if (!a || typeof a !== "object") return undefined;
+    const addr = a as Record<string, unknown>;
+    return {
+      anrede: str(addr.anrede),
+      vorname: str(addr.vorname),
+      name: str(addr.name),
+      strasse: str(addr.strasse),
+      plz: str(addr.plz),
+      ort: str(addr.ort),
+      land: str(addr.land),
+      email: str(addr.email),
+      telefon: str(addr.telefon),
+      handy: str(addr.handy),
+    };
+  };
+
   const result: Beleg[] = belege.map((b) => {
     const beleg = b as Record<string, unknown>;
     const positions = toArray(beleg["position"] as unknown);
@@ -271,6 +304,9 @@ export async function fetchBelegByNumber(
       endpreis_netto: num(beleg.endpreis_netto),
       endpreis_brutto: num(beleg.endpreis_brutto),
       erstellt: str(beleg.erstellt),
+      mitarbeiter: str(beleg.mitarbeiter),
+      rechnungsadresse: parseAdresse(beleg.rechnungsadresse),
+      lieferadresse: parseAdresse(beleg.lieferadresse),
       positionen: positions.map((p) => {
         const pos = p as Record<string, unknown>;
         return {
