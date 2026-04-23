@@ -176,8 +176,26 @@ function formatDate(d: Date): string {
 }
 
 /**
+ * Decides whether the user-entered number is the internal Abisco beleg-id
+ * (purely numeric, optionally with a single letter prefix like A/R/L) or
+ * the customer-facing external order number (anything else — typically
+ * contains a hyphen, like "KB24-73627372300").
+ */
+function classifyInput(s: string): { kind: "id" | "bestellnummer"; value: string } {
+  const trimmed = s.trim();
+  // "A243775523", "R123456", "243775523" → internal id
+  if (/^[A-Za-z]?\d+$/.test(trimmed)) {
+    return { kind: "id", value: trimmed.replace(/^[A-Za-z]+/, "") };
+  }
+  // Anything else (contains "-", letters mid-string, etc.) → external bestellnummer
+  return { kind: "bestellnummer", value: trimmed };
+}
+
+/**
  * Fetches a single order (beleg) by order number, including its positions.
- * typ may be 'auftrag' | 'rechnung' | 'lieferschein' | 'angebot'.
+ * Accepts either the internal Abisco id (A243775523) or the external
+ * customer-facing order number (KB24-73627372300). typ defaults to
+ * 'auftrag' because bestellnummer lookups only work with typ=auftrag.
  */
 export async function fetchBelegByNumber(
   cfg: WebiscoConfig,
@@ -186,23 +204,29 @@ export async function fetchBelegByNumber(
     id: string;
   }
 ): Promise<WebiscoResult<Beleg[]>> {
-  const typ = options.typ ?? "rechnung";
-  const id = normalizeBelegNumber(options.id);
+  const input = classifyInput(options.id);
+  // bestellnummer lookups require typ=auftrag; fall back for id lookups
+  // to the user's choice or 'auftrag' as the most useful default.
+  const typ = input.kind === "bestellnummer" ? "auftrag" : options.typ ?? "auftrag";
 
-  // Always include a wide date range as a safety net — if the id doesn't
-  // match, Webisco falls back to "all belege of the user" mode which
-  // requires von/bis. With a specific id, these are effectively ignored.
+  // Always include a wide date range as a safety net — if no match is
+  // found, Webisco falls back to 'all belege of the user' mode which
+  // requires von/bis.
   const bis = new Date();
   const von = new Date();
   von.setFullYear(von.getFullYear() - 5);
 
-  const inner =
-    `<beleganfrage ` +
-    `typ="${typ}" ` +
-    `id="${xmlEscape(id)}" ` +
-    `von="${formatDate(von)}" ` +
-    `bis="${formatDate(bis)}" ` +
-    `positionen="T"/>`;
+  const attrs = [`typ="${typ}"`];
+  if (input.kind === "id") {
+    attrs.push(`id="${xmlEscape(input.value)}"`);
+  } else {
+    attrs.push(`bestellnummer="${xmlEscape(input.value)}"`);
+  }
+  attrs.push(`von="${formatDate(von)}"`);
+  attrs.push(`bis="${formatDate(bis)}"`);
+  attrs.push(`positionen="T"`);
+
+  const inner = `<beleganfrage ${attrs.join(" ")}/>`;
 
   let xml: string;
   try {

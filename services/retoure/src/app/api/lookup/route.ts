@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 
 type LookupRequest = {
   bestellnummer?: string;
+  // typ is accepted but usually auto-derived server-side
   typ?: "auftrag" | "rechnung" | "lieferschein" | "angebot";
 };
 

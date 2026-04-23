@@ -36,7 +36,6 @@ type LookupResponse =
 
 export default function Home() {
   const [bestellnummer, setBestellnummer] = useState("");
-  const [typ, setTyp] = useState<"auftrag" | "rechnung" | "lieferschein">("rechnung");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<LookupResponse | null>(null);
 
@@ -49,7 +48,7 @@ export default function Home() {
       const res = await fetch("/api/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bestellnummer: bestellnummer.trim(), typ }),
+        body: JSON.stringify({ bestellnummer: bestellnummer.trim() }),
       });
       const json = (await res.json()) as LookupResponse;
       setResult(json);
@@ -74,21 +73,8 @@ export default function Home() {
 
       <form
         onSubmit={onSubmit}
-        className="bg-bg-card rounded-xl border border-border p-6 shadow-sm space-y-4"
+        className="bg-bg-card rounded-xl border border-border p-6 shadow-sm space-y-3"
       >
-        <div>
-          <label className="block text-sm font-medium text-text mb-1">Beleg-Typ</label>
-          <select
-            value={typ}
-            onChange={(e) => setTyp(e.target.value as typeof typ)}
-            className="w-full md:w-auto px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary focus:outline-none focus:ring-2 focus:ring-accent/50"
-          >
-            <option value="rechnung">Rechnung</option>
-            <option value="auftrag">Auftrag</option>
-            <option value="lieferschein">Lieferschein</option>
-          </select>
-        </div>
-
         <div>
           <label className="block text-sm font-medium text-text mb-1">Bestellnummer</label>
           <div className="flex gap-2">
@@ -96,7 +82,7 @@ export default function Home() {
               type="text"
               value={bestellnummer}
               onChange={(e) => setBestellnummer(e.target.value)}
-              placeholder="z. B. R123456 (oder 'demo' für Testdaten)"
+              placeholder="z. B. KB24-73627372300 oder A243775523"
               className="flex-1 px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
             />
             <button
@@ -108,6 +94,9 @@ export default function Home() {
               {loading ? "Suche..." : "Suchen"}
             </button>
           </div>
+          <p className="text-xs text-text-light mt-1.5">
+            Du findest die Bestellnummer in deiner Bestellbestätigung (beginnt mit KB24-).
+          </p>
         </div>
       </form>
 
