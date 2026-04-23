@@ -1,0 +1,31 @@
+services:
+  retoure:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kfzblitz24/retoure:prod
+    container_name: retoure_prod
+    restart: unless-stopped
+    environment:
+      WEBISCO_HOST: ${WEBISCO_HOST:-}
+      WEBISCO_USERNAME: ${WEBISCO_USERNAME:-}
+      WEBISCO_PASSWORD: ${WEBISCO_PASSWORD:-}
+      WEBISCO_ADMIN_ID: ${WEBISCO_ADMIN_ID:-}
+      WEBISCO_DEMO_MODE: ${WEBISCO_DEMO_MODE:-}
+    networks:
+      - prod_internal
+      - traefik_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_net
+      - traefik.http.routers.retoure-prod.rule=Host(`retoure.kfzblitz24-group.com`)
+      - traefik.http.routers.retoure-prod.entrypoints=websecure
+      - traefik.http.routers.retoure-prod.tls=true
+      - traefik.http.routers.retoure-prod.tls.certresolver=letsencrypt
+      - traefik.http.services.retoure-prod.loadbalancer.server.port=3000
+
+networks:
+  prod_internal:
+    external: true
+  traefik_net:
+    external: true
