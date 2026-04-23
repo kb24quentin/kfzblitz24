@@ -1,8 +1,62 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { auth } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
+
+export type TestEmailState = { ok: boolean; message: string };
+
+export async function sendTestEmail(
+  _prev: TestEmailState,
+  formData: FormData
+): Promise<TestEmailState> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, message: "Nicht eingeloggt." };
+
+  const to = (formData.get("to") as string | null)?.trim() ?? "";
+  const subject = (formData.get("subject") as string | null)?.trim() ?? "";
+  const body = (formData.get("body") as string | null) ?? "";
+
+  if (!to || !subject || !body.trim()) {
+    return { ok: false, message: "Bitte alle Felder ausfüllen." };
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+    return { ok: false, message: "Ungültige Empfänger-Adresse." };
+  }
+  if (!process.env.RESEND_API_KEY) {
+    return { ok: false, message: "RESEND_API_KEY ist auf dem Server nicht gesetzt." };
+  }
+
+  try {
+    const { Resend } = await import("resend");
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const html = body
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\n/g, "<br>");
+
+    const result = await resend.emails.send({
+      from: process.env.FROM_EMAIL || "noreply@kfzblitz24-group.com",
+      to: [to],
+      subject,
+      html: `<div style="font-family:system-ui,sans-serif;line-height:1.6;color:#111">${html}</div>`,
+      text: body,
+    });
+
+    if (result.error) {
+      return { ok: false, message: `Resend-Fehler: ${result.error.message}` };
+    }
+    return {
+      ok: true,
+      message: `Versendet an ${to} (Resend ID: ${result.data?.id ?? "—"}).`,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, message: `Fehler: ${msg}` };
+  }
+}
 
 export async function createUser(formData: FormData) {
   const password = formData.get("password") as string;

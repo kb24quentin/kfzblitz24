@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
 import { CheckCircle, XCircle, Key, Mail, Globe, Users } from "lucide-react";
 import { UserManagement } from "./user-management";
+import { TestEmailForm } from "./test-email-form";
 
 export default async function SettingsPage({
   searchParams,
@@ -95,6 +96,8 @@ export default async function SettingsPage({
             </div>
             <div className="p-3 bg-bg-secondary rounded-lg font-mono text-xs">POST https://crm.kfzblitz24-group.com/api/webhook/resend</div>
           </div>
+
+          <TestEmailForm />
         </>
       ) : (
         <UserManagement users={users} />
