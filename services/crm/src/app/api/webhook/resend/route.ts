@@ -4,9 +4,14 @@ import { prisma } from "@/lib/db";
 
 interface ResendEvent {
   type: string;
-  data: {
+  data: Record<string, unknown> & {
     email_id?: string;
-    [key: string]: unknown;
+    from?: string | { email?: string; address?: string };
+    to?: string | string[];
+    subject?: string;
+    text?: string;
+    html?: string;
+    headers?: Record<string, string>;
   };
 }
 
@@ -39,21 +44,29 @@ export async function POST(request: NextRequest) {
   }
 
   const { type, data } = event;
-  if (!data?.email_id) {
-    return NextResponse.json({ error: "Missing email_id" }, { status: 400 });
-  }
-
-  const email = await prisma.email.findFirst({
-    where: { resendEmailId: data.email_id },
-  });
-
-  if (!email) {
-    // Webhook may fire for emails not in our DB (test events, manually-sent, etc).
-    // Return 200 so Resend doesn't keep retrying.
-    return NextResponse.json({ received: true, ignored: "unknown email_id" });
-  }
+  console.log(`[resend-webhook] event=${type}`);
 
   try {
+    // ─── Inbound (replies received via Resend Inbound) ──────────────────
+    if (type === "email.received" || type === "email.inbound" || type === "email.inbound.created") {
+      console.log("[resend-webhook] inbound payload:", JSON.stringify(data, null, 2));
+      return await handleInbound(data);
+    }
+
+    // ─── Outbound delivery events (need email_id) ───────────────────────
+    if (!data?.email_id) {
+      console.log(`[resend-webhook] event ${type} has no email_id, ignoring`);
+      return NextResponse.json({ received: true, ignored: "no email_id" });
+    }
+
+    const email = await prisma.email.findFirst({
+      where: { resendEmailId: data.email_id },
+    });
+
+    if (!email) {
+      return NextResponse.json({ received: true, ignored: "unknown email_id" });
+    }
+
     switch (type) {
       case "email.delivered":
         await prisma.email.update({
@@ -93,11 +106,107 @@ export async function POST(request: NextRequest) {
           data: { status: "bounced" },
         });
         break;
+
+      default:
+        console.log(`[resend-webhook] unhandled event type: ${type}`, JSON.stringify(data, null, 2));
     }
 
     return NextResponse.json({ received: true, type });
   } catch (error) {
-    console.error("[resend-webhook] DB update failed:", error);
+    console.error("[resend-webhook] handler error:", error);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Inbound reply handling
+// ────────────────────────────────────────────────────────────────────────
+function extractFromEmail(from: unknown): string | null {
+  if (typeof from === "string") {
+    // "Name <email@x.com>" → email@x.com  |  or just "email@x.com"
+    const match = from.match(/<([^>]+)>/);
+    return (match ? match[1] : from).trim().toLowerCase();
+  }
+  if (from && typeof from === "object") {
+    const f = from as { email?: string; address?: string };
+    return (f.email || f.address || null)?.toLowerCase() ?? null;
+  }
+  return null;
+}
+
+function extractInReplyTo(headers: unknown): string | null {
+  if (!headers || typeof headers !== "object") return null;
+  const h = headers as Record<string, string>;
+  // Headers are case-insensitive in MIME; check common variants
+  return (
+    h["in-reply-to"] ||
+    h["In-Reply-To"] ||
+    h["IN-REPLY-TO"] ||
+    null
+  );
+}
+
+async function handleInbound(data: ResendEvent["data"]) {
+  const fromEmail = extractFromEmail(data.from);
+  const subject = data.subject ?? null;
+  const body = (data.text as string) || (data.html as string) || "";
+  const inReplyTo = extractInReplyTo(data.headers);
+
+  if (!fromEmail) {
+    console.warn("[resend-webhook] inbound: no from address");
+    return NextResponse.json({ received: true, ignored: "no from" });
+  }
+
+  // 1. Find the contact by sender email
+  const contact = await prisma.contact.findUnique({ where: { email: fromEmail } });
+  if (!contact) {
+    console.warn(`[resend-webhook] inbound: no contact for ${fromEmail}`);
+    return NextResponse.json({ received: true, ignored: "unknown contact", from: fromEmail });
+  }
+
+  // 2. Find the original email this is replying to.
+  //    Strategy: most-recently-sent email to that contact in the last 90 days.
+  const original = await prisma.email.findFirst({
+    where: {
+      contactId: contact.id,
+      sentAt: { not: null },
+    },
+    orderBy: { sentAt: "desc" },
+  });
+
+  if (!original) {
+    console.warn(`[resend-webhook] inbound: no prior email to ${fromEmail}, can't link reply`);
+    return NextResponse.json({ received: true, ignored: "no prior email" });
+  }
+
+  // 3. Create the reply record
+  const reply = await prisma.reply.create({
+    data: {
+      emailId: original.id,
+      contactId: contact.id,
+      fromEmail,
+      subject,
+      body,
+    },
+  });
+
+  // 4. Update the original email status
+  await prisma.email.update({
+    where: { id: original.id },
+    data: { status: "replied", repliedAt: new Date() },
+  });
+
+  // 5. Update contact status
+  await prisma.contact.update({
+    where: { id: contact.id },
+    data: { status: "replied" },
+  });
+
+  console.log(`[resend-webhook] inbound: reply ${reply.id} from ${fromEmail} linked to email ${original.id}`);
+  return NextResponse.json({
+    received: true,
+    type: "inbound",
+    replyId: reply.id,
+    inReplyTo,
+  });
 }
