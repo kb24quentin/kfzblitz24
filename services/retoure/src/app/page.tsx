@@ -103,13 +103,26 @@ function maxMenge(p: Position): number {
   return m > 0 ? m : 0;
 }
 
-function returnableArticles(beleg: Beleg): Position[] {
-  return beleg.positionen.filter((p) => {
-    if (p.typ !== "artikel") return false;
-    if (p.status === "geliefertstreckengeschaeft") return false;
-    return true; // include even if already credited; UI will disable qty>0
-  });
+/**
+ * All article positions on the beleg (including drop-shipments, already-
+ * retourned etc.). The UI marks each entry with its own disabled reason.
+ */
+function allArticles(beleg: Beleg): Position[] {
+  return beleg.positionen.filter((p) => p.typ === "artikel");
 }
+
+type DisabledReason = null | "bereits_retourniert" | "storniert";
+
+function disabledReason(p: Position): DisabledReason {
+  if (p.status === "storniert" || p.status === "geloescht") return "storniert";
+  if (maxMenge(p) <= 0) return "bereits_retourniert";
+  return null;
+}
+
+const DISABLED_REASON_TEXT: Record<Exclude<DisabledReason, null>, string> = {
+  bereits_retourniert: "bereits retourniert",
+  storniert: "storniert",
+};
 
 // ────────────────────────────────────────────────────────────────────────
 // Page
@@ -124,7 +137,7 @@ export default function Home() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
   const shippingMode = beleg ? detectShippingMode(beleg) : "unknown";
-  const articles = beleg ? returnableArticles(beleg) : [];
+  const articles = beleg ? allArticles(beleg) : [];
 
   const reset = () => {
     setStep("search");
@@ -273,8 +286,12 @@ function SearchStep({ onFound }: { onFound: (b: Beleg) => void }) {
         setError("Keine Bestellung zu dieser Nummer gefunden.");
         return;
       }
-      // Pick the first one with returnable articles, else the first.
-      const best = belege.find((b) => returnableArticles(b).length > 0) ?? belege[0];
+      // Pick the beleg with the most article positions so the customer
+      // sees something even if everything's a drop-shipment.
+      const best =
+        [...belege].sort(
+          (a, b) => allArticles(b).length - allArticles(a).length
+        )[0] ?? belege[0];
       onFound(best);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -341,7 +358,7 @@ function SelectStep({
   onNext: () => void;
 }) {
   const toggle = (p: Position) => {
-    if (maxMenge(p) <= 0) return; // not returnable
+    if (disabledReason(p) !== null) return; // not selectable
     const next = { ...selections };
     if (next[p.id]) {
       delete next[p.id];
@@ -381,14 +398,15 @@ function SelectStep({
 
         {articles.length === 0 ? (
           <div className="p-6 text-center text-sm text-text-light">
-            Für diese Bestellung sind aktuell keine Artikel retourfähig.
+            Diese Bestellung enthält keine Artikel-Positionen.
           </div>
         ) : (
           <div className="divide-y divide-border">
             {articles.map((p) => {
               const sel = selections[p.id];
               const max = maxMenge(p);
-              const disabled = max <= 0;
+              const reason = disabledReason(p);
+              const disabled = reason !== null;
               return (
                 <label
                   key={p.id}
@@ -418,8 +436,8 @@ function SelectStep({
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-text-light">
                         {p.artikelnummer && <span className="font-mono">{p.artikelnummer}</span>}
                         {p.hersteller && <span>· {p.hersteller}</span>}
-                        {disabled ? (
-                          <span className="text-text-light italic">· bereits retourniert</span>
+                        {reason ? (
+                          <span className="text-text-light italic">· {DISABLED_REASON_TEXT[reason]}</span>
                         ) : (
                           <span>· max {max} Stk</span>
                         )}
