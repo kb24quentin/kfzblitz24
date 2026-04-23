@@ -160,6 +160,22 @@ function str(v: unknown): string | undefined {
 // ────────────────────────────────────────────────────────────────────────
 
 /**
+ * Strip letter prefixes from an order number. Webisco expects the numeric
+ * part only — e.g. "A243775523" → "243775523", "R123456" → "123456".
+ * If the input is already digits-only, return it unchanged.
+ */
+function normalizeBelegNumber(s: string): string {
+  const trimmed = s.trim();
+  // Capture leading letters + digits; return just the digits part
+  const m = trimmed.match(/^[A-Za-z]*(\d+)$/);
+  return m ? m[1] : trimmed;
+}
+
+function formatDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
  * Fetches a single order (beleg) by order number, including its positions.
  * typ may be 'auftrag' | 'rechnung' | 'lieferschein' | 'angebot'.
  */
@@ -171,7 +187,22 @@ export async function fetchBelegByNumber(
   }
 ): Promise<WebiscoResult<Beleg[]>> {
   const typ = options.typ ?? "rechnung";
-  const inner = `<beleganfrage typ="${typ}" id="${xmlEscape(options.id)}" positionen="T"/>`;
+  const id = normalizeBelegNumber(options.id);
+
+  // Always include a wide date range as a safety net — if the id doesn't
+  // match, Webisco falls back to "all belege of the user" mode which
+  // requires von/bis. With a specific id, these are effectively ignored.
+  const bis = new Date();
+  const von = new Date();
+  von.setFullYear(von.getFullYear() - 5);
+
+  const inner =
+    `<beleganfrage ` +
+    `typ="${typ}" ` +
+    `id="${xmlEscape(id)}" ` +
+    `von="${formatDate(von)}" ` +
+    `bis="${formatDate(bis)}" ` +
+    `positionen="T"/>`;
 
   let xml: string;
   try {
