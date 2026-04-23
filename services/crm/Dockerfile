@@ -40,6 +40,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Required by prisma/seed.js (Next.js standalone trace doesn't include it
+# at the top level since it's used inside the standalone bundle)
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
