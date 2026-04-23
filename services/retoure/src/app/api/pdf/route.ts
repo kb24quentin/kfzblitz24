@@ -22,6 +22,8 @@ type Item = {
   beschreibung?: string;
   menge: number;
   grund: string;
+  einzelpreis_brutto?: number;
+  gesamtpreis_brutto?: number;
 };
 
 type Body = {
@@ -166,8 +168,9 @@ export async function POST(req: Request) {
   // Table header
   const col = {
     menge: margin,
-    artikel: margin + 50,
-    grund: margin + 310,
+    artikel: margin + 40,
+    grund: margin + 260,
+    summe: width - margin - 60,
   };
   page.drawRectangle({
     x: margin - 5,
@@ -179,23 +182,38 @@ export async function POST(req: Request) {
   drawText("Menge", col.menge, y, { size: 9, font: fontBold, color: [0.3, 0.3, 0.3] });
   drawText("Artikel", col.artikel, y, { size: 9, font: fontBold, color: [0.3, 0.3, 0.3] });
   drawText("Grund", col.grund, y, { size: 9, font: fontBold, color: [0.3, 0.3, 0.3] });
+  drawText("Summe", col.summe, y, { size: 9, font: fontBold, color: [0.3, 0.3, 0.3] });
   y -= 20;
 
+  const fmtEur = (n: number) => n.toFixed(2).replace(".", ",") + " \u20ac";
+  let erstattungTotal = 0;
+
   for (const it of body.items) {
-    if (y < 120) {
-      // Not enough space — simple: draw footer note and stop
+    if (y < 130) {
       drawText("... (weitere Artikel abgeschnitten)", margin, y, { size: 9, color: [0.6, 0.2, 0.2] });
       break;
     }
-    drawText(`${it.menge}×`, col.menge, y, { size: 10, font: fontBold });
+    drawText(`${it.menge}x`, col.menge, y, { size: 10, font: fontBold });
 
     const descLine = it.beschreibung ?? "";
-    const metaLine = [it.artikelnummer, it.hersteller].filter(Boolean).join(" · ");
-    drawText(descLine.slice(0, 48), col.artikel, y, { size: 10 });
+    const metaLine = [it.artikelnummer, it.hersteller].filter(Boolean).join(" \u00b7 ");
+    drawText(descLine.slice(0, 38), col.artikel, y, { size: 10 });
     if (metaLine) {
-      drawText(metaLine.slice(0, 48), col.artikel, y - 11, { size: 8, color: [0.4, 0.4, 0.4] });
+      drawText(metaLine.slice(0, 44), col.artikel, y - 11, { size: 8, color: [0.4, 0.4, 0.4] });
     }
     drawText(it.grund.slice(0, 28), col.grund, y, { size: 10 });
+    if (it.gesamtpreis_brutto !== undefined) {
+      drawText(fmtEur(it.gesamtpreis_brutto), col.summe, y, { size: 10, font: fontBold });
+      if (it.einzelpreis_brutto !== undefined && it.menge > 1) {
+        drawText(
+          `${fmtEur(it.einzelpreis_brutto)} / Stk`,
+          col.summe,
+          y - 11,
+          { size: 8, color: [0.4, 0.4, 0.4] }
+        );
+      }
+      erstattungTotal += it.gesamtpreis_brutto;
+    }
 
     page.drawLine({
       start: { x: margin - 5, y: y - 16 },
@@ -204,6 +222,21 @@ export async function POST(req: Request) {
       color: rgb(0.85, 0.85, 0.85),
     });
     y -= 28;
+  }
+
+  // Erstattungs-Summe + Hinweis
+  if (erstattungTotal > 0) {
+    y -= 4;
+    drawText("Voraussichtliche Erstattung", col.grund, y, { size: 10, font: fontBold });
+    drawText(fmtEur(erstattungTotal), col.summe, y, { size: 12, font: fontBold });
+    y -= 18;
+    drawText(
+      "Die Erstattung erfolgt auf das urspruengliche Zahlungsmittel.",
+      margin,
+      y,
+      { size: 8, color: [0.3, 0.3, 0.3] }
+    );
+    y -= 4;
   }
 
   // Instructions footer
@@ -244,15 +277,15 @@ export async function POST(req: Request) {
       borderColor: rgb(0.85, 0.7, 0.4),
       borderWidth: 0.5,
     });
-    drawText("Rücksendeadresse", margin, y, { size: 11, font: fontBold, color: [0.5, 0.3, 0] });
+    drawText("Ruecksendeadresse", margin, y, { size: 11, font: fontBold, color: [0.5, 0.3, 0] });
     y -= 16;
-    drawText("kfzblitz24 GmbH", margin, y, { size: 10 });
+    drawText("kfzBlitz24 GmbH", margin, y, { size: 10 });
     y -= 12;
-    drawText("Retourenabteilung", margin, y, { size: 10 });
+    drawText("c/o RETOURE", margin, y, { size: 10 });
     y -= 12;
-    drawText("Musterstraße 1", margin, y, { size: 10 });
+    drawText("Musterstrasse 1", margin, y, { size: 10 });
     y -= 12;
-    drawText("82031 Grünwald", margin, y, { size: 10 });
+    drawText("12345 Musterstadt", margin, y, { size: 10 });
     y -= 18;
     drawText("Bitte frankiere die Sendung ausreichend. Unfrei gesendete Pakete", margin, y, { size: 8, color: [0.4, 0.4, 0.4] });
     y -= 10;

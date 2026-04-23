@@ -441,6 +441,11 @@ function SelectStep({
                         ) : (
                           <span>· max {max} Stk</span>
                         )}
+                        {p.einzelpreis_brutto !== undefined && (
+                          <span className="font-medium text-text">
+                            · {Math.abs(p.einzelpreis_brutto).toFixed(2).replace(".", ",")} € / Stk
+                          </span>
+                        )}
                       </div>
 
                       {sel && (
@@ -536,14 +541,25 @@ function ReviewStep({
   const selected = useMemo(() => {
     return articles
       .filter((a) => selections[a.id])
-      .map((a) => ({
-        artikelnummer: a.artikelnummer,
-        hersteller: a.hersteller,
-        beschreibung: a.beschreibung,
-        menge: selections[a.id].menge,
-        grund: selections[a.id].grund,
-      }));
+      .map((a) => {
+        const menge = selections[a.id].menge;
+        const unit = a.einzelpreis_brutto !== undefined ? Math.abs(a.einzelpreis_brutto) : undefined;
+        return {
+          artikelnummer: a.artikelnummer,
+          hersteller: a.hersteller,
+          beschreibung: a.beschreibung,
+          menge,
+          grund: selections[a.id].grund,
+          einzelpreis_brutto: unit,
+          gesamtpreis_brutto: unit !== undefined ? unit * menge : undefined,
+        };
+      });
   }, [articles, selections]);
+
+  const erstattungSumme = selected.reduce(
+    (sum, it) => sum + (it.gesamtpreis_brutto ?? 0),
+    0
+  );
 
   const addr = beleg.rechnungsadresse;
 
@@ -614,10 +630,10 @@ function ReviewStep({
                 Für diese Bestellung wurde die &ldquo;Sichere Rückgabe&rdquo; nicht gebucht. Bitte sende die Ware auf eigene Kosten an folgende Adresse:
               </p>
               <div className="text-sm bg-white rounded-lg p-3 border border-amber-200 font-mono">
-                kfzblitz24 GmbH<br />
-                Retourenabteilung<br />
+                kfzBlitz24 GmbH<br />
+                c/o RETOURE<br />
                 Musterstraße 1<br />
-                82031 Grünwald
+                12345 Musterstadt
               </div>
               <p className="text-xs">
                 Lege den ausgedruckten Retourenschein (siehe Schritt 4) bitte der Sendung bei.
@@ -650,9 +666,37 @@ function ReviewStep({
                   <span className="font-medium">Grund:</span> {it.grund}
                 </p>
               </div>
+              {it.gesamtpreis_brutto !== undefined && (
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold text-text">
+                    {it.gesamtpreis_brutto.toFixed(2).replace(".", ",")} €
+                  </p>
+                  {it.einzelpreis_brutto !== undefined && it.menge > 1 && (
+                    <p className="text-xs text-text-light">
+                      {it.einzelpreis_brutto.toFixed(2).replace(".", ",")} € / Stk
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           ))}
+          {erstattungSumme > 0 && (
+            <div className="p-4 bg-bg-secondary/40 flex items-center justify-between">
+              <span className="text-sm font-semibold text-text">Voraussichtliche Erstattung</span>
+              <span className="text-lg font-bold text-text">
+                {erstattungSumme.toFixed(2).replace(".", ",")} €
+              </span>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Refund hint */}
+      <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-3 text-sm flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+        <span>
+          Die Erstattung erfolgt auf das ursprüngliche Zahlungsmittel.
+        </span>
       </div>
 
       {error && (
