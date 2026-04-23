@@ -209,12 +209,13 @@ export async function fetchBelegByNumber(
   // to the user's choice or 'auftrag' as the most useful default.
   const typ = input.kind === "bestellnummer" ? "auftrag" : options.typ ?? "auftrag";
 
-  // Always include a wide date range as a safety net — if no match is
-  // found, Webisco falls back to 'all belege of the user' mode which
-  // requires von/bis.
+  // Webisco requires von/bis for non-id searches and caps the range at
+  // 365 days. We send a ~360-day window which is effectively "all recent
+  // belege" for a retouren portal (returns are almost always well within
+  // a year of the order).
   const bis = new Date();
   const von = new Date();
-  von.setFullYear(von.getFullYear() - 5);
+  von.setDate(von.getDate() - 360);
 
   const attrs = [`typ="${typ}"`];
   if (input.kind === "id") {
