@@ -29,10 +29,13 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-primary text-white flex flex-col">
       {/* Logo */}
-      <div className="flex items-center gap-2 px-6 py-5 border-b border-white/10">
-        <span className="text-xl font-extrabold tracking-tight">
-          kfz<span className="text-accent">blitz</span>24
-        </span>
+      <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/kfzblitz-logo.svg"
+          alt="kfzblitz24"
+          className="h-7 w-auto"
+        />
         <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full font-medium">
           CRM
         </span>

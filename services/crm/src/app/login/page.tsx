@@ -6,10 +6,13 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            kfz<span className="text-accent">blitz</span>24
-          </h1>
-          <p className="text-white/60 text-sm mt-1">CRM Acquirer</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/kfzblitz-logo.svg"
+            alt="kfzblitz24"
+            className="h-12 w-auto mx-auto"
+          />
+          <p className="text-white/60 text-sm mt-3">CRM Acquirer</p>
         </div>
 
         {/* Login Card */}
