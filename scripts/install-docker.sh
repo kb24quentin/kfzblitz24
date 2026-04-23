@@ -23,8 +23,20 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 # Install
+# NOTE: Pinned to Docker 28.x because Traefik (and many other tools using
+# older Docker SDK clients) cannot talk to Docker 29.x daemons — they send
+# API v1.24 which Docker 29 rejects (minimum is 1.40).
 sudo apt-get update -qq
-sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+DOCKER_VERSION="5:28.5.2-1~ubuntu.24.04~noble"
+sudo apt-get install -y -qq \
+  docker-ce="$DOCKER_VERSION" \
+  docker-ce-cli="$DOCKER_VERSION" \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin
+
+# Hold docker-ce so unattended-upgrades doesn't bump it to 29.x
+sudo apt-mark hold docker-ce docker-ce-cli
 
 # Add deploy user to docker group
 sudo usermod -aG docker "$USER"
