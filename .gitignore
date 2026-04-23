@@ -1,0 +1,25 @@
+# Secrets & Environment
+.env
+.env.local
+*.env
+!.env.example
+
+# SSH Keys
+*.pem
+id_rsa*
+id_ed25519*
+
+# Docker
+**/data/
+**/volumes/
+**/letsencrypt/
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+logs/

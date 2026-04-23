@@ -1,0 +1,19 @@
+services:
+  whoami:
+    image: traefik/whoami:latest
+    container_name: whoami_prod
+    restart: unless-stopped
+    networks:
+      - traefik_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_net
+      - traefik.http.routers.whoami-prod.rule=Host(`whoami.kfzblitz24-group.com`)
+      - traefik.http.routers.whoami-prod.entrypoints=websecure
+      - traefik.http.routers.whoami-prod.tls=true
+      - traefik.http.routers.whoami-prod.tls.certresolver=letsencrypt
+      - traefik.http.services.whoami-prod.loadbalancer.server.port=80
+
+networks:
+  traefik_net:
+    external: true
