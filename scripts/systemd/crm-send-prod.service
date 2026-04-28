@@ -1,0 +1,11 @@
+[Unit]
+Description=Process queued CRM emails (production)
+Documentation=https://github.com/kb24quentin/kfzblitz24
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/curl -fsS --max-time 30 -X POST https://crm.kfzblitz24-group.com/api/send
+StandardOutput=journal
+StandardError=journal

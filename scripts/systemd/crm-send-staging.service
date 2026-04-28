@@ -1,0 +1,13 @@
+[Unit]
+Description=Process queued CRM emails (staging)
+Documentation=https://github.com/kb24quentin/kfzblitz24
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Hits the public endpoint via Traefik. Times out after 30s so we never
+# leave a zombie request hanging.
+ExecStart=/usr/bin/curl -fsS --max-time 30 -X POST https://crm.staging.kfzblitz24-group.com/api/send
+StandardOutput=journal
+StandardError=journal
