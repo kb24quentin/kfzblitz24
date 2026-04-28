@@ -1,12 +1,12 @@
 [Unit]
-Description=Run CRM email queue processor every 2 minutes (staging)
+Description=Run CRM email queue processor every 10 minutes (staging)
 Documentation=https://github.com/kb24quentin/kfzblitz24
 
 [Timer]
 # Wait 60s after boot before first fire so the CRM container is up.
 OnBootSec=60s
 # Then every 2 minutes after the previous run finished.
-OnUnitActiveSec=2min
+OnUnitActiveSec=10min
 AccuracySec=5s
 # Catch up on missed runs after downtime.
 Persistent=true
