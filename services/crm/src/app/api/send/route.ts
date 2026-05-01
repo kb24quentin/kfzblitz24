@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getFromAddress } from "@/lib/email";
+import { getFromAddress, getListUnsubscribeHeaders, htmlToPlainText } from "@/lib/email";
 
 // This API route processes the email send queue
 // Call it via cron job or manually to send queued emails
@@ -33,6 +33,8 @@ export async function POST() {
               to: [email.contact.email],
               subject: email.subject,
               html: email.body,
+              text: htmlToPlainText(email.body),
+              headers: getListUnsubscribeHeaders(),
             });
 
             await prisma.email.update({

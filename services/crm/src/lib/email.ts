@@ -24,6 +24,25 @@ export function wrapEmailHtml(html: string): string {
 }
 
 /**
+ * Builds the List-Unsubscribe + List-Unsubscribe-Post headers that Gmail,
+ * Yahoo & Outlook now require for bulk B2B/B2C senders. Recipients get a
+ * one-click "unsubscribe" button at the top of the message — without that,
+ * Gmail moves messages straight to Spam regardless of authentication.
+ *
+ * Returns an object suitable for Resend's `headers` field. The mailto
+ * forwards to the configured FROM address so we get notified.
+ */
+export function getListUnsubscribeHeaders(opts?: { unsubscribeUrl?: string }): Record<string, string> {
+  const fromEmail = process.env.FROM_EMAIL?.trim() || "noreply@kfzblitz24-group.com";
+  const targets: string[] = [`<mailto:${fromEmail}?subject=unsubscribe>`];
+  if (opts?.unsubscribeUrl) targets.unshift(`<${opts.unsubscribeUrl}>`);
+  return {
+    "List-Unsubscribe": targets.join(", "),
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
+
+/**
  * Best-effort plain-text fallback for the multipart text/plain part of an
  * email. Strips HTML tags and collapses runs of whitespace; preserves
  * paragraph breaks by mapping <br> and </p> to newlines first.

@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { getFromAddress, wrapEmailHtml, htmlToPlainText } from "@/lib/email";
+import { getFromAddress, wrapEmailHtml, htmlToPlainText, getListUnsubscribeHeaders } from "@/lib/email";
 import { revalidatePath } from "next/cache";
 
 export type SendDirectEmailResult = { ok: boolean; message: string };
@@ -44,6 +44,7 @@ export async function sendDirectEmail(
       subject,
       html: htmlWrapped,
       text: htmlToPlainText(body),
+      headers: getListUnsubscribeHeaders(),
     });
     if (result.error) {
       return { ok: false, message: `Resend-Fehler: ${result.error.message}` };

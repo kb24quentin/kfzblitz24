@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { getFromAddress, wrapEmailHtml, htmlToPlainText } from "@/lib/email";
+import { getFromAddress, wrapEmailHtml, htmlToPlainText, getListUnsubscribeHeaders } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 
@@ -39,6 +39,7 @@ export async function sendTestEmail(
       subject,
       html: wrapEmailHtml(body),
       text: htmlToPlainText(body),
+      headers: getListUnsubscribeHeaders(),
     });
 
     if (result.error) {
