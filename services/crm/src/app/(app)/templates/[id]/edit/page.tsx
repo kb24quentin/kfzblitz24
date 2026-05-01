@@ -11,13 +11,23 @@ export default async function EditTemplatePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const template = await prisma.template.findUnique({ where: { id } });
+  const [template, signatures] = await Promise.all([
+    prisma.template.findUnique({ where: { id } }),
+    prisma.signature.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, html: true },
+    }),
+  ]);
   if (!template) notFound();
 
   return (
     <div className="max-w-5xl">
       <h2 className="text-lg font-bold text-text mb-6">Template bearbeiten</h2>
-      <TemplateEditor action={updateTemplate} template={template} />
+      <TemplateEditor
+        action={updateTemplate}
+        template={template}
+        signatures={signatures}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Save, ArrowLeft, Eye, Code, Variable, FileSignature } from "lucide-react";
 import Link from "next/link";
 import { RichTextEditor, type RichTextEditorHandle } from "./rich-text-editor";
@@ -11,7 +11,13 @@ type TemplateData = {
   subject?: string;
   bodyHtml?: string;
   bodyText?: string | null;
-  signature?: string | null;
+  signatureId?: string | null;
+};
+
+type SignatureOption = {
+  id: string;
+  name: string;
+  html: string;
 };
 
 const AVAILABLE_VARIABLES = [
@@ -39,13 +45,14 @@ const SAMPLE_DATA: Record<string, string> = {
 export function TemplateEditor({
   action,
   template,
+  signatures,
 }: {
   action: (formData: FormData) => Promise<void>;
   template?: TemplateData;
+  signatures: SignatureOption[];
 }) {
   const [bodyHtml, setBodyHtml] = useState(template?.bodyHtml || "");
-  const [signature, setSignature] = useState(template?.signature || "");
-  const [signatureMode, setSignatureMode] = useState<"wysiwyg" | "code">("wysiwyg");
+  const [signatureId, setSignatureId] = useState<string>(template?.signatureId || "");
   const [subject, setSubject] = useState(template?.subject || "");
   const [showPreview, setShowPreview] = useState(false);
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -64,11 +71,16 @@ export function TemplateEditor({
 
   const detectedVars = [...new Set((bodyHtml.match(/\{\{(\w+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, "")))];
 
+  const selectedSignature = useMemo(
+    () => signatures.find((s) => s.id === signatureId) ?? null,
+    [signatures, signatureId]
+  );
+
   return (
     <form action={action} className="space-y-6">
       {template?.id && <input type="hidden" name="id" value={template.id} />}
       <input type="hidden" name="bodyHtml" value={bodyHtml} />
-      <input type="hidden" name="signature" value={signature} />
+      <input type="hidden" name="signatureId" value={signatureId} />
 
       <div className="bg-bg-card rounded-xl border border-border p-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -164,81 +176,51 @@ export function TemplateEditor({
               className="prose prose-sm max-w-none text-text"
               dangerouslySetInnerHTML={{ __html: renderPreview(bodyHtml) }}
             />
-            {signature && (
-              <>
-                <hr className="my-4 border-border" />
-                <div
-                  className="prose prose-sm max-w-none text-text"
-                  dangerouslySetInnerHTML={{ __html: renderPreview(signature) }}
-                />
-              </>
+            {selectedSignature && (
+              <div
+                className="mt-6"
+                dangerouslySetInnerHTML={{ __html: renderPreview(selectedSignature.html) }}
+              />
             )}
           </div>
         )}
       </div>
 
-      {/* Signature */}
+      {/* Signature picker */}
       <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <FileSignature className="w-4 h-4 text-accent" />
-            <h3 className="text-sm font-semibold text-text">HTML-Signatur</h3>
-            <span className="text-xs text-text-light">— wird automatisch unten an jede Mail dieses Templates angehängt</span>
-          </div>
-          <div className="flex bg-bg-secondary rounded-lg p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setSignatureMode("wysiwyg")}
-              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                signatureMode === "wysiwyg"
-                  ? "bg-bg-card text-text shadow-sm"
-                  : "text-text-light hover:text-text"
-              }`}
-            >
-              Visuell
-            </button>
-            <button
-              type="button"
-              onClick={() => setSignatureMode("code")}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-colors ${
-                signatureMode === "code"
-                  ? "bg-bg-card text-text shadow-sm"
-                  : "text-text-light hover:text-text"
-              }`}
-            >
-              <Code className="w-3 h-3" /> HTML
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <FileSignature className="w-4 h-4 text-accent" />
+          <h3 className="text-sm font-semibold text-text">Signatur</h3>
+          <span className="text-xs text-text-light">— wird automatisch unten an jede Mail dieses Templates angehängt</span>
         </div>
 
-        {signatureMode === "wysiwyg" ? (
-          <RichTextEditor
-            value={signature}
-            onChange={setSignature}
-            placeholder={"Mit freundlichen Grüßen\nCorinna Wagner — kfzBlitz24"}
-            minHeight={140}
-          />
-        ) : (
-          <textarea
-            value={signature}
-            onChange={(e) => setSignature(e.target.value)}
-            placeholder={'<table>...</table>'}
-            spellCheck={false}
-            className="w-full px-3 py-2 border border-border rounded-lg text-xs font-mono bg-bg-secondary focus:outline-none focus:ring-2 focus:ring-accent/50 resize-y"
-            style={{ minHeight: 200 }}
-          />
-        )}
+        <select
+          value={signatureId}
+          onChange={(e) => setSignatureId(e.target.value)}
+          className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+        >
+          <option value="">— Keine Signatur —</option>
+          {signatures.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
 
-        {signature && (
+        {selectedSignature && (
           <details className="text-xs">
-            <summary className="cursor-pointer text-text-light hover:text-text">Vorschau</summary>
-            <div className="mt-2 p-3 border border-border rounded-lg bg-white" dangerouslySetInnerHTML={{ __html: renderPreview(signature) }} />
+            <summary className="cursor-pointer text-text-light hover:text-text">Vorschau der Signatur</summary>
+            <div
+              className="mt-2 p-3 border border-border rounded-lg bg-white"
+              dangerouslySetInnerHTML={{ __html: renderPreview(selectedSignature.html) }}
+            />
           </details>
         )}
 
         <p className="text-xs text-text-light">
-          <strong>HTML-Modus</strong> nutzen wenn du fertigen Signatur-HTML einfügst (z.B. aus unserer Vorlage).{" "}
-          <strong>Visuell-Modus</strong> nutzen für einfache Text-Signaturen. Variablen wie <code>{`{{first_name}}`}</code> funktionieren in beiden Modi.
+          Signaturen werden in den{" "}
+          <Link href="/settings?tab=signatures" className="text-accent hover:underline">
+            Einstellungen
+          </Link>{" "}
+          verwaltet.
         </p>
       </div>
 

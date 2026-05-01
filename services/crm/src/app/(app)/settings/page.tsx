@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
-import { CheckCircle, XCircle, Key, Mail, Globe, Users } from "lucide-react";
+import { CheckCircle, XCircle, Key, Mail, Globe, Users, FileSignature } from "lucide-react";
 import { UserManagement } from "./user-management";
 import { TestEmailForm } from "./test-email-form";
+import { SignaturesManager } from "./signatures-manager";
 
 export default async function SettingsPage({
   searchParams,
@@ -22,30 +23,34 @@ export default async function SettingsPage({
   const users = tab === "users"
     ? await prisma.user.findMany({ orderBy: { createdAt: "asc" } })
     : [];
+  const signatures = tab === "signatures"
+    ? await prisma.signature.findMany({ orderBy: { name: "asc" } })
+    : [];
+
+  const tabs = [
+    { id: "config", label: "API & Konfiguration", icon: Key },
+    { id: "signatures", label: "Signaturen", icon: FileSignature },
+    { id: "users", label: "Benutzer", icon: Users },
+  ];
 
   return (
     <div className="max-w-3xl space-y-6">
       {/* Tabs */}
       <div className="flex gap-1 bg-bg-card rounded-xl border border-border p-1">
-        <a
-          href="/settings?tab=config"
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            tab === "config" ? "bg-primary text-white" : "text-text-light hover:text-text hover:bg-bg-secondary"
-          }`}
-        >
-          <Key className="w-4 h-4" /> API & Konfiguration
-        </a>
-        <a
-          href="/settings?tab=users"
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            tab === "users" ? "bg-primary text-white" : "text-text-light hover:text-text hover:bg-bg-secondary"
-          }`}
-        >
-          <Users className="w-4 h-4" /> Benutzer
-        </a>
+        {tabs.map((t) => (
+          <a
+            key={t.id}
+            href={`/settings?tab=${t.id}`}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              tab === t.id ? "bg-primary text-white" : "text-text-light hover:text-text hover:bg-bg-secondary"
+            }`}
+          >
+            <t.icon className="w-4 h-4" /> {t.label}
+          </a>
+        ))}
       </div>
 
-      {tab === "config" ? (
+      {tab === "config" && (
         <>
           {hasResendKey ? (
             <div className="bg-green-50 border border-green-200 rounded-xl p-4">
@@ -108,9 +113,11 @@ export default async function SettingsPage({
 
           <TestEmailForm />
         </>
-      ) : (
-        <UserManagement users={users} />
       )}
+
+      {tab === "signatures" && <SignaturesManager signatures={signatures} />}
+
+      {tab === "users" && <UserManagement users={users} />}
     </div>
   );
 }

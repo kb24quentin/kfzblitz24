@@ -99,3 +99,28 @@ export async function toggleUserActive(formData: FormData) {
 
   revalidatePath("/settings");
 }
+
+// ─── Signatures ─────────────────────────────────────────────────────────
+
+export async function createSignature(formData: FormData) {
+  const name = (formData.get("name") as string)?.trim();
+  const html = (formData.get("html") as string) ?? "";
+  if (!name || !html.trim()) return;
+  await prisma.signature.create({ data: { name, html } });
+  revalidatePath("/settings");
+}
+
+export async function updateSignature(formData: FormData) {
+  const id = formData.get("id") as string;
+  const name = (formData.get("name") as string)?.trim();
+  const html = (formData.get("html") as string) ?? "";
+  if (!id || !name || !html.trim()) return;
+  await prisma.signature.update({ where: { id }, data: { name, html } });
+  revalidatePath("/settings");
+}
+
+export async function deleteSignature(formData: FormData) {
+  const id = formData.get("id") as string;
+  await prisma.signature.delete({ where: { id } });
+  revalidatePath("/settings");
+}

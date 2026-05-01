@@ -53,8 +53,8 @@ export async function sendCampaignEmails(campaignId: string) {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
     include: {
-      templateA: true,
-      templateB: true,
+      templateA: { include: { signature: true } },
+      templateB: { include: { signature: true } },
       campaignContacts: { include: { contact: true } },
     },
   });
@@ -89,7 +89,7 @@ export async function sendCampaignEmails(campaignId: string) {
 
     let subject = template.subject;
     let body = template.bodyHtml;
-    let signature = template.signature ?? "";
+    let signature = template.signature?.html ?? "";
     for (const [key, value] of Object.entries(replacements)) {
       const re = new RegExp(`\\{\\{${key}\\}\\}`, "g");
       subject = subject.replace(re, value);
@@ -97,10 +97,10 @@ export async function sendCampaignEmails(campaignId: string) {
       signature = signature.replace(re, value);
     }
 
-    // Append the rendered signature with a thin separator so the body
-    // sent to Resend mirrors what the user previewed in the editor.
+    // Append the rendered signature with a small vertical gap (no <hr>
+    // separator — the signature card has its own visual identity).
     const fullBody = signature.trim()
-      ? `${body}<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0" />${signature}`
+      ? `${body}<div style="margin-top:24px">${signature}</div>`
       : body;
 
     await prisma.email.create({

@@ -79,20 +79,31 @@ model Reminder {
 }
 
 model Template {
-  id        String   @id @default(cuid())
-  name      String
-  subject   String
-  bodyHtml  String
-  bodyText  String?
-  signature String?  // optional HTML signature appended below body on send
-  variables String   @default("[]")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  subject     String
+  bodyHtml    String
+  bodyText    String?
+  signatureId String?  // optional FK to a managed Signature row
+  variables   String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
+  signature         Signature? @relation(fields: [signatureId], references: [id], onDelete: SetNull)
   campaignsA        Campaign[] @relation("TemplateA")
   campaignsB        Campaign[] @relation("TemplateB")
   campaignsFollowUp Campaign[] @relation("FollowUpTemplate")
   emails            Email[]
+}
+
+model Signature {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  html      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  templates Template[]
 }
 
 model Campaign {
