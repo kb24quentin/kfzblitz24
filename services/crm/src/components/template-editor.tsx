@@ -45,6 +45,7 @@ export function TemplateEditor({
 }) {
   const [bodyHtml, setBodyHtml] = useState(template?.bodyHtml || "");
   const [signature, setSignature] = useState(template?.signature || "");
+  const [signatureMode, setSignatureMode] = useState<"wysiwyg" | "code">("wysiwyg");
   const [subject, setSubject] = useState(template?.subject || "");
   const [showPreview, setShowPreview] = useState(false);
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -178,19 +179,66 @@ export function TemplateEditor({
 
       {/* Signature */}
       <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <FileSignature className="w-4 h-4 text-accent" />
-          <h3 className="text-sm font-semibold text-text">HTML-Signatur</h3>
-          <span className="text-xs text-text-light">— wird automatisch unten an jede Mail dieses Templates angehängt</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <FileSignature className="w-4 h-4 text-accent" />
+            <h3 className="text-sm font-semibold text-text">HTML-Signatur</h3>
+            <span className="text-xs text-text-light">— wird automatisch unten an jede Mail dieses Templates angehängt</span>
+          </div>
+          <div className="flex bg-bg-secondary rounded-lg p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setSignatureMode("wysiwyg")}
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                signatureMode === "wysiwyg"
+                  ? "bg-bg-card text-text shadow-sm"
+                  : "text-text-light hover:text-text"
+              }`}
+            >
+              Visuell
+            </button>
+            <button
+              type="button"
+              onClick={() => setSignatureMode("code")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-colors ${
+                signatureMode === "code"
+                  ? "bg-bg-card text-text shadow-sm"
+                  : "text-text-light hover:text-text"
+              }`}
+            >
+              <Code className="w-3 h-3" /> HTML
+            </button>
+          </div>
         </div>
-        <RichTextEditor
-          value={signature}
-          onChange={setSignature}
-          placeholder={'<p>Mit freundlichen Grüßen<br>Corinna Wagner – kfzBlitz24<br><a href="https://kfzblitz24.de">kfzblitz24.de</a></p>'}
-          minHeight={140}
-        />
+
+        {signatureMode === "wysiwyg" ? (
+          <RichTextEditor
+            value={signature}
+            onChange={setSignature}
+            placeholder={"Mit freundlichen Grüßen\nCorinna Wagner — kfzBlitz24"}
+            minHeight={140}
+          />
+        ) : (
+          <textarea
+            value={signature}
+            onChange={(e) => setSignature(e.target.value)}
+            placeholder={'<table>...</table>'}
+            spellCheck={false}
+            className="w-full px-3 py-2 border border-border rounded-lg text-xs font-mono bg-bg-secondary focus:outline-none focus:ring-2 focus:ring-accent/50 resize-y"
+            style={{ minHeight: 200 }}
+          />
+        )}
+
+        {signature && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-text-light hover:text-text">Vorschau</summary>
+            <div className="mt-2 p-3 border border-border rounded-lg bg-white" dangerouslySetInnerHTML={{ __html: renderPreview(signature) }} />
+          </details>
+        )}
+
         <p className="text-xs text-text-light">
-          Variablen wie <code>{`{{first_name}}`}</code> funktionieren auch hier, falls du den Empfänger persönlich grüßen willst. Lass das Feld leer, wenn du keine Signatur willst.
+          <strong>HTML-Modus</strong> nutzen wenn du fertigen Signatur-HTML einfügst (z.B. aus unserer Vorlage).{" "}
+          <strong>Visuell-Modus</strong> nutzen für einfache Text-Signaturen. Variablen wie <code>{`{{first_name}}`}</code> funktionieren in beiden Modi.
         </p>
       </div>
 
