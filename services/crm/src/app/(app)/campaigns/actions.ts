@@ -88,10 +88,19 @@ export async function sendCampaignEmails(campaignId: string) {
 
     let subject = template.subject;
     let body = template.bodyHtml;
+    let signature = template.signature ?? "";
     for (const [key, value] of Object.entries(replacements)) {
-      subject = subject.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
-      body = body.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
+      const re = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+      subject = subject.replace(re, value);
+      body = body.replace(re, value);
+      signature = signature.replace(re, value);
     }
+
+    // Append the rendered signature with a thin separator so the body
+    // sent to Resend mirrors what the user previewed in the editor.
+    const fullBody = signature.trim()
+      ? `${body}<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0" />${signature}`
+      : body;
 
     await prisma.email.create({
       data: {
@@ -100,7 +109,7 @@ export async function sendCampaignEmails(campaignId: string) {
         templateId: template.id,
         variant: cc.variant,
         subject,
-        body,
+        body: fullBody,
         status: "queued",
       },
     });

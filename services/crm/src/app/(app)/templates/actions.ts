@@ -12,7 +12,9 @@ function extractVariables(html: string): string[] {
 
 export async function createTemplate(formData: FormData) {
   const bodyHtml = formData.get("bodyHtml") as string;
-  const variables = extractVariables(bodyHtml);
+  const signatureRaw = (formData.get("signature") as string) || "";
+  // Both body and signature can carry variables we need to track
+  const variables = extractVariables(bodyHtml + signatureRaw);
 
   await prisma.template.create({
     data: {
@@ -20,6 +22,7 @@ export async function createTemplate(formData: FormData) {
       subject: formData.get("subject") as string,
       bodyHtml,
       bodyText: (formData.get("bodyText") as string) || null,
+      signature: signatureRaw.trim() ? signatureRaw : null,
       variables: JSON.stringify(variables),
     },
   });
@@ -30,7 +33,8 @@ export async function createTemplate(formData: FormData) {
 export async function updateTemplate(formData: FormData) {
   const id = formData.get("id") as string;
   const bodyHtml = formData.get("bodyHtml") as string;
-  const variables = extractVariables(bodyHtml);
+  const signatureRaw = (formData.get("signature") as string) || "";
+  const variables = extractVariables(bodyHtml + signatureRaw);
 
   await prisma.template.update({
     where: { id },
@@ -39,6 +43,7 @@ export async function updateTemplate(formData: FormData) {
       subject: formData.get("subject") as string,
       bodyHtml,
       bodyText: (formData.get("bodyText") as string) || null,
+      signature: signatureRaw.trim() ? signatureRaw : null,
       variables: JSON.stringify(variables),
     },
   });

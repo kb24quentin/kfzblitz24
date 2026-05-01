@@ -83,6 +83,7 @@ model Template {
   subject   String
   bodyHtml  String
   bodyText  String?
+  signature String?  // optional HTML signature appended below body on send
   variables String   @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
