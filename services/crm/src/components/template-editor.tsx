@@ -15,6 +15,7 @@ type TemplateData = {
 };
 
 const AVAILABLE_VARIABLES = [
+  { name: "salutation", label: "Anrede" },
   { name: "first_name", label: "Vorname" },
   { name: "last_name", label: "Nachname" },
   { name: "email", label: "Email" },
@@ -25,6 +26,7 @@ const AVAILABLE_VARIABLES = [
 ];
 
 const SAMPLE_DATA: Record<string, string> = {
+  salutation: "Herr",
   first_name: "Max",
   last_name: "Mustermann",
   email: "max@autohaus-mueller.de",

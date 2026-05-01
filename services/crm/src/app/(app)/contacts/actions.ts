@@ -16,6 +16,7 @@ export async function createContact(formData: FormData) {
   const userId = await getCurrentUserId();
   const contact = await prisma.contact.create({
     data: {
+      salutation: (formData.get("salutation") as string) || null,
       firstName: formData.get("firstName") as string,
       lastName: formData.get("lastName") as string,
       email: formData.get("email") as string,
@@ -46,6 +47,7 @@ export async function updateContact(formData: FormData) {
   await prisma.contact.update({
     where: { id },
     data: {
+      salutation: (formData.get("salutation") as string) || null,
       firstName: formData.get("firstName") as string,
       lastName: formData.get("lastName") as string,
       email: formData.get("email") as string,
@@ -89,6 +91,7 @@ export async function deleteContact(formData: FormData) {
 }
 
 export async function importContacts(contacts: Array<{
+  salutation?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -100,10 +103,20 @@ export async function importContacts(contacts: Array<{
   let imported = 0;
   let skipped = 0;
 
+  // Normalize common salutation spellings to "Herr" / "Frau"
+  const normalizeSalutation = (raw?: string): string | null => {
+    if (!raw) return null;
+    const s = raw.trim().toLowerCase().replace(/\.$/, "");
+    if (["herr", "mr", "h"].includes(s)) return "Herr";
+    if (["frau", "mrs", "ms", "miss", "f"].includes(s)) return "Frau";
+    return null;
+  };
+
   for (const contact of contacts) {
     try {
       await prisma.contact.create({
         data: {
+          salutation: normalizeSalutation(contact.salutation),
           firstName: contact.firstName,
           lastName: contact.lastName,
           email: contact.email,

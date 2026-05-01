@@ -5,6 +5,7 @@ import Link from "next/link";
 
 type ContactData = {
   id?: string;
+  salutation?: string | null;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -39,7 +40,20 @@ export function ContactForm({
       {contact?.id && <input type="hidden" name="id" value={contact.id} />}
 
       <div className="bg-bg-card rounded-xl border border-border p-6 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-[140px_1fr_1fr] gap-4">
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">Anrede *</label>
+            <select
+              name="salutation"
+              required
+              defaultValue={contact?.salutation || ""}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              <option value="" disabled>— wählen —</option>
+              <option value="Herr">Herr</option>
+              <option value="Frau">Frau</option>
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1">Vorname *</label>
             <input

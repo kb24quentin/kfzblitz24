@@ -77,6 +77,7 @@ export async function sendCampaignEmails(campaignId: string) {
     // Render template with contact data
     const contact = cc.contact;
     const replacements: Record<string, string> = {
+      salutation: contact.salutation || "",
       first_name: contact.firstName,
       last_name: contact.lastName,
       email: contact.email,

@@ -9,6 +9,7 @@ type ParsedRow = Record<string, string>;
 
 const FIELD_OPTIONS = [
   { value: "", label: "— Nicht importieren —" },
+  { value: "salutation", label: "Anrede" },
   { value: "firstName", label: "Vorname" },
   { value: "lastName", label: "Nachname" },
   { value: "email", label: "Email" },
@@ -50,11 +51,12 @@ export default function ImportPage() {
       const autoMap: Record<string, string> = {};
       for (const col of cols) {
         const lower = col.toLowerCase();
-        if (lower.includes("vorname") || lower === "first_name" || lower === "firstname") autoMap[col] = "firstName";
+        if (lower.includes("anrede") || lower === "salutation" || lower === "title") autoMap[col] = "salutation";
+        else if (lower.includes("vorname") || lower === "first_name" || lower === "firstname") autoMap[col] = "firstName";
         else if (lower.includes("nachname") || lower === "last_name" || lower === "lastname" || lower === "name") autoMap[col] = "lastName";
         else if (lower.includes("email") || lower.includes("mail")) autoMap[col] = "email";
         else if (lower.includes("firma") || lower.includes("company") || lower.includes("unternehmen")) autoMap[col] = "company";
-        else if (lower.includes("position") || lower.includes("titel") || lower.includes("role")) autoMap[col] = "position";
+        else if (lower.includes("position") || lower.includes("role")) autoMap[col] = "position";
         else if (lower.includes("telefon") || lower.includes("phone") || lower.includes("tel")) autoMap[col] = "phone";
         else if (lower.includes("stadt") || lower.includes("city") || lower.includes("ort")) autoMap[col] = "city";
       }
@@ -80,6 +82,7 @@ export default function ImportPage() {
     }
 
     const contacts = rows.map((row) => ({
+      salutation: reverseMap.salutation ? String(row[reverseMap.salutation] || "").trim() : undefined,
       firstName: String(row[reverseMap.firstName] || "").trim(),
       lastName: String(row[reverseMap.lastName] || "").trim(),
       email: String(row[reverseMap.email] || "").trim(),
