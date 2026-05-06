@@ -11,9 +11,31 @@ export const runtime = "nodejs";
 
 type LookupRequest = {
   bestellnummer?: string;
+  plz?: string;
   // typ is accepted but usually auto-derived server-side
   typ?: "auftrag" | "rechnung" | "lieferschein" | "angebot";
 };
+
+function normalizePlz(input: string | undefined | null): string {
+  return (input ?? "").replace(/\s+/g, "").trim();
+}
+
+/**
+ * PLZ check: a beleg matches if the input PLZ equals either the
+ * Rechnungs- or Lieferadresse PLZ. We compare the normalized digits-only
+ * form so trailing whitespace or formatting don't trip up legit customers.
+ */
+function belegMatchesPlz(beleg: Beleg, plz: string): boolean {
+  const target = normalizePlz(plz);
+  if (!target) return false;
+  const candidates = [
+    beleg.rechnungsadresse?.plz,
+    beleg.lieferadresse?.plz,
+  ]
+    .map(normalizePlz)
+    .filter(Boolean);
+  return candidates.includes(target);
+}
 
 export async function POST(req: Request) {
   let payload: LookupRequest;
@@ -24,9 +46,17 @@ export async function POST(req: Request) {
   }
 
   const bestellnummer = (payload.bestellnummer || "").trim();
+  const plz = normalizePlz(payload.plz);
+
   if (!bestellnummer) {
     return NextResponse.json(
       { ok: false, error: "Bestellnummer fehlt" },
+      { status: 400 }
+    );
+  }
+  if (!plz) {
+    return NextResponse.json(
+      { ok: false, error: "Postleitzahl fehlt" },
       { status: 400 }
     );
   }
@@ -35,7 +65,8 @@ export async function POST(req: Request) {
   const demoMode = !cfg || process.env.WEBISCO_DEMO_MODE === "true";
 
   if (demoMode) {
-    const belege = mockBelegByNumber(bestellnummer);
+    const allBelege = mockBelegByNumber(bestellnummer);
+    const belege = allBelege.filter((b) => belegMatchesPlz(b, plz));
     return NextResponse.json({
       ok: true,
       mode: "demo",
@@ -58,6 +89,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const belege: Beleg[] = result.data;
+  // Filter strictly: customer must know both Bestellnummer AND PLZ.
+  // We deliberately return an empty list (instead of an explicit "PLZ
+  // stimmt nicht") so we don't leak that an order with this number exists.
+  const belege: Beleg[] = result.data.filter((b) => belegMatchesPlz(b, plz));
   return NextResponse.json({ ok: true, mode: "live", belege });
 }

@@ -262,19 +262,25 @@ function Stepper({ step }: { step: Step }) {
 // ────────────────────────────────────────────────────────────────────────
 function SearchStep({ onFound }: { onFound: (b: Beleg) => void }) {
   const [bestellnummer, setBestellnummer] = useState("");
+  const [plz, setPlz] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const canSubmit = bestellnummer.trim().length > 0 && /^\d{4,5}$/.test(plz.trim());
+
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!bestellnummer.trim()) return;
+    if (!canSubmit) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bestellnummer: bestellnummer.trim() }),
+        body: JSON.stringify({
+          bestellnummer: bestellnummer.trim(),
+          plz: plz.trim(),
+        }),
       });
       const json = await res.json();
       if (!json.ok) {
@@ -283,7 +289,9 @@ function SearchStep({ onFound }: { onFound: (b: Beleg) => void }) {
       }
       const belege = (json.belege ?? []) as Beleg[];
       if (belege.length === 0) {
-        setError("Keine Bestellung zu dieser Nummer gefunden.");
+        setError(
+          "Keine Bestellung zu dieser Bestellnummer und PLZ gefunden. Bitte überprüfe deine Angaben."
+        );
         return;
       }
       // Pick the beleg with the most article positions so the customer
@@ -303,30 +311,47 @@ function SearchStep({ onFound }: { onFound: (b: Beleg) => void }) {
   return (
     <form
       onSubmit={onSubmit}
-      className="bg-bg-card rounded-xl border border-border p-6 shadow-sm space-y-3"
+      className="bg-bg-card rounded-xl border border-border p-6 shadow-sm space-y-4"
     >
-      <div>
-        <label className="block text-sm font-medium text-text mb-1">Bestellnummer</label>
-        <div className="flex gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr,160px] gap-3">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Bestellnummer</label>
           <input
             type="text"
             value={bestellnummer}
             onChange={(e) => setBestellnummer(e.target.value)}
-            placeholder="z. B. KB24-73627372300 oder A243775523"
-            className="flex-1 px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+            placeholder="z. B. KB24-73627372300"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
-          <button
-            type="submit"
-            disabled={loading || !bestellnummer.trim()}
-            className="bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-accent-light disabled:opacity-50 inline-flex items-center gap-2"
-          >
-            <Search className="w-4 h-4" />
-            {loading ? "Suche..." : "Weiter"}
-          </button>
         </div>
-        <p className="text-xs text-text-light mt-1.5">
-          Du findest die Bestellnummer in deiner Bestellbestätigung (beginnt mit KB24-).
-        </p>
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Postleitzahl</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="postal-code"
+            value={plz}
+            onChange={(e) => setPlz(e.target.value.replace(/\D/g, "").slice(0, 5))}
+            placeholder="z. B. 12345"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 font-mono tracking-wider"
+          />
+        </div>
+      </div>
+
+      <p className="text-xs text-text-light">
+        Du findest die Bestellnummer in deiner Bestellbestätigung (beginnt mit KB24-).
+        Die Postleitzahl ist die deiner Rechnungsadresse.
+      </p>
+
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={loading || !canSubmit}
+          className="bg-accent text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-accent-light disabled:opacity-50 inline-flex items-center gap-2"
+        >
+          <Search className="w-4 h-4" />
+          {loading ? "Suche..." : "Bestellung suchen"}
+        </button>
       </div>
 
       {error && (
