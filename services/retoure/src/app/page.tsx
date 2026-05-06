@@ -135,6 +135,9 @@ export default function Home() {
   const [selections, setSelections] = useState<Record<number, Selection>>({});
   const [requestDHLLabel, setRequestDHLLabel] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  // ─── TEMP: für Rechnungs-Viewer ───
+  const [userPlz, setUserPlz] = useState("");
+  // ─── /TEMP ───
 
   const shippingMode = beleg ? detectShippingMode(beleg) : "unknown";
   const articles = beleg ? allArticles(beleg) : [];
@@ -146,6 +149,7 @@ export default function Home() {
     setRequestDHLLabel(false);
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     setPdfUrl(null);
+    setUserPlz(""); // TEMP: Rechnungs-Viewer
   };
 
   return (
@@ -172,8 +176,9 @@ export default function Home() {
 
       {step === "search" && (
         <SearchStep
-          onFound={(b) => {
+          onFound={(b, plz) => {
             setBeleg(b);
+            setUserPlz(plz); // TEMP: Rechnungs-Viewer
             setStep("select");
           }}
         />
@@ -187,6 +192,7 @@ export default function Home() {
           setSelections={setSelections}
           onBack={() => setStep("search")}
           onNext={() => setStep("review")}
+          userPlz={userPlz} /* TEMP: Rechnungs-Viewer */
         />
       )}
 
@@ -260,7 +266,7 @@ function Stepper({ step }: { step: Step }) {
 // ────────────────────────────────────────────────────────────────────────
 // Step 1: Search
 // ────────────────────────────────────────────────────────────────────────
-function SearchStep({ onFound }: { onFound: (b: Beleg) => void }) {
+function SearchStep({ onFound }: { onFound: (b: Beleg, plz: string) => void }) {
   const [bestellnummer, setBestellnummer] = useState("");
   const [plz, setPlz] = useState("");
   const [loading, setLoading] = useState(false);
@@ -300,7 +306,7 @@ function SearchStep({ onFound }: { onFound: (b: Beleg) => void }) {
         [...belege].sort(
           (a, b) => allArticles(b).length - allArticles(a).length
         )[0] ?? belege[0];
-      onFound(best);
+      onFound(best, plz.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -374,6 +380,7 @@ function SelectStep({
   setSelections,
   onBack,
   onNext,
+  userPlz, // TEMP: Rechnungs-Viewer
 }: {
   beleg: Beleg;
   articles: Position[];
@@ -381,6 +388,7 @@ function SelectStep({
   setSelections: (s: Record<number, Selection>) => void;
   onBack: () => void;
   onNext: () => void;
+  userPlz: string /* TEMP */;
 }) {
   const toggle = (p: Position) => {
     if (disabledReason(p) !== null) return; // not selectable
@@ -412,6 +420,10 @@ function SelectStep({
   return (
     <div className="space-y-6">
       <BelegCard beleg={beleg} />
+
+      {/* ─── TEMP: Rechnungs-Viewer (testweise) ─── */}
+      <InvoiceViewerButton belegId={beleg.id} plz={userPlz} />
+      {/* ─── /TEMP ─── */}
 
       <div className="bg-bg-card rounded-xl border border-border overflow-hidden">
         <div className="p-4 border-b border-border bg-bg-secondary/50">
@@ -795,6 +807,62 @@ function DoneStep({ pdfUrl, onReset }: { pdfUrl: string; onReset: () => void }) 
         className="text-sm text-text-light hover:text-text"
       >
         Weitere Retoure anmelden →
+      </button>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// TEMP: Rechnungs-Viewer (testweise) — komplettes File-Block
+// löschen + den TEMP-Block in SelectStep + die userPlz-Prop in Home
+// entfernen, dann ist das Feature komplett raus.
+// ────────────────────────────────────────────────────────────────────────
+function InvoiceViewerButton({ belegId, plz }: { belegId: number; plz: string }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onClick = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/invoice-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ belegId, plz }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      // Best-effort cleanup
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3 flex-wrap">
+      <FileText className="w-4 h-4 text-blue-700 shrink-0" />
+      <div className="flex-1 min-w-[180px]">
+        <p className="text-sm font-medium text-blue-900">Rechnung zu dieser Bestellung</p>
+        <p className="text-xs text-blue-700/80">
+          [TEST] Öffnet die ursprüngliche Rechnung als PDF in einem neuen Tab.
+        </p>
+        {error && <p className="text-xs text-red-700 mt-1">{error}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={loading}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+      >
+        {loading ? "Lade..." : "Rechnung ansehen"}
       </button>
     </div>
   );
