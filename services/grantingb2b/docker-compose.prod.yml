@@ -1,0 +1,54 @@
+services:
+  grantingb2b-db:
+    image: postgres:16-alpine
+    container_name: grantingb2b_db_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: grantingb2b
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: grantingb2b
+    volumes:
+      - /opt/kfzblitz24/data/prod/grantingb2b-postgres:/var/lib/postgresql/data
+    networks:
+      - prod_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grantingb2b -d grantingb2b"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  grantingb2b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kfzblitz24/grantingb2b:prod
+    container_name: grantingb2b_prod
+    restart: unless-stopped
+    depends_on:
+      grantingb2b-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://grantingb2b:${DB_PASSWORD}@grantingb2b-db:5432/grantingb2b
+      APP_URL: https://grantingb2b.kfzblitz24-group.com
+      API_TOKEN: ${API_TOKEN}
+      NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-kfzblitz24-grantingb2b-prod}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    volumes:
+      - /opt/kfzblitz24/data/prod/grantingb2b-uploads:/app/uploads
+    networks:
+      - prod_internal
+      - traefik_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_net
+      - traefik.http.routers.grantingb2b-prod.rule=Host(`grantingb2b.kfzblitz24-group.com`)
+      - traefik.http.routers.grantingb2b-prod.entrypoints=websecure
+      - traefik.http.routers.grantingb2b-prod.tls=true
+      - traefik.http.routers.grantingb2b-prod.tls.certresolver=letsencrypt
+      - traefik.http.services.grantingb2b-prod.loadbalancer.server.port=3000
+
+networks:
+  prod_internal:
+    external: true
+  traefik_net:
+    external: true

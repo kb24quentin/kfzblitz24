@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model B2BCase {
+  id                 String   @id @default(cuid())
+
+  // ─── Klassifizierung ─────────────────────────────────────────────────
+  customerType       String   // "werkstatt" | "wiederverkaeufer"
+  businessSubtype    String?  // "kfz_werkstatt" | "reifenservice" | "karosseriebau" | "onlineshop" | "grosshandel" | "einzelhandel"
+
+  // ─── Firma & Ansprechpartner ─────────────────────────────────────────
+  companyName        String
+  contactFirstName   String
+  contactLastName    String
+  email              String
+  phone              String?
+
+  // ─── Rechnungsadresse ────────────────────────────────────────────────
+  street             String
+  postalCode         String
+  city               String
+  country            String   @default("Deutschland")
+
+  // ─── Lieferadresse (optional, sonst = Rechnungsadresse) ─────────────
+  shippingSameAsBilling Boolean  @default(true)
+  shippingStreet        String?
+  shippingPostalCode    String?
+  shippingCity          String?
+  shippingCountry       String?
+
+  // ─── Steuer & Gewerbe ────────────────────────────────────────────────
+  ustId                  String?
+  gewerbescheinPath      String?
+  gewerbescheinFilename  String?
+  gewerbescheinMimeType  String?
+  gewerbescheinSizeBytes Int?
+
+  // ─── Status & Bewertung ─────────────────────────────────────────────
+  // pending: case angelegt, noch nicht bewertet
+  // assessing: gerade in Assessment
+  // approved: freigegeben
+  // rejected: abgelehnt
+  // more_docs_needed: Dokumente nachgefordert
+  status             String   @default("pending")
+
+  // 0..100 Score aus Assessment
+  score              Int?
+
+  // JSON: Detailergebnisse aus Assessment (VIES, geocode, email, etc.)
+  assessmentJson     String?
+
+  // Empfehlung (vom Algorithmus berechnet): approve | review | reject
+  recommendation     String?
+
+  // Manuelle Entscheidung
+  decision           String?  // approved | rejected | more_docs_needed
+  decisionReason     String?
+  decidedBy          String?
+  decidedAt          DateTime?
+
+  // Quelle: form | api | import
+  source             String   @default("form")
+  externalRef        String?  // optional: ID aus dem aufrufenden System
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  events             B2BCaseEvent[]
+
+  @@index([status])
+  @@index([email])
+  @@index([companyName])
+}
+
+model B2BCaseEvent {
+  id          String   @id @default(cuid())
+  caseId      String
+  type        String   // case_created | assessment_started | assessment_completed | decision | document_uploaded | note | status_changed
+  message     String?
+  detailsJson String?
+  actor       String?  // wer (z.B. admin email, "system", "api")
+  createdAt   DateTime @default(now())
+
+  case B2BCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([createdAt])
+}
