@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { prisma } from "@/lib/db";
 import { saveUpload, UploadError } from "@/lib/upload";
 import { runAssessment } from "@/lib/assess";
@@ -152,22 +153,33 @@ export async function createCaseAction(
     }
   }
 
-  // ─── Assessment ─────────────────────────────────────────────────────
-  // Synchron triggern. Falls VIES/Nominatim langsam sind, dauert die
-  // Form-Submission ein paar Sekunden — für ein internes Tool ok.
-  try {
-    await runAssessment(created.id);
-  } catch (e) {
-    await prisma.b2BCaseEvent.create({
-      data: {
-        caseId: created.id,
-        type: "note",
-        message: `Assessment fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`,
-        actor: "system",
-      },
-    });
-  }
+  // Bereits hier auf "assessing" setzen, damit die Detail-Seite gleich
+  // das richtige Banner zeigt.
+  await prisma.b2BCase.update({
+    where: { id: created.id },
+    data: { status: "assessing" },
+  });
+
+  // ─── Assessment im Hintergrund nach dem Response ────────────────────
+  // `after()` schedule die Arbeit erst nachdem die Redirect-Response
+  // an den Browser raus ist — der User sieht sofort die Detail-Seite,
+  // VIES/Nominatim/OpenAI laufen dann im Hintergrund.
+  const newId = created.id;
+  after(async () => {
+    try {
+      await runAssessment(newId);
+    } catch (e) {
+      await prisma.b2BCaseEvent.create({
+        data: {
+          caseId: newId,
+          type: "note",
+          message: `Assessment fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`,
+          actor: "system",
+        },
+      });
+    }
+  });
 
   revalidatePath("/");
-  redirect(`/cases/${created.id}`);
+  redirect(`/cases/${newId}`);
 }

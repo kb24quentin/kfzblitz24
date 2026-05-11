@@ -72,10 +72,31 @@ model B2BCase {
   updatedAt          DateTime @updatedAt
 
   events             B2BCaseEvent[]
+  documents          B2BCaseDocument[]
 
   @@index([status])
   @@index([email])
   @@index([companyName])
+}
+
+/// Nachgereichte Dokumente (nach Initial-Submit). Der Gewerbeschein im
+/// B2BCase-Modell ist die Erstaufnahme; alles weitere wandert hier rein.
+model B2BCaseDocument {
+  id        String   @id @default(cuid())
+  caseId    String
+  kind      String   // "gewerbeschein" | "ust_id_certificate" | "handelsregister" | "meisterbrief" | "firmenbriefbogen" | "personalausweis_inhaber" | "address_proof" | "bank_statement" | "other"
+  filename  String
+  path      String
+  mimeType  String
+  sizeBytes Int
+  note      String?
+  uploadedBy String?
+  createdAt DateTime @default(now())
+
+  case B2BCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([kind])
 }
 
 model B2BCaseEvent {

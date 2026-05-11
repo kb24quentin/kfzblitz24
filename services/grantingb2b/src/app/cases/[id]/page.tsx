@@ -24,7 +24,9 @@ import {
   runAssessmentAction,
   decideCaseAction,
   addNoteAction,
+  deleteDocumentAction,
 } from "./actions";
+import { DocUploadForm } from "./doc-upload";
 
 export default async function CaseDetailPage({
   params,
@@ -36,6 +38,7 @@ export default async function CaseDetailPage({
     where: { id },
     include: {
       events: { orderBy: { createdAt: "desc" } },
+      documents: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!c) notFound();
@@ -49,8 +52,13 @@ export default async function CaseDetailPage({
     }
   }
 
+  const isAssessing = c.status === "assessing";
+
   return (
     <div className="space-y-6">
+      {/* Auto-refresh while assessment is running */}
+      {isAssessing && <meta httpEquiv="refresh" content="4" />}
+
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <Link
@@ -65,6 +73,19 @@ export default async function CaseDetailPage({
           <ScoreBadge score={c.score} />
         </div>
       </div>
+
+      {isAssessing && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-4 flex items-center gap-3">
+          <RefreshCw className="w-5 h-5 animate-spin shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold">Bewertung läuft im Hintergrund…</p>
+            <p className="text-sm">
+              VIES, OSM-Geocoder, OpenAI-OCR &amp; Reputations-Recherche feuern parallel. Diese
+              Seite aktualisiert sich automatisch.
+            </p>
+          </div>
+        </div>
+      )}
 
       <header className="bg-bg-card rounded-xl border border-border p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -340,6 +361,59 @@ export default async function CaseDetailPage({
             ) : (
               <p className="text-sm text-text-light">Kein Gewerbeschein hochgeladen.</p>
             )}
+          </section>
+
+          {/* ─── Dokumente nachreichen ──────────────────────────────── */}
+          <section className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
+            <h2 className="font-semibold text-text">Dokumente nachreichen</h2>
+            {c.documents.length > 0 && (
+              <ul className="space-y-2 mb-2">
+                {c.documents.map((d) => (
+                  <li
+                    key={d.id}
+                    className="border border-border rounded-lg p-2.5 bg-bg-secondary/40 text-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-text">
+                          <span className="text-xs text-accent uppercase tracking-wide mr-1">
+                            {d.kind}
+                          </span>
+                        </p>
+                        <a
+                          href={`/api/cases/${c.id}/documents/${d.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-accent hover:underline inline-flex items-center gap-1 text-xs break-all"
+                        >
+                          {d.filename}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                        {d.note && (
+                          <p className="text-xs text-text-light mt-1">{d.note}</p>
+                        )}
+                        <p className="text-[10px] text-text-light mt-0.5">
+                          {(d.sizeBytes / 1024).toFixed(0)} KB · {formatDateTime(d.createdAt)}
+                          {d.uploadedBy ? ` · ${d.uploadedBy}` : ""}
+                        </p>
+                      </div>
+                      <form action={deleteDocumentAction}>
+                        <input type="hidden" name="docId" value={d.id} />
+                        <input type="hidden" name="caseId" value={c.id} />
+                        <button
+                          type="submit"
+                          className="text-xs text-text-light hover:text-red-700"
+                          title="Entfernen"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
+                      </form>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <DocUploadForm caseId={c.id} />
           </section>
         </aside>
       </div>

@@ -24,7 +24,10 @@ export type RunAssessmentResult = {
  * (z.B. nach manuellem Dokumenten-Upload).
  */
 export async function runAssessment(caseId: string): Promise<RunAssessmentResult> {
-  const c = await prisma.b2BCase.findUnique({ where: { id: caseId } });
+  const c = await prisma.b2BCase.findUnique({
+    where: { id: caseId },
+    include: { documents: { orderBy: { createdAt: "desc" } } },
+  });
   if (!c) {
     return { ok: false, score: 0, recommendation: "reject", reasons: ["Case nicht gefunden."] };
   }
@@ -41,6 +44,26 @@ export async function runAssessment(caseId: string): Promise<RunAssessmentResult
     },
   });
 
+  // Nachgereichte Dokumente einlesen.
+  // Wenn ein nachgereichter Gewerbeschein existiert, nimm den für OCR
+  // statt des ursprünglich hochgeladenen.
+  const supplementalGewerbe = c.documents.find((d) => d.kind === "gewerbeschein");
+  const ocrTarget = supplementalGewerbe
+    ? {
+        path: supplementalGewerbe.path,
+        mime: supplementalGewerbe.mimeType,
+        hasFile: true as const,
+      }
+    : c.gewerbescheinPath && c.gewerbescheinMimeType
+    ? {
+        path: c.gewerbescheinPath,
+        mime: c.gewerbescheinMimeType,
+        hasFile: true as const,
+      }
+    : { hasFile: false as const };
+
+  const satisfiedDocKinds = new Set(c.documents.map((d) => d.kind));
+
   // Parallel rauslaufen — die OpenAI-Calls sind die langsamsten (Vision + web_search)
   const [vies, geocode, ocr, reputation] = await Promise.all([
     c.ustId ? checkVies(c.ustId) : Promise.resolve(null),
@@ -50,10 +73,10 @@ export async function runAssessment(caseId: string): Promise<RunAssessmentResult
       city: c.city,
       country: c.country,
     }),
-    c.gewerbescheinPath && c.gewerbescheinMimeType
+    ocrTarget.hasFile
       ? extractGewerbeschein(
-          uploadAbsolutePath(c.gewerbescheinPath),
-          c.gewerbescheinMimeType,
+          uploadAbsolutePath(ocrTarget.path),
+          ocrTarget.mime,
           {
             companyName: c.companyName,
             street: c.street,
@@ -76,12 +99,14 @@ export async function runAssessment(caseId: string): Promise<RunAssessmentResult
     vies,
     geocode,
     email,
-    hasGewerbeschein: !!c.gewerbescheinPath,
+    hasGewerbeschein: !!c.gewerbescheinPath || satisfiedDocKinds.has("gewerbeschein"),
     hasPhone: !!c.phone,
     companyName: c.companyName,
     customerType: c.customerType,
+    businessSubtype: c.businessSubtype,
     ocr,
     reputation,
+    satisfiedDocKinds,
   });
 
   // Automatische Status-Setzung (kann durch manuelle Entscheidung

@@ -23,8 +23,14 @@ export type ScoringInput = {
   hasPhone: boolean;
   companyName: string;
   customerType: string;
+  businessSubtype?: string | null;
   ocr?: GewerbescheinExtraction | null;
   reputation?: ReputationResearch | null;
+  /**
+   * Nachgereichte Dokumente — Set of kinds, die der Kunde später
+   * eingereicht hat. Werden aus der requestedDocs-Liste herausgefiltert.
+   */
+  satisfiedDocKinds?: Set<string>;
 };
 
 export type RequestedDoc = {
@@ -224,7 +230,18 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
   if (score < 0) score = 0;
 
   // ─── Requested documents (zuerst, damit die Recommendation sie nutzen kann) ──
-  const requestedDocs = computeRequestedDocs(input);
+  const allRequestedDocs = computeRequestedDocs(input);
+  // Bereits nachgereichte Dokumente herausfiltern
+  const satisfied = input.satisfiedDocKinds ?? new Set<string>();
+  const requestedDocs = allRequestedDocs.filter((d) => !satisfied.has(d.kind));
+  if (satisfied.size > 0) {
+    signals.satisfied_doc_kinds = Array.from(satisfied);
+    reasons.push(
+      `Nachgereichte Dokumente werden berücksichtigt: ${Array.from(satisfied).join(", ")}.`
+    );
+    // Pro nachgereichtem Doc gibt's einen kleinen Score-Boost (max +10 ges.)
+    score = Math.min(100, score + Math.min(satisfied.size * 3, 10));
+  }
 
   // ─── Recommendation ─────────────────────────────────────────────────
   let recommendation: ScoreBreakdown["recommendation"];
