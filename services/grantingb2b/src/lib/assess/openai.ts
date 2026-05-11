@@ -244,7 +244,7 @@ Antworte ausschließlich als JSON mit dieser Struktur:
     const resp = await client.responses.create({
       model: "gpt-4.1",
       input,
-      tools: [{ type: "web_search" }],
+      tools: [{ type: "web_search_preview" }],
       // Wir wollen am Ende strukturiertes JSON
       text: { format: { type: "json_object" } },
     });
