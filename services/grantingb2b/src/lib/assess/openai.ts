@@ -258,7 +258,7 @@ Antworte ausschließlich als JSON mit dieser Struktur:
     }
 
     const verdictRaw = String(parsed.verdict ?? "").toLowerCase();
-    const verdict: ReputationResearch extends { verdict: infer V } ? V : never =
+    const verdict: "legitimate" | "uncertain" | "suspicious" =
       verdictRaw === "legitimate"
         ? "legitimate"
         : verdictRaw === "suspicious"
