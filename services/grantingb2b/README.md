@@ -22,25 +22,35 @@ mehrerer Einzelchecks.
 
 ## Assessment-Checks (aktuell)
 
+**Philosophie:** B2B grob sortieren — eine reale Firma mit sauberer Adresse,
+verifiziertem Gewerbeschein und positiver Online-Präsenz reicht für Auto-Approve,
+auch ohne USt-ID.
+
 | Check | Quelle | Punkte |
 |-------|--------|--------|
-| USt-ID gültig | EU VIES SOAP | bis 30 |
-| USt-ID-Firmenname-Match | VIES + Fuzzy | bis 10 |
 | Adresse geocodierbar | OpenStreetMap Nominatim | bis 25 |
+| Gewerbeschein-OCR + Datenabgleich | OpenAI gpt-4o-mini (Vision) | bis 22 |
+| USt-ID gültig + Name-Match | EU VIES SOAP | bis 25 (optional) |
+| Reputations-Recherche | OpenAI gpt-4.1 + web_search | –20 bis +15 |
 | Email auf Firmen-Domain | Heuristik (Freemail-Liste) | bis 15 |
-| Gewerbeschein-OCR + Datenabgleich | OpenAI gpt-4o-mini (Vision) | bis 15 |
-| Reputations-Recherche | OpenAI gpt-4.1 + web_search | –10 bis +10 |
-| Gewerbeschein hochgeladen | Upload | 5 |
-| Telefon angegeben | Feld | 5 |
+| Gewerbeschein hochgeladen | Upload | 8 |
+| Telefon angegeben | Feld | 3 (kein Negativ-Abzug) |
+| Nachgereichte Dokumente | je Doc | +3 bis +10 |
 
 OpenAI-Calls werden übersprungen wenn `OPENAI_API_KEY` nicht gesetzt ist —
 das Assessment läuft dann nur mit VIES + Nominatim + Email-Heuristik.
 
 ## Score → Empfehlung
 
-- `≥ 80` → **approve** (auto-status: approved)
-- `50–79` → **review** (auto-status: more_docs_needed)
-- `< 50` → **reject** (auto-status: rejected)
+- `≥ 65` → **approve** (auto-status: approved)
+- `35–64` → **review** (auto-status: more_docs_needed)
+- `< 35` → **reject** (auto-status: rejected)
+
+Soft-Escalation: Fälle mit konkreten Blocker-Dokumenten und Score ≥ 20 werden
+auf "review" hochgezogen statt direkt abgelehnt.
+
+Hard-Override: Reputation-`suspicious` Cases landen mindestens auf "review",
+auch wenn der Score sonst zum Approve reichen würde.
 
 Admin kann jede Entscheidung in der UI manuell überschreiben.
 

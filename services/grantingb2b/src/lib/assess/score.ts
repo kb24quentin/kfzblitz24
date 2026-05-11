@@ -62,17 +62,22 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
   const signals: Record<string, unknown> = {};
   let score = 0;
 
-  // ─── USt-ID (max 40 Punkte) ──────────────────────────────────────────
+  // Scoring-Philosophie: B2B-Kunden GROB sortieren. Eine reale Firma mit
+  // sauberer Adresse + verifiziertem Gewerbeschein + neutraler/positiver
+  // Online-Präsenz reicht für Auto-Approve — auch ohne USt-ID. USt-ID
+  // wird "nice to have" gewichtet, nicht als Pflicht.
+
+  // ─── USt-ID (Bonus, max 25 Punkte) ───────────────────────────────────
   if (input.vies?.ok) {
     signals.vies_valid = input.vies.valid;
     if (input.vies.valid) {
-      score += 30;
-      reasons.push("USt-ID ist bei VIES als gültig registriert.");
+      score += 20;
+      reasons.push("USt-ID bei VIES als gültig registriert.");
       if (input.vies.name) {
         const sim = fuzzyMatch(input.vies.name, input.companyName);
         signals.vies_company_match = sim;
         if (sim >= 0.7) {
-          score += 10;
+          score += 5;
           reasons.push(
             `Firmenname stimmt mit VIES-Eintrag überein (${(sim * 100).toFixed(0)}%).`
           );
@@ -87,12 +92,13 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
     }
   } else if (input.vies && !input.vies.ok) {
     signals.vies_error = input.vies.error;
-    reasons.push(`USt-ID-Prüfung fehlgeschlagen: ${input.vies.error}`);
+    reasons.push(`USt-ID-Prüfung fehlgeschlagen: ${input.vies.error} (kein Punktabzug)`);
   } else {
+    // Keine USt-ID = kein Punktabzug, nur eine Notiz
     reasons.push("Keine USt-ID angegeben.");
   }
 
-  // ─── Adresse (max 25 Punkte) ────────────────────────────────────────
+  // ─── Adresse (max 25 Punkte) — Hauptsignal ──────────────────────────
   if (input.geocode?.ok) {
     if (input.geocode.found) {
       signals.geocode_match = input.geocode.addressMatchScore;
@@ -101,12 +107,12 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
         score += 25;
         reasons.push("Adresse vollständig auf OpenStreetMap auffindbar.");
       } else if (m > 0) {
-        score += 12;
+        score += 15;
         reasons.push(
           `Adresse teilweise auffindbar (${(m * 100).toFixed(0)}% Übereinstimmung).`
         );
       } else {
-        score += 5;
+        score += 8;
         reasons.push("Adresse ist geocodierbar, aber Details weichen ab.");
       }
     } else {
@@ -135,9 +141,9 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
     reasons.push("Email-Format ist ungültig.");
   }
 
-  // ─── Gewerbeschein vorhanden (max 5 Punkte für reine Existenz) ──────
+  // ─── Gewerbeschein vorhanden (max 8 Punkte für reine Existenz) ──────
   if (input.hasGewerbeschein) {
-    score += 5;
+    score += 8;
     reasons.push("Gewerbeschein wurde hochgeladen.");
     signals.gewerbeschein_uploaded = true;
   } else {
@@ -145,7 +151,7 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
     signals.gewerbeschein_uploaded = false;
   }
 
-  // ─── Gewerbeschein-OCR (max 15 Punkte) ──────────────────────────────
+  // ─── Gewerbeschein-OCR (max 22 Punkte) — Hauptsignal ─────────────────
   if (input.ocr) {
     if (input.ocr.ok) {
       signals.ocr_matches = input.ocr.matches;
@@ -153,24 +159,19 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
       let ocrPoints = 0;
       const m = input.ocr.matches;
       if ((m.companyName ?? 0) >= 0.7) {
-        ocrPoints += 7;
+        ocrPoints += 12;
         reasons.push(
           `Gewerbeschein-Firmenname stimmt mit Eingabe überein (${((m.companyName ?? 0) * 100).toFixed(0)}%).`
         );
       } else if ((m.companyName ?? 0) > 0) {
+        ocrPoints += 3;
         reasons.push(
           `Firmenname im Gewerbeschein weicht ab (${((m.companyName ?? 0) * 100).toFixed(0)}%).`
         );
       }
-      if (m.postalCode === true) {
-        ocrPoints += 3;
-      }
-      if ((m.city ?? 0) >= 0.7) {
-        ocrPoints += 3;
-      }
-      if ((m.street ?? 0) >= 0.6) {
-        ocrPoints += 2;
-      }
+      if (m.postalCode === true) ocrPoints += 4;
+      if ((m.city ?? 0) >= 0.7) ocrPoints += 3;
+      if ((m.street ?? 0) >= 0.6) ocrPoints += 3;
       if (m.postalCode === true && (m.city ?? 0) >= 0.7 && (m.street ?? 0) >= 0.6) {
         reasons.push("Adresse aus Gewerbeschein stimmt vollständig mit Eingabe überein.");
       } else if (
@@ -191,15 +192,12 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
     }
   }
 
-  // ─── Telefon (max 5 Punkte) ─────────────────────────────────────────
+  // ─── Telefon (max 3 Punkte, kein Negativ-Abzug) ─────────────────────
   if (input.hasPhone) {
-    score += 5;
-    reasons.push("Telefonnummer angegeben.");
-  } else {
-    reasons.push("Keine Telefonnummer angegeben.");
+    score += 3;
   }
 
-  // ─── Reputation / Online-Präsenz (max 10 Punkte) ────────────────────
+  // ─── Reputation / Online-Präsenz (max 15 Punkte) — Hauptsignal ──────
   if (input.reputation) {
     if (input.reputation.ok) {
       signals.reputation = {
@@ -208,14 +206,14 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
         sources: input.reputation.sources,
       };
       if (input.reputation.verdict === "legitimate") {
-        score += 10;
+        score += 15;
         reasons.push(`Reputations-Check positiv: ${input.reputation.summary}`);
       } else if (input.reputation.verdict === "uncertain") {
-        score += 3;
+        score += 5;
         reasons.push(`Reputations-Check unklar: ${input.reputation.summary}`);
       } else {
-        // suspicious → Punktabzug
-        score -= 10;
+        // Nur ECHTE Red Flags ziehen Punkte ab
+        score -= 20;
         reasons.push(`⚠ Reputations-Check verdächtig: ${input.reputation.summary}`);
       }
     } else if ("skipped" in input.reputation && input.reputation.skipped) {
@@ -244,20 +242,36 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
   }
 
   // ─── Recommendation ─────────────────────────────────────────────────
+  // B2B grobe Sortierung: konservative Schwellen wären falsch.
+  // - ≥ 65: Engine ist sich sicher genug → approve
+  // - 35–64: einige Signale fehlen oder weichen ab → review/Dokumente nach
+  // - < 35: kaum verifizierbare Signale → reject
   let recommendation: ScoreBreakdown["recommendation"];
-  if (score >= 80) recommendation = "approve";
-  else if (score >= 50) recommendation = "review";
+  if (score >= 65) recommendation = "approve";
+  else if (score >= 35) recommendation = "review";
   else recommendation = "reject";
 
   // Soft-Escalation: Wenn die Engine konkret Dokumente einfordert und der
   // Score nicht katastrophal ist, lieber "review/more_docs_needed" statt
   // direkt ablehnen — der Kunde hat eine echte Chance zu liefern.
   const hasBlockerDocs = requestedDocs.some((d) => d.severity === "blocker");
-  if (hasBlockerDocs && score >= 30 && recommendation === "reject") {
+  if (hasBlockerDocs && score >= 20 && recommendation === "reject") {
     recommendation = "review";
     reasons.push(
       "Empfehlung zu 'Dokumente nachfordern' eskaliert — siehe Doku-Anforderungen."
     );
+  }
+
+  // Hard-Override für klare Reputation-Suspicious-Cases: egal wie hoch der
+  // Score sonst wäre, wenn Reputation als suspicious eingestuft wurde,
+  // landet das mindestens auf review.
+  if (input.reputation?.ok && input.reputation.verdict === "suspicious") {
+    if (recommendation === "approve") {
+      recommendation = "review";
+      reasons.push(
+        "Empfehlung von 'approve' auf 'review' gestuft — Reputations-Check meldete Warnsignale."
+      );
+    }
   }
 
   return { score, recommendation, reasons, signals, requestedDocs };
@@ -306,30 +320,22 @@ function computeRequestedDocs(input: ScoringInput): RequestedDoc[] {
     }
   }
 
-  // USt-ID-Bescheinigung
+  // USt-ID-Bescheinigung — nur Blocker wenn aktiv ungültig
   const incorporated = isLikelyIncorporated(input.companyName);
   if (incorporated) {
-    if (!input.vies) {
-      // keine USt-ID angegeben
-      docs.push({
-        kind: "ust_id_certificate",
-        label: "USt-Identifikationsnummer-Bescheinigung (vom Finanzamt)",
-        reason: "Für Kapital-/Personengesellschaften erforderlich; bisher keine USt-ID angegeben.",
-        severity: "blocker",
-      });
-    } else if (input.vies.ok && !input.vies.valid) {
+    if (input.vies && input.vies.ok && !input.vies.valid) {
       docs.push({
         kind: "ust_id_certificate",
         label: "Aktuelle USt-ID-Bescheinigung (Finanzamt)",
         reason: "Die angegebene USt-ID konnte bei VIES nicht als gültig bestätigt werden.",
         severity: "blocker",
       });
-    } else if (!input.vies.ok) {
-      // VIES erreichbar nicht — soft hinweisen
+    } else if (!input.vies) {
+      // Keine USt-ID angegeben — empfohlen, nicht Pflicht
       docs.push({
         kind: "ust_id_certificate",
-        label: "USt-ID-Bescheinigung (zur Absicherung)",
-        reason: "USt-ID konnte automatisch nicht verifiziert werden (VIES nicht erreichbar).",
+        label: "USt-ID oder USt-ID-Bescheinigung",
+        reason: "Hilfreich zur Verifizierung, aber kein Pflicht-Dokument.",
         severity: "recommended",
       });
     }
