@@ -27,11 +27,28 @@ export type ScoringInput = {
   reputation?: ReputationResearch | null;
 };
 
+export type RequestedDoc = {
+  kind:
+    | "gewerbeschein"
+    | "gewerbeschein_clearer"
+    | "ust_id_certificate"
+    | "handelsregister"
+    | "meisterbrief"
+    | "firmenbriefbogen"
+    | "personalausweis_inhaber"
+    | "address_proof"
+    | "bank_statement";
+  label: string;
+  reason: string;
+  severity: "blocker" | "recommended";
+};
+
 export type ScoreBreakdown = {
   score: number; // 0..100
   recommendation: "approve" | "review" | "reject";
   reasons: string[]; // menschlich lesbare Begründungen
   signals: Record<string, unknown>; // strukturierte Detail-Signale
+  requestedDocs: RequestedDoc[]; // welche Dokumente konkret fehlen / nachzureichen sind
 };
 
 export function computeScore(input: ScoringInput): ScoreBreakdown {
@@ -206,11 +223,164 @@ export function computeScore(input: ScoringInput): ScoreBreakdown {
   if (score > 100) score = 100;
   if (score < 0) score = 0;
 
+  // ─── Requested documents (zuerst, damit die Recommendation sie nutzen kann) ──
+  const requestedDocs = computeRequestedDocs(input);
+
   // ─── Recommendation ─────────────────────────────────────────────────
   let recommendation: ScoreBreakdown["recommendation"];
   if (score >= 80) recommendation = "approve";
   else if (score >= 50) recommendation = "review";
   else recommendation = "reject";
 
-  return { score, recommendation, reasons, signals };
+  // Soft-Escalation: Wenn die Engine konkret Dokumente einfordert und der
+  // Score nicht katastrophal ist, lieber "review/more_docs_needed" statt
+  // direkt ablehnen — der Kunde hat eine echte Chance zu liefern.
+  const hasBlockerDocs = requestedDocs.some((d) => d.severity === "blocker");
+  if (hasBlockerDocs && score >= 30 && recommendation === "reject") {
+    recommendation = "review";
+    reasons.push(
+      "Empfehlung zu 'Dokumente nachfordern' eskaliert — siehe Doku-Anforderungen."
+    );
+  }
+
+  return { score, recommendation, reasons, signals, requestedDocs };
+}
+
+function isLikelyIncorporated(companyName: string): boolean {
+  return /\b(gmbh|ag|ug|kg|ohg|kgaa|se|e\.?k\.?|haftungsbeschr)/i.test(companyName);
+}
+
+function computeRequestedDocs(input: ScoringInput): RequestedDoc[] {
+  const docs: RequestedDoc[] = [];
+
+  // Gewerbeschein
+  if (!input.hasGewerbeschein) {
+    docs.push({
+      kind: "gewerbeschein",
+      label: "Gewerbeschein (Gewerbeanmeldung)",
+      reason: "Es wurde kein Gewerbeschein hochgeladen.",
+      severity: "blocker",
+    });
+  } else if (input.ocr && input.ocr.ok) {
+    const m = input.ocr.matches;
+    const nameOff = (m.companyName ?? 0) < 0.6;
+    const addressOff =
+      m.postalCode !== true &&
+      (m.city ?? 0) < 0.6 &&
+      (m.street ?? 0) < 0.6 &&
+      (input.ocr.data.street || input.ocr.data.city);
+    if (nameOff || addressOff) {
+      docs.push({
+        kind: "gewerbeschein_clearer",
+        label: "Aktueller / besser lesbarer Gewerbeschein",
+        reason: nameOff
+          ? `Firmenname im hochgeladenen Gewerbeschein weicht von der Eingabe ab${input.ocr.data.companyName ? ` (Dokument: "${input.ocr.data.companyName}")` : ""}.`
+          : "Adresse im hochgeladenen Gewerbeschein weicht von der Eingabe ab.",
+        severity: "blocker",
+      });
+    }
+    if ((input.ocr.confidence ?? 0) < 0.5) {
+      docs.push({
+        kind: "gewerbeschein_clearer",
+        label: "Gewerbeschein in besserer Qualität / Auflösung",
+        reason: "Der hochgeladene Gewerbeschein war schwer lesbar.",
+        severity: "recommended",
+      });
+    }
+  }
+
+  // USt-ID-Bescheinigung
+  const incorporated = isLikelyIncorporated(input.companyName);
+  if (incorporated) {
+    if (!input.vies) {
+      // keine USt-ID angegeben
+      docs.push({
+        kind: "ust_id_certificate",
+        label: "USt-Identifikationsnummer-Bescheinigung (vom Finanzamt)",
+        reason: "Für Kapital-/Personengesellschaften erforderlich; bisher keine USt-ID angegeben.",
+        severity: "blocker",
+      });
+    } else if (input.vies.ok && !input.vies.valid) {
+      docs.push({
+        kind: "ust_id_certificate",
+        label: "Aktuelle USt-ID-Bescheinigung (Finanzamt)",
+        reason: "Die angegebene USt-ID konnte bei VIES nicht als gültig bestätigt werden.",
+        severity: "blocker",
+      });
+    } else if (!input.vies.ok) {
+      // VIES erreichbar nicht — soft hinweisen
+      docs.push({
+        kind: "ust_id_certificate",
+        label: "USt-ID-Bescheinigung (zur Absicherung)",
+        reason: "USt-ID konnte automatisch nicht verifiziert werden (VIES nicht erreichbar).",
+        severity: "recommended",
+      });
+    }
+
+    docs.push({
+      kind: "handelsregister",
+      label: "Aktueller Handelsregisterauszug (HRB / HRA, nicht älter als 3 Monate)",
+      reason: "Bei Kapital-/Personengesellschaft Standard für B2B-Onboarding.",
+      severity: "recommended",
+    });
+  }
+
+  // Werkstatt-spezifisch: Meisterbrief / HWK-Eintrag
+  if (
+    input.customerType === "werkstatt" &&
+    (input.businessSubtype === "kfz_werkstatt" || input.businessSubtype === "karosseriebau")
+  ) {
+    docs.push({
+      kind: "meisterbrief",
+      label: "Meisterbrief oder Eintragung in die Handwerksrolle",
+      reason: "Kfz-Werkstatt / Karosseriebau gehört zum zulassungspflichtigen Handwerk.",
+      severity: "recommended",
+    });
+  }
+
+  // Freemail → Firmen-Briefbogen
+  if (input.email.valid && input.email.isFreemail) {
+    docs.push({
+      kind: "firmenbriefbogen",
+      label: "Firmen-Briefbogen mit Stempel / Visitenkarte",
+      reason: `Ansprech-Email läuft auf Freemail-Anbieter (${input.email.domain}). Wir brauchen einen Nachweis der Firmenzugehörigkeit.`,
+      severity: "blocker",
+    });
+  }
+
+  // Adresse nicht auffindbar
+  if (input.geocode?.ok && !input.geocode.found) {
+    docs.push({
+      kind: "address_proof",
+      label: "Nachweis der Firmenanschrift (Mietvertrag / aktuelle Versorgerrechnung)",
+      reason: "Die angegebene Firmenanschrift konnte online nicht verifiziert werden.",
+      severity: "blocker",
+    });
+  }
+
+  // Suspicious bei Reputation → harter Beleg-Schub
+  if (input.reputation?.ok && input.reputation.verdict === "suspicious") {
+    docs.push({
+      kind: "bank_statement",
+      label: "Kontoauszug / Bestätigung der Firmen-Bankverbindung",
+      reason: "Online-Recherche zeigte Warnhinweise — bitte Identität zusätzlich belegen.",
+      severity: "blocker",
+    });
+    docs.push({
+      kind: "personalausweis_inhaber",
+      label: "Personalausweis-Kopie des Inhabers / Geschäftsführers",
+      reason: "Zusätzliche Identitätsprüfung erforderlich.",
+      severity: "blocker",
+    });
+  }
+
+  // De-duplizieren (gleiche kind nur einmal, severity blocker gewinnt)
+  const seen = new Map<string, RequestedDoc>();
+  for (const d of docs) {
+    const prev = seen.get(d.kind);
+    if (!prev || (prev.severity === "recommended" && d.severity === "blocker")) {
+      seen.set(d.kind, d);
+    }
+  }
+  return Array.from(seen.values());
 }

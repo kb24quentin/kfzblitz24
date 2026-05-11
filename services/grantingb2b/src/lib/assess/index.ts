@@ -107,6 +107,7 @@ export async function runAssessment(caseId: string): Promise<RunAssessmentResult
           reputation,
           signals: breakdown.signals,
           reasons: breakdown.reasons,
+          requestedDocs: breakdown.requestedDocs,
           runAt: new Date().toISOString(),
         },
         null,

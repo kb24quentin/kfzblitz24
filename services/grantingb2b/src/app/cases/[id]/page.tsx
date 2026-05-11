@@ -17,6 +17,7 @@ import {
   Clock,
   RefreshCw,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import { StatusBadge, ScoreBadge } from "@/components/status-badge";
 import {
@@ -157,6 +158,11 @@ export default async function CaseDetailPage({
               </>
             )}
           </section>
+
+          {/* ─── Erforderliche Dokumente ──────────────────────────── */}
+          {assessment && (assessment.requestedDocs?.length ?? 0) > 0 && (
+            <RequestedDocsBlock docs={assessment.requestedDocs ?? []} />
+          )}
 
           {/* ─── Decision ─────────────────────────────────────────── */}
           <section className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
@@ -353,7 +359,15 @@ type ParsedAssessment = {
   reputation?: ReputationData | null;
   signals?: Record<string, unknown>;
   reasons: string[];
+  requestedDocs?: RequestedDocData[];
   runAt?: string;
+};
+
+type RequestedDocData = {
+  kind: string;
+  label: string;
+  reason: string;
+  severity: "blocker" | "recommended";
 };
 
 type ReputationData =
@@ -444,6 +458,53 @@ function RecommendationPill({ rec }: { rec: string | null }) {
     >
       {m.icon} {m.label}
     </span>
+  );
+}
+
+function RequestedDocsBlock({ docs }: { docs: RequestedDocData[] }) {
+  const blockers = docs.filter((d) => d.severity === "blocker");
+  const recommended = docs.filter((d) => d.severity === "recommended");
+  return (
+    <section className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="w-5 h-5 text-amber-700" />
+        <h2 className="font-semibold text-amber-900">Nachzureichende Dokumente</h2>
+      </div>
+      {blockers.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 mb-2">
+            Zwingend erforderlich
+          </p>
+          <ul className="space-y-2">
+            {blockers.map((d, i) => (
+              <li key={i} className="bg-white rounded-lg border border-amber-200 p-3">
+                <p className="text-sm font-semibold text-text">{d.label}</p>
+                <p className="text-xs text-text-light mt-0.5">{d.reason}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {recommended.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 mb-2">
+            Empfohlen
+          </p>
+          <ul className="space-y-2">
+            {recommended.map((d, i) => (
+              <li key={i} className="bg-white rounded-lg border border-amber-200/60 p-3">
+                <p className="text-sm font-medium text-text">{d.label}</p>
+                <p className="text-xs text-text-light mt-0.5">{d.reason}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <p className="text-xs text-amber-900/80 pt-1">
+        Diese Liste wird automatisch aus den Prüfungs-Signalen abgeleitet. Bei Vorlage der
+        Dokumente kannst du das Assessment erneut auslösen (&ldquo;Neu prüfen&rdquo;) oder direkt freigeben.
+      </p>
+    </section>
   );
 }
 
