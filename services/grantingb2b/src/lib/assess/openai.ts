@@ -226,7 +226,10 @@ Prüfe:
 - Gibt es Warnhinweise, Abmahnungen, Insolvenzmeldungen, oder Berichte von Betrug/unzufriedenen Kunden?
 - Stimmt die Adresse mit dem überein, was im Web zu finden ist?
 
-Antworte ausschließlich als JSON mit dieser Struktur:
+WICHTIG: Antworte am Ende AUSSCHLIESSLICH mit einem JSON-Objekt zwischen den Markern
+<<<JSON>>> und <<<END>>>. KEIN Text danach. Genau diese Struktur:
+
+<<<JSON>>>
 {
   "verdict": "legitimate" | "uncertain" | "suspicious",
   "summary": "1-3 Sätze Zusammenfassung der Recherche",
@@ -238,23 +241,46 @@ Antworte ausschließlich als JSON mit dieser Struktur:
     "redFlags": ["..."]
   },
   "sources": [{"title": "...", "url": "https://..."}]
-}`;
+}
+<<<END>>>`;
 
-    // Responses API mit web_search Tool
+    // Responses API mit web_search Tool — JSON-Mode ist mit web_search
+    // NICHT erlaubt, deshalb über Marker-Delimiter parsen.
     const resp = await client.responses.create({
       model: "gpt-4.1",
       input,
       tools: [{ type: "web_search_preview" }],
-      // Wir wollen am Ende strukturiertes JSON
-      text: { format: { type: "json_object" } },
     });
 
     const text = resp.output_text ?? "";
+    // Marker-Block extrahieren, fallback: ersten {…} JSON-Block finden
+    let jsonStr = "";
+    const markerMatch = text.match(/<<<JSON>>>([\s\S]*?)<<<END>>>/);
+    if (markerMatch) {
+      jsonStr = markerMatch[1].trim();
+    } else {
+      const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
+      if (fenceMatch) {
+        jsonStr = fenceMatch[1].trim();
+      } else {
+        const braceStart = text.indexOf("{");
+        const braceEnd = text.lastIndexOf("}");
+        if (braceStart >= 0 && braceEnd > braceStart) {
+          jsonStr = text.slice(braceStart, braceEnd + 1);
+        }
+      }
+    }
+    if (!jsonStr) {
+      return { ok: false, error: "Reputation-Antwort enthielt kein JSON" };
+    }
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      return { ok: false, error: "Reputation-Antwort war kein gültiges JSON" };
+      parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+    } catch (e) {
+      return {
+        ok: false,
+        error: `Reputation-Antwort war kein gültiges JSON: ${e instanceof Error ? e.message : String(e)}`,
+      };
     }
 
     const verdictRaw = String(parsed.verdict ?? "").toLowerCase();
