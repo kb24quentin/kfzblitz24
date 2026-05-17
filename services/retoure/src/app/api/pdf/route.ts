@@ -440,11 +440,121 @@ export async function POST(req: Request) {
     }
 
     if (labelResult.ok) {
-      // Label-PDF in unser Retouren-PDF mergen (alle Seiten anhängen)
+      // Label-PDF in unser Retouren-PDF einbetten — auf A4 mit kfzBlitz24
+      // Header, Anleitung und Label zentriert in Originalgröße.
       try {
         const labelPdf = await PDFDocument.load(new Uint8Array(labelResult.pdfBuffer));
-        const labelPages = await pdf.copyPages(labelPdf, labelPdf.getPageIndices());
-        labelPages.forEach((p) => pdf.addPage(p));
+        const embeddedLabelPages = await pdf.embedPdf(
+          labelPdf,
+          labelPdf.getPageIndices()
+        );
+        for (const lp of embeddedLabelPages) {
+          const labelHostPage = pdf.addPage([595.28, 841.89]); // A4
+          const pageW = 595.28;
+          const pageH = 841.89;
+
+          // ─── kfzBlitz24 Header ───
+          labelHostPage.drawRectangle({
+            x: 0,
+            y: pageH - 50,
+            width: pageW,
+            height: 50,
+            color: rgb(0.07, 0.16, 0.27),
+          });
+          labelHostPage.drawText("kfzBlitz24", {
+            x: 40,
+            y: pageH - 32,
+            size: 18,
+            font: fontBold,
+            color: rgb(1, 1, 1),
+          });
+          labelHostPage.drawText("DHL-Retourenlabel", {
+            x: pageW - 40 - fontBold.widthOfTextAtSize("DHL-Retourenlabel", 12),
+            y: pageH - 30,
+            size: 12,
+            font: fontBold,
+            color: rgb(1, 1, 1),
+          });
+
+          // ─── Anleitung ───
+          let iy = pageH - 80;
+          labelHostPage.drawText("Anleitung", {
+            x: 40,
+            y: iy,
+            size: 13,
+            font: fontBold,
+          });
+          iy -= 20;
+          const steps = [
+            "1. Schneide das DHL-Label entlang der gestrichelten Linie aus.",
+            "2. Klebe es gut sichtbar auf die Außenseite der Sendung.",
+            "3. Lege den Retourenschein (Seite 1) ins Paket.",
+            "4. Übergib das Paket bei einer DHL-Filiale oder Packstation.",
+          ];
+          for (const s of steps) {
+            labelHostPage.drawText(s, { x: 40, y: iy, size: 10, font });
+            iy -= 14;
+          }
+          // Hinweis zur Erstattung
+          iy -= 6;
+          labelHostPage.drawText(
+            "Bei Eingang prüfen wir die Ware und veranlassen die Erstattung",
+            { x: 40, y: iy, size: 9, font, color: rgb(0.4, 0.4, 0.4) }
+          );
+          iy -= 11;
+          labelHostPage.drawText(
+            "innerhalb von 5 Werktagen auf das ursprüngliche Zahlungsmittel.",
+            { x: 40, y: iy, size: 9, font, color: rgb(0.4, 0.4, 0.4) }
+          );
+
+          // ─── Label zentriert + gestrichelter Rahmen ───
+          const labelW = lp.width;
+          const labelH = lp.height;
+          // Platziere das Label vertikal mittig zwischen Anleitung-Ende und
+          // Footer; horizontal zentriert.
+          const availableYTop = iy - 30;
+          const availableYBottom = 80;
+          const availSpace = availableYTop - availableYBottom;
+          const lx = (pageW - labelW) / 2;
+          const ly = availableYBottom + (availSpace - labelH) / 2;
+
+          // Gestrichelte Schneide-Linien-Markierung
+          const pad = 8;
+          labelHostPage.drawRectangle({
+            x: lx - pad,
+            y: ly - pad,
+            width: labelW + 2 * pad,
+            height: labelH + 2 * pad,
+            borderColor: rgb(0.6, 0.6, 0.6),
+            borderWidth: 0.5,
+            borderDashArray: [4, 3],
+          });
+          // Mini-Scheren-Hinweis links neben dem Rahmen
+          labelHostPage.drawText("✂", {
+            x: lx - pad - 14,
+            y: ly + labelH / 2 - 4,
+            size: 11,
+            color: rgb(0.5, 0.5, 0.5),
+          });
+
+          // Das eingebettete Label-PDF auf die Seite zeichnen
+          labelHostPage.drawPage(lp, {
+            x: lx,
+            y: ly,
+            width: labelW,
+            height: labelH,
+          });
+
+          // ─── Footer ───
+          labelHostPage.drawText(
+            `Tracking: ${labelResult.trackingNumber ?? "—"}   ·   Bestellnr.: ${body.bestellnummer}`,
+            { x: 40, y: 50, size: 9, font, color: rgb(0.4, 0.4, 0.4) }
+          );
+          labelHostPage.drawText(
+            "kfzBlitz24 · retoure.kfzblitz24-group.com",
+            { x: 40, y: 36, size: 8, font, color: rgb(0.55, 0.55, 0.55) }
+          );
+        }
         labelInfo =
           body.shippingMode === "sicher"
             ? {
