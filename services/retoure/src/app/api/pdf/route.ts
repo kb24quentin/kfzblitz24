@@ -16,6 +16,7 @@ type Address = {
   ort?: string;
   email?: string;
   telefon?: string;
+  handy?: string;
 };
 
 type Item = {
@@ -426,6 +427,7 @@ export async function POST(req: Request) {
               city: addr.ort,
               email: addr.email,
               phone: addr.telefon,
+              mobile: addr.handy,
               countryISOCode: "DE",
             }
           : undefined,

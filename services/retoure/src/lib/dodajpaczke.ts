@@ -129,7 +129,8 @@ export interface CustomerForReceiver {
   city?: string;
   countryISOCode?: string; // default "DE"
   email?: string;
-  phone?: string;
+  phone?: string; // Festnetz
+  mobile?: string; // Handy
 }
 
 export interface CreateRetoureOptions {
@@ -208,7 +209,11 @@ export async function createRetoureLabel(
       identityCommunication: {
         contactPerson: fullName || "",
         email: c.email ?? "",
-        phone: c.phone ?? "",
+        // DHL braucht mind. eine Telefonnummer — fülle phone immer wenn
+        // wir irgendeine Nummer haben (Festnetz ODER Handy), und
+        // dupliziere ins mobile-Feld wenn handy bekannt.
+        phone: c.phone || c.mobile || "",
+        mobile: c.mobile || "",
       },
     };
   } else {
