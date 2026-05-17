@@ -134,6 +134,8 @@ export default function Home() {
   const [beleg, setBeleg] = useState<Beleg | null>(null);
   const [selections, setSelections] = useState<Record<number, Selection>>({});
   const [requestDHLLabel, setRequestDHLLabel] = useState(false);
+  /** Standard-Versand: Label kostenpflichtig (Abzug von Erstattung) */
+  const [requestPaidLabel, setRequestPaidLabel] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   // ─── TEMP: für Rechnungs-Viewer ───
   const [userPlz, setUserPlz] = useState("");
@@ -147,6 +149,7 @@ export default function Home() {
     setBeleg(null);
     setSelections({});
     setRequestDHLLabel(false);
+    setRequestPaidLabel(false);
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     setPdfUrl(null);
     setUserPlz(""); // TEMP: Rechnungs-Viewer
@@ -204,6 +207,8 @@ export default function Home() {
           shippingMode={shippingMode}
           requestDHLLabel={requestDHLLabel}
           setRequestDHLLabel={setRequestDHLLabel}
+          requestPaidLabel={requestPaidLabel}
+          setRequestPaidLabel={setRequestPaidLabel}
           onBack={() => setStep("select")}
           onDone={(url) => {
             setPdfUrl(url);
@@ -553,6 +558,10 @@ function SelectStep({
 // ────────────────────────────────────────────────────────────────────────
 // Step 3: Review + submit
 // ────────────────────────────────────────────────────────────────────────
+const LABEL_FEE_NET = 4.5; // Netto-Kosten für ein über uns erzeugtes DHL-Label
+const VAT_RATE = 0.19;
+const LABEL_FEE_BRUTTO = +(LABEL_FEE_NET * (1 + VAT_RATE)).toFixed(2);
+
 function ReviewStep({
   beleg,
   articles,
@@ -560,6 +569,8 @@ function ReviewStep({
   shippingMode,
   requestDHLLabel,
   setRequestDHLLabel,
+  requestPaidLabel,
+  setRequestPaidLabel,
   onBack,
   onDone,
 }: {
@@ -569,6 +580,8 @@ function ReviewStep({
   shippingMode: ShippingMode;
   requestDHLLabel: boolean;
   setRequestDHLLabel: (b: boolean) => void;
+  requestPaidLabel: boolean;
+  setRequestPaidLabel: (b: boolean) => void;
   onBack: () => void;
   onDone: (pdfUrl: string) => void;
 }) {
@@ -593,10 +606,17 @@ function ReviewStep({
       });
   }, [articles, selections]);
 
-  const erstattungSumme = selected.reduce(
+  const erstattungSummeBrutto = selected.reduce(
     (sum, it) => sum + (it.gesamtpreis_brutto ?? 0),
     0
   );
+
+  // Sichere Rückgabe: Label-Erzeugung ist kostenfrei → kein Abzug.
+  // Standard + Opt-in: 4,50 € netto (5,36 € brutto) Label-Kosten gehen
+  // vom Erstattungsbetrag ab.
+  const labelDeduction =
+    shippingMode === "sicher" ? 0 : requestPaidLabel ? LABEL_FEE_BRUTTO : 0;
+  const erstattungSumme = Math.max(0, erstattungSummeBrutto - labelDeduction);
 
   const addr = beleg.rechnungsadresse;
 
@@ -616,6 +636,9 @@ function ReviewStep({
           items: selected,
           shippingMode,
           requestDHLLabel,
+          requestPaidLabel,
+          labelFeeNet: LABEL_FEE_NET,
+          labelFeeBrutto: LABEL_FEE_BRUTTO,
         }),
       });
       if (!res.ok) {
@@ -659,22 +682,59 @@ function ReviewStep({
           </label>
         </div>
       ) : (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4">
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 space-y-3">
           <div className="flex items-start gap-2">
             <Truck className="w-5 h-5 mt-0.5 shrink-0" />
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1">
               <p className="font-semibold">Standard-Rücksendung</p>
               <p className="text-sm">
-                Für diese Bestellung wurde die &ldquo;Sichere Rückgabe&rdquo; nicht gebucht. Bitte sende die Ware auf eigene Kosten an folgende Adresse:
+                Für diese Bestellung wurde die &ldquo;Sichere Rückgabe&rdquo; nicht gebucht. Du
+                hast zwei Möglichkeiten:
               </p>
-              <div className="text-sm bg-white rounded-lg p-3 border border-amber-200 font-mono">
+
+              <ol className="text-sm list-decimal ml-5 space-y-1">
+                <li>
+                  <span className="font-semibold">Auf eigene Kosten verschicken</span> — an
+                  diese Adresse:
+                </li>
+              </ol>
+              <div className="text-sm bg-white rounded-lg p-3 border border-amber-200 font-mono ml-5">
                 kfzBlitz24 GmbH<br />
                 c/o RETOURE<br />
                 Musterstraße 1<br />
                 12345 Musterstadt
               </div>
-              <p className="text-xs">
-                Lege den ausgedruckten Retourenschein (siehe Schritt 4) bitte der Sendung bei.
+
+              <ol className="text-sm list-decimal ml-5 space-y-1" start={2}>
+                <li>
+                  <span className="font-semibold">DHL-Retourenlabel über uns erzeugen</span>{" "}
+                  — bequem, wir generieren das Label, du druckst es aus.
+                </li>
+              </ol>
+
+              <label className="ml-5 flex items-start gap-2 text-sm cursor-pointer bg-white rounded-lg p-3 border border-amber-200">
+                <input
+                  type="checkbox"
+                  checked={requestPaidLabel}
+                  onChange={(e) => setRequestPaidLabel(e.target.checked)}
+                  className="mt-0.5 rounded border-amber-300"
+                />
+                <span>
+                  Ja, bitte <strong>DHL-Label über kfzBlitz24 erzeugen</strong>.<br />
+                  <span className="text-xs">
+                    Kosten:{" "}
+                    <strong>
+                      {LABEL_FEE_NET.toFixed(2).replace(".", ",")} € netto
+                    </strong>{" "}
+                    ({LABEL_FEE_BRUTTO.toFixed(2).replace(".", ",")} € brutto inkl. MwSt.) —
+                    werden von der Erstattung abgezogen.
+                  </span>
+                </span>
+              </label>
+
+              <p className="text-xs ml-5">
+                Lege den ausgedruckten Retourenschein (siehe Schritt 4) bitte der Sendung
+                bei.
               </p>
             </div>
           </div>
@@ -718,12 +778,32 @@ function ReviewStep({
               )}
             </div>
           ))}
-          {erstattungSumme > 0 && (
-            <div className="p-4 bg-bg-secondary/40 flex items-center justify-between">
-              <span className="text-sm font-semibold text-text">Voraussichtliche Erstattung</span>
-              <span className="text-lg font-bold text-text">
-                {erstattungSumme.toFixed(2).replace(".", ",")} €
-              </span>
+          {erstattungSummeBrutto > 0 && (
+            <div className="p-4 bg-bg-secondary/40 space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-text-light">Warenwert</span>
+                <span className="text-text font-medium">
+                  {erstattungSummeBrutto.toFixed(2).replace(".", ",")} €
+                </span>
+              </div>
+              {labelDeduction > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-text-light">
+                    DHL-Label-Kosten ({LABEL_FEE_NET.toFixed(2).replace(".", ",")} € netto)
+                  </span>
+                  <span className="text-red-700 font-medium">
+                    – {labelDeduction.toFixed(2).replace(".", ",")} €
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                <span className="text-sm font-semibold text-text">
+                  Voraussichtliche Erstattung
+                </span>
+                <span className="text-lg font-bold text-text">
+                  {erstattungSumme.toFixed(2).replace(".", ",")} €
+                </span>
+              </div>
             </div>
           )}
         </div>

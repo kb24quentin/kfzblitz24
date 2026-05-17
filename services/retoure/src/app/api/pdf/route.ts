@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
 import bwipjs from "bwip-js";
 import { addBelegBemerkung, getWebiscoConfig } from "@/lib/webisco";
+import { createRetoureLabel, type RetoureLabelResult } from "@/lib/dodajpaczke";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,11 +36,37 @@ type Body = {
   rechnungsadresse?: Address;
   items: Item[];
   shippingMode: "standard" | "sicher" | "unknown";
+  /** Sichere Rückgabe: Label kostenfrei anfordern */
   requestDHLLabel?: boolean;
+  /** Standard-Versand: Label gegen Gebühr (Abzug von Erstattung) */
+  requestPaidLabel?: boolean;
+  /** Label-Gebühr (vom Client mitgeschickt zur Konsistenz) */
+  labelFeeNet?: number;
+  labelFeeBrutto?: number;
 };
 
+/** Soll ein DHL-Retoure-Label erzeugt werden? */
+function shouldGenerateLabel(body: Body): boolean {
+  if (body.shippingMode === "sicher" && body.requestDHLLabel) return true;
+  if (body.shippingMode !== "sicher" && body.requestPaidLabel) return true;
+  return false;
+}
+
+/** Label-Info zum Anhängen an die Bemerkung. */
+type LabelInfo =
+  | { mode: "none" }
+  | { mode: "free"; trackingNumber?: string; shipmentId?: number }
+  | {
+      mode: "paid";
+      trackingNumber?: string;
+      shipmentId?: number;
+      feeNet: number;
+      feeBrutto: number;
+    }
+  | { mode: "failed"; reason: string };
+
 /** Build the free-text Bemerkung that gets written back to Abisco. */
-function buildBemerkungText(body: Body): string {
+function buildBemerkungText(body: Body, label: LabelInfo): string {
   const ts = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const stamp = `${pad(ts.getDate())}.${pad(ts.getMonth() + 1)}.${ts.getFullYear()} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
@@ -77,14 +104,38 @@ function buildBemerkungText(body: Body): string {
     if (it.gesamtpreis_brutto) total += it.gesamtpreis_brutto;
   }
   if (total > 0) {
+    const deduction = label.mode === "paid" ? label.feeBrutto : 0;
+    const erstattung = Math.max(0, total - deduction);
     lines.push("");
-    lines.push(`VORAUSSICHTLICHE ERSTATTUNG: ${total.toFixed(2).replace(".", ",")} EUR`);
+    lines.push(`WARENWERT: ${total.toFixed(2).replace(".", ",")} EUR`);
+    if (deduction > 0) {
+      lines.push(`ABZUG DHL-LABEL: -${deduction.toFixed(2).replace(".", ",")} EUR`);
+    }
+    lines.push(`VORAUSSICHTLICHE ERSTATTUNG: ${erstattung.toFixed(2).replace(".", ",")} EUR`);
   }
-  lines.push(
-    body.shippingMode === "sicher"
-      ? `VERSAND: Sichere Rückgabe${body.requestDHLLabel ? " (DHL-Label angefordert)" : ""}`
-      : "VERSAND: Standard (Kunde trägt Rücksendekosten)"
-  );
+  lines.push("");
+  if (body.shippingMode === "sicher") {
+    lines.push("VERSAND: Sichere Rückgabe");
+    if (label.mode === "free") {
+      lines.push(
+        `  DHL-Retourenlabel über uns erzeugt (kostenfrei).${label.trackingNumber ? ` Tracking: ${label.trackingNumber}` : ""}`
+      );
+    } else if (body.requestDHLLabel) {
+      lines.push("  DHL-Label vom Kunden angefordert.");
+    }
+  } else {
+    lines.push("VERSAND: Standard");
+    if (label.mode === "paid") {
+      lines.push(
+        `  DHL-Retourenlabel über uns erzeugt (kostenpflichtig: ${label.feeNet.toFixed(2).replace(".", ",")} EUR netto / ${label.feeBrutto.toFixed(2).replace(".", ",")} EUR brutto).${label.trackingNumber ? ` Tracking: ${label.trackingNumber}` : ""}`
+      );
+    } else {
+      lines.push("  Kunde trägt Rücksendekosten selbst.");
+    }
+  }
+  if (label.mode === "failed") {
+    lines.push(`  ⚠ Label-Erzeugung fehlgeschlagen: ${label.reason}`);
+  }
   lines.push("");
   lines.push("Eingegangen über: retoure.kfzblitz24-group.com");
   return lines.join("\n");
@@ -354,13 +405,68 @@ export async function POST(req: Request) {
     { size: 8, color: [0.6, 0.6, 0.6] }
   );
 
+  // ── Optional: DHL-Retoure-Label über dodajpaczke generieren + mergen ──
+  let labelInfo: LabelInfo = { mode: "none" };
+  if (shouldGenerateLabel(body)) {
+    let labelResult: RetoureLabelResult;
+    try {
+      labelResult = await createRetoureLabel({
+        customerReference: body.bestellnummer,
+        description: `Retoure ${body.bestellnummer}`,
+      });
+    } catch (e) {
+      labelResult = {
+        ok: false,
+        error: `dodajpaczke threw: ${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
+
+    if (labelResult.ok) {
+      // Label-PDF in unser Retouren-PDF mergen (alle Seiten anhängen)
+      try {
+        const labelPdf = await PDFDocument.load(new Uint8Array(labelResult.pdfBuffer));
+        const labelPages = await pdf.copyPages(labelPdf, labelPdf.getPageIndices());
+        labelPages.forEach((p) => pdf.addPage(p));
+        labelInfo =
+          body.shippingMode === "sicher"
+            ? {
+                mode: "free",
+                trackingNumber: labelResult.trackingNumber,
+                shipmentId: labelResult.shipmentId,
+              }
+            : {
+                mode: "paid",
+                trackingNumber: labelResult.trackingNumber,
+                shipmentId: labelResult.shipmentId,
+                feeNet: body.labelFeeNet ?? 4.5,
+                feeBrutto: body.labelFeeBrutto ?? 5.36,
+              };
+        console.log(
+          `[retoure] DHL label merged (shipment=${labelResult.shipmentId}, tracking=${labelResult.trackingNumber ?? "—"})`
+        );
+      } catch (e) {
+        labelInfo = {
+          mode: "failed",
+          reason: `Label-PDF konnte nicht gemerged werden: ${e instanceof Error ? e.message : String(e)}`,
+        };
+        console.warn(`[retoure] label merge failed: ${labelInfo.reason}`);
+      }
+    } else if ("skipped" in labelResult && labelResult.skipped) {
+      labelInfo = { mode: "failed", reason: `dodajpaczke skipped: ${labelResult.reason}` };
+      console.warn(`[retoure] label generation skipped: ${labelResult.reason}`);
+    } else {
+      labelInfo = { mode: "failed", reason: labelResult.error };
+      console.warn(`[retoure] label generation error: ${labelResult.error}`);
+    }
+  }
+
   const bytes = await pdf.save();
 
   // ── Write a Bemerkung back to Abisco (best-effort, non-blocking) ──
   const cfg = getWebiscoConfig();
   const belegId = body.belegid ?? body.belegnummer;
   if (cfg && belegId) {
-    const text = buildBemerkungText(body);
+    const text = buildBemerkungText(body, labelInfo);
     const res = await addBelegBemerkung(cfg, {
       typ: "auftrag",
       id: belegId,
