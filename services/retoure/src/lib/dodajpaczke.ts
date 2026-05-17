@@ -96,7 +96,9 @@ async function authedFetch(
 ): Promise<Response> {
   const token = await getToken(cfg);
   const headers = new Headers(init?.headers);
-  headers.set("Authorization", `Bearer ${token}`);
+  // ⚠ dodajpaczke erwartet den Token RAW im Authorization-Header, OHNE
+  // "Bearer"-Prefix. Anders als bei den meisten REST-APIs üblich, sonst 403.
+  headers.set("Authorization", token);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
   return fetch(`${cfg.baseUrl}${path}`, { ...init, headers, cache: "no-store" });
 }
@@ -217,18 +219,26 @@ export async function createRetoureLabel(
   const trackingNumber = first?.shipment?.trackingNumber;
   const retoureIdc = first?.shipment?.retoureIdc;
 
-  // Schritt 2: Retoure-Label abholen
+  // Schritt 2: Label abholen.
+  // Für DHL-Retoure-Sendungen (Provider 36 — angelegt mit createShipment)
+  // ist /shippingLabel das richtige Endpoint. /retoureLabel dagegen ist für
+  // "ich habe eine bestehende Versand-Sendung und will nachträglich eine
+  // Retoure draufpacken". Bei reinen Retoure-Sendungen wäre /retoureLabel
+  // 404 — daher: erst shippingLabel versuchen, dann als Fallback retoureLabel.
   let labelRes: Response;
   try {
-    labelRes = await authedFetch(cfg, `/shipments/${shipmentId}/retoureLabel`);
+    labelRes = await authedFetch(cfg, `/shipments/${shipmentId}/shippingLabel`);
+    if (labelRes.status === 404) {
+      labelRes = await authedFetch(cfg, `/shipments/${shipmentId}/retoureLabel`);
+    }
   } catch (e) {
-    return { ok: false, error: `dodajpaczke retoureLabel network: ${stringErr(e)}` };
+    return { ok: false, error: `dodajpaczke label network: ${stringErr(e)}` };
   }
   if (!labelRes.ok) {
     const txt = await labelRes.text().catch(() => "");
     return {
       ok: false,
-      error: `dodajpaczke retoureLabel HTTP ${labelRes.status}: ${txt.slice(0, 200)}`,
+      error: `dodajpaczke label HTTP ${labelRes.status}: ${txt.slice(0, 200)}`,
     };
   }
   const labelJson = (await labelRes.json()) as {
@@ -238,7 +248,7 @@ export async function createRetoureLabel(
   if (labelJson.error || !labelJson.data?.file) {
     return {
       ok: false,
-      error: `dodajpaczke retoureLabel: ${labelJson.error ?? "kein file in Antwort"}`,
+      error: `dodajpaczke label: ${labelJson.error ?? "kein file in Antwort"}`,
     };
   }
 
