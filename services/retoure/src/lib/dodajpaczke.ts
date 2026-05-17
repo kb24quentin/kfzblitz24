@@ -118,6 +118,20 @@ export type RetoureLabelResult =
       filename: string;
     };
 
+export interface CustomerForReceiver {
+  salutation?: string; // "Herr" | "Frau"
+  firstname?: string;
+  lastname?: string;
+  companyName?: string;
+  streetName?: string;
+  streetNumber?: string;
+  zipNumber?: string;
+  city?: string;
+  countryISOCode?: string; // default "DE"
+  email?: string;
+  phone?: string;
+}
+
 export interface CreateRetoureOptions {
   /** Gewicht in kg, default 1. DHL Retoure-Label akzeptiert flexible Werte. */
   weightInKg?: number;
@@ -125,6 +139,22 @@ export interface CreateRetoureOptions {
   customerReference?: string;
   /** Optionaler Freitext / Beschreibung. */
   description?: string;
+  /**
+   * Kundendaten für den Receiver des Retoure-Labels.
+   * In dodajpaczke-Retoure-Semantik (Provider 36) ist der "receiver"
+   * derjenige, der die Sendung verschickt — also der Kunde, dessen
+   * Adresse auf dem Label als Absender erscheint.
+   */
+  customer?: CustomerForReceiver;
+}
+
+/** Versucht "Hauptstraße 5a" → ["Hauptstraße", "5a"] zu splitten. */
+function splitStreet(raw: string | undefined): { streetName?: string; streetNumber?: string } {
+  if (!raw) return {};
+  const trimmed = raw.trim();
+  const m = trimmed.match(/^(.+?)\s+(\d+[a-zA-Z\-/]*\d*)\s*$/);
+  if (m) return { streetName: m[1].trim(), streetNumber: m[2].trim() };
+  return { streetName: trimmed };
 }
 
 /**
@@ -148,6 +178,50 @@ export async function createRetoureLabel(
   }
 
   // Schritt 1: Sendung anlegen (sync=1 → wir kriegen die ID direkt zurück)
+  // ──────────────────────────────────────────────────────────────────────
+  // Receiver-Logik:
+  // • Kundendaten vorhanden → echte Kunden-Adresse auf das Label
+  // • Sonst → Fallback auf Warehouse (zeigt N/A; nicht ideal aber erlaubt)
+  let receiverBlock: Record<string, unknown>;
+  if (opts.customer) {
+    const c = opts.customer;
+    const fullName = [c.firstname, c.lastname].filter(Boolean).join(" ").trim();
+    // Wenn echter Firmenname existiert: companyName + ggf. contactPerson;
+    // sonst: type=company mit fullName als companyName (person-Typ ist deprecated)
+    const companyName = c.companyName?.trim() || fullName || "Kunde";
+    const street = splitStreet(
+      // Falls separat übergeben, nimm direkt; sonst aus streetName extrahieren
+      c.streetName && c.streetNumber
+        ? `${c.streetName} ${c.streetNumber}`
+        : c.streetName
+    );
+    receiverBlock = {
+      type: "company",
+      companyName,
+      identityAddress: {
+        streetName: c.streetName ?? street.streetName ?? "N/A",
+        streetNumber: c.streetNumber ?? street.streetNumber ?? "",
+        zipNumber: c.zipNumber ?? cfg.warehouseZip,
+        city: c.city ?? "",
+        originCountryISOCode: c.countryISOCode ?? "DE",
+      },
+      identityCommunication: {
+        contactPerson: fullName || "",
+        email: c.email ?? "",
+        phone: c.phone ?? "",
+      },
+    };
+  } else {
+    receiverBlock = {
+      type: "company",
+      companyName: cfg.warehouseName,
+      identityAddress: {
+        originCountryISOCode: "DE",
+        zipNumber: cfg.warehouseZip,
+      },
+    };
+  }
+
   const payload = {
     shipments: [
       {
@@ -159,14 +233,7 @@ export async function createRetoureLabel(
           weightInKg: opts.weightInKg ?? 1,
           packageType: "PK",
         },
-        receiver: {
-          type: "company",
-          companyName: cfg.warehouseName,
-          identityAddress: {
-            originCountryISOCode: "DE",
-            zipNumber: cfg.warehouseZip,
-          },
-        },
+        receiver: receiverBlock,
       },
     ],
   };

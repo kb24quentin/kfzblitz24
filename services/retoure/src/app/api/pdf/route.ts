@@ -410,9 +410,25 @@ export async function POST(req: Request) {
   if (shouldGenerateLabel(body)) {
     let labelResult: RetoureLabelResult;
     try {
+      // Kundendaten aus Webisco-Rechnungsadresse als Receiver auf das Label
+      const addr = body.rechnungsadresse;
       labelResult = await createRetoureLabel({
         customerReference: body.bestellnummer,
         description: `Retoure ${body.bestellnummer}`,
+        customer: addr
+          ? {
+              salutation: addr.anrede,
+              firstname: addr.vorname,
+              lastname: addr.name,
+              // strasse aus Webisco enthält schon "Straße Hausnummer"
+              streetName: addr.strasse,
+              zipNumber: addr.plz,
+              city: addr.ort,
+              email: addr.email,
+              phone: addr.telefon,
+              countryISOCode: "DE",
+            }
+          : undefined,
       });
     } catch (e) {
       labelResult = {
