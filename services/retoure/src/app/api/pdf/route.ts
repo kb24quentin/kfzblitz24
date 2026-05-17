@@ -529,12 +529,14 @@ export async function POST(req: Request) {
             borderWidth: 0.5,
             borderDashArray: [4, 3],
           });
-          // Mini-Scheren-Hinweis links neben dem Rahmen
-          labelHostPage.drawText("✂", {
-            x: lx - pad - 14,
-            y: ly + labelH / 2 - 4,
-            size: 11,
-            color: rgb(0.5, 0.5, 0.5),
+          // Hinweis-Text neben dem Rahmen (KEINE Unicode-Symbole — Helvetica
+          // kennt nur WinAnsi; ✂ würde drawText werfen lassen).
+          labelHostPage.drawText("Hier ausschneiden", {
+            x: lx - pad,
+            y: ly + labelH + pad + 4,
+            size: 8,
+            font,
+            color: rgb(0.55, 0.55, 0.55),
           });
 
           // Das eingebettete Label-PDF auf die Seite zeichnen
@@ -573,11 +575,14 @@ export async function POST(req: Request) {
           `[retoure] DHL label merged (shipment=${labelResult.shipmentId}, tracking=${labelResult.trackingNumber ?? "—"})`
         );
       } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const stack = e instanceof Error ? e.stack : "";
         labelInfo = {
           mode: "failed",
-          reason: `Label-PDF konnte nicht gemerged werden: ${e instanceof Error ? e.message : String(e)}`,
+          reason: `Label-PDF konnte nicht gemerged werden: ${msg}`,
         };
-        console.warn(`[retoure] label merge failed: ${labelInfo.reason}`);
+        console.warn(`[retoure] label merge failed: ${msg}`);
+        if (stack) console.warn(stack.split("\n").slice(0, 5).join("\n"));
       }
     } else if ("skipped" in labelResult && labelResult.skipped) {
       labelInfo = { mode: "failed", reason: `dodajpaczke skipped: ${labelResult.reason}` };
