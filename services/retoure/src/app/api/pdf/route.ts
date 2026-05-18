@@ -859,13 +859,6 @@ export async function POST(req: Request) {
   // ─── DB-Persistenz: RetoureCase anlegen (best-effort, non-blocking) ───
   let createdCaseId: string | null = null;
   try {
-    const labelGenerated = labelInfo.mode === "free" || labelInfo.mode === "paid";
-    const dhlData = labelGenerated
-      ? {
-          dhlShipmentId: labelInfo.shipmentId,
-          dhlTrackingNumber: labelInfo.trackingNumber,
-        }
-      : {};
     // Gewicht das wir an DHL gemeldet haben (nur wenn Label generiert)
     const rawWeightKg = body.items.reduce((sum, it) => {
       const g = (it.einzelgewicht_g ?? 0) * it.menge;
@@ -873,6 +866,22 @@ export async function POST(req: Request) {
     }, 0);
     const sentWeight =
       rawWeightKg > 0 ? Math.max(0.5, Math.min(30, rawWeightKg * 1.2)) : 30;
+
+    // DHL-Daten + Gewicht nur extrahieren wenn labelInfo discriminant
+    // entsprechend ist — sonst kann TS die Felder nicht narrow.
+    const labelGenerated = labelInfo.mode === "free" || labelInfo.mode === "paid";
+    let dhlShipmentId: number | undefined;
+    let dhlTrackingNumber: string | undefined;
+    if (labelInfo.mode === "free" || labelInfo.mode === "paid") {
+      dhlShipmentId = labelInfo.shipmentId;
+      dhlTrackingNumber = labelInfo.trackingNumber;
+    }
+    const labelFeeBrutto = labelInfo.mode === "paid" ? labelInfo.feeBrutto : 0;
+
+    const warenwert = body.items.reduce(
+      (s, it) => s + (it.gesamtpreis_brutto ?? 0),
+      0
+    );
 
     const c = await createCase({
       bestellnummer: body.bestellnummer!,
@@ -890,30 +899,32 @@ export async function POST(req: Request) {
         gesamtpreis_brutto: it.gesamtpreis_brutto,
         einzelgewicht_g: it.einzelgewicht_g,
       })),
-      warenwertBrutto: body.items.reduce(
-        (s, it) => s + (it.gesamtpreis_brutto ?? 0),
-        0
-      ),
-      labelFeeBrutto: labelInfo.mode === "paid" ? labelInfo.feeBrutto : 0,
-      voraussichtlicheErstattung:
-        body.items.reduce((s, it) => s + (it.gesamtpreis_brutto ?? 0), 0) -
-        (labelInfo.mode === "paid" ? labelInfo.feeBrutto : 0),
+      warenwertBrutto: warenwert,
+      labelFeeBrutto,
+      voraussichtlicheErstattung: warenwert - labelFeeBrutto,
       shippingMode: body.shippingMode,
       labelRequested:
         (body.shippingMode === "sicher" && !!body.requestDHLLabel) ||
         (body.shippingMode !== "sicher" && !!body.requestPaidLabel),
       labelPaid: labelInfo.mode === "paid",
-      ...dhlData,
+      dhlShipmentId,
+      dhlTrackingNumber,
       weightSentKg: labelGenerated ? sentWeight : undefined,
     });
     createdCaseId = c.id;
 
     // Zusätzliche Events je nach Label-Status
-    if (labelInfo.mode === "free" || labelInfo.mode === "paid") {
-      await addEvent(c.id, "label_generated", `DHL-Label erzeugt`, {
+    if (labelInfo.mode === "free") {
+      await addEvent(c.id, "label_generated", `DHL-Label erzeugt (kostenfrei)`, {
         shipmentId: labelInfo.shipmentId,
         trackingNumber: labelInfo.trackingNumber,
-        feeBrutto: labelInfo.mode === "paid" ? labelInfo.feeBrutto : 0,
+        feeBrutto: 0,
+      });
+    } else if (labelInfo.mode === "paid") {
+      await addEvent(c.id, "label_generated", `DHL-Label erzeugt (kostenpflichtig)`, {
+        shipmentId: labelInfo.shipmentId,
+        trackingNumber: labelInfo.trackingNumber,
+        feeBrutto: labelInfo.feeBrutto,
       });
     } else if (labelInfo.mode === "failed") {
       await addEvent(c.id, "label_failed", labelInfo.reason);
