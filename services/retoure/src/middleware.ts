@@ -44,9 +44,13 @@ export default auth((req) => {
   // gehen kann und die App geöffnet ist.
   if (kind === "pda") {
     if (path === "/") {
-      const url = req.nextUrl.clone();
-      url.pathname = "/pda-app";
-      return Response.redirect(url);
+      // WICHTIG: `req.nextUrl.clone()` zieht den Host aus AUTH_URL /
+      // NEXTAUTH_URL (z. B. rma.staging.*) — das würde den Redirect auf
+      // den falschen Host wegrouten. Wir bauen die Target-URL deshalb
+      // explizit aus dem echten Request-Host.
+      const proto =
+        req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "");
+      return Response.redirect(`${proto}://${host}/pda-app`, 307);
     }
     const allowed =
       PDA_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + "/")) ||
