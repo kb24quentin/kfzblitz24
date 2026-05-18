@@ -148,10 +148,12 @@ function parseEnvelope(xml: string): { content: Record<string, unknown>; error: 
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "",
-    parseAttributeValue: true,
+    // parseAttributeValue:false — sonst frisst der Parser führende Nullen
+    // bei PLZs wie "04821" (→ 4821). Wir konvertieren wo nötig selbst per
+    // num()/Number() (Belegnummern, Preise etc.), die robust gegen
+    // String-Input sind.
+    parseAttributeValue: false,
     trimValues: true,
-    // The Webisco response sometimes returns a single item where we'd
-    // expect a list — normalize lists later.
   });
   const doc = parser.parse(xml) as Record<string, unknown>;
   const envelope = doc["webisco"] as Record<string, unknown> | undefined;
