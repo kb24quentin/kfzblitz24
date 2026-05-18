@@ -50,12 +50,16 @@ services:
       - traefik.enable=true
       - traefik.docker.network=traefik_net
       # /api/app/* → server backend (port 8080)
+      # Parse Server mounts at /app intern (PARSE_MOUNT=/app), aber von außen
+      # erwartet das Frontend /api/app/* — also Traefik-StripPrefix /api einsetzen.
       - traefik.http.routers.opensign-staging-api.rule=Host(`sign.staging.kfzblitz24-group.com`) && PathPrefix(`/api/app`)
       - traefik.http.routers.opensign-staging-api.entrypoints=websecure
       - traefik.http.routers.opensign-staging-api.tls=true
       - traefik.http.routers.opensign-staging-api.tls.certresolver=letsencrypt
       - traefik.http.routers.opensign-staging-api.priority=100
       - traefik.http.routers.opensign-staging-api.service=opensign-staging-api
+      - traefik.http.routers.opensign-staging-api.middlewares=opensign-staging-stripapi
+      - traefik.http.middlewares.opensign-staging-stripapi.stripprefix.prefixes=/api
       - traefik.http.services.opensign-staging-api.loadbalancer.server.port=8080
 
   opensign_app:
