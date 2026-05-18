@@ -1,0 +1,71 @@
+{#
+   Twig-Override: erweitert das Shopware-Order-Detail-Template um einen
+   "Retoure anmelden"-Button im kfzBlitz24-Stil.
+
+   Konvention: wir extenden den Block `page_account_order_item_detail_table`
+   (Shopware 6.5+). Falls Shopware den Block-Namen in einer späteren
+   Version ändert, hier nachziehen.
+#}
+{% sw_extends '@Storefront/storefront/page/account/order-history/order-detail.html.twig' %}
+
+{% block page_account_order_item_detail_table %}
+    {{ parent() }}
+
+    {% set kbRetoure = page.extensions.kbRetoure %}
+    {% if kbRetoure and kbRetoure.enabled %}
+        <div class="kb-retoure-cta">
+            {#
+               Der Button postet zu einem Storefront-Controller, der den
+               Prefill-Token holt und auf {apiBaseUrl}/start?token=… umleitet.
+               Controller wird in Phase 9 implementiert (siehe README).
+            #}
+            <form method="POST"
+                  action="{{ path('frontend.kb24.retoure.start') }}"
+                  target="_blank"
+                  rel="noopener">
+                <input type="hidden" name="orderId" value="{{ page.order.id }}">
+                <input type="hidden" name="_csrf_token" value="{{ sw_csrf('frontend.kb24.retoure.start', {'mode': 'token'}) }}">
+
+                <button type="submit" class="kb-retoure-btn">
+                    Retoure anmelden
+                </button>
+            </form>
+
+            <p class="kb-retoure-hint">
+                Du wirst zum kfzBlitz24-Retoure-Portal weitergeleitet. Dort
+                kannst Du in wenigen Schritten die Rückgabe anmelden und das
+                Versandetikett herunterladen.
+            </p>
+        </div>
+
+        <style>
+            .kb-retoure-cta {
+                margin: 1.5rem 0;
+                padding: 1rem;
+                background: #f6f7f9;
+                border-left: 4px solid #ff6600;
+                border-radius: 4px;
+            }
+            .kb-retoure-btn {
+                background: #ff6600;
+                color: #ffffff;
+                border: 0;
+                padding: 0.75rem 1.5rem;
+                font-weight: 600;
+                font-size: 1rem;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: background 120ms ease-in-out;
+            }
+            .kb-retoure-btn:hover,
+            .kb-retoure-btn:focus {
+                background: #e55a00;
+            }
+            .kb-retoure-hint {
+                margin: 0.75rem 0 0;
+                color: #3d4654;
+                font-size: 0.875rem;
+            }
+        </style>
+    {% endif %}
+{% endblock %}

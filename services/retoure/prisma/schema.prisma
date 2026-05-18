@@ -73,11 +73,90 @@ model RetoureCase {
   updatedAt   DateTime @updatedAt
 
   events RetoureEvent[]
+  items  RetoureItem[]
+
+  // SLA-Felder (gefüllt von Carrier-Polling bzw. Partner-Scan)
+  /// Zeitpunkt an dem DHL "delivered" / "eingang_partner" gemeldet hat.
+  carrierDeliveredAt  DateTime?
+  /// Zeitpunkt an dem ein Partner-PDA das Paket physisch gescannt hat.
+  partnerReceivedAt   DateTime?
+  /// Wenn DHL geliefert ist aber Partner noch nicht gescannt hat → SLA-Stunden.
+  /// Sobald > slaThresholdHours, kommt der Case in die 9-Uhr-Mail.
 
   @@index([status])
   @@index([bestellnummer])
   @@index([dhlTrackingNumber])
   @@index([createdAt])
+  @@index([carrierDeliveredAt])
+  @@index([partnerReceivedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// RetoureItem — Item-Level Tracking
+// ─────────────────────────────────────────────────────────────────────
+model RetoureItem {
+  id     String @id @default(cuid())
+  caseId String
+
+  /// "registered" — vom Kunden bei der Anmeldung markiert
+  /// "extra"      — vom Lager im Paket gefunden, aber zur selben Order
+  /// "unknown"    — vom Lager im Paket gefunden, NICHT zur Order (Wrong-Item)
+  source String @default("registered")
+
+  /// "pending"          — angemeldet, noch nicht gescannt
+  /// "received"         — Partner-PDA hat es gescannt + bestätigt
+  /// "missing"          — angemeldet aber nicht im Paket
+  /// "photographed"     — Fotos aufgenommen
+  /// "assessed"         — Mitarbeiter + AI-Score liegt vor
+  /// "on_pallet"        — auf einen Container/Palette gelegt
+  /// "shipped_supplier" — an Lieferanten retourniert
+  /// "at_supplier"      — beim Lieferanten eingegangen
+  /// "refunded"         — erstattet
+  /// "rejected"         — abgelehnt
+  status String @default("pending")
+
+  // Snapshot zum Zeitpunkt der Anmeldung bzw. des Extra-Hinzufügens
+  artikelnummer       String?
+  hersteller          String?
+  beschreibung        String?
+  menge               Int     @default(1)
+  /// Bei source=registered Pflicht; bei extra/unknown vom PDA gewählt.
+  grund               String?
+  einzelpreis_brutto  Float?
+  gesamtpreis_brutto  Float?
+  einzelgewicht_g     Int?
+  /// EK-Preis brutto aus Webisco (Phase 8) — null bis das eingebaut ist.
+  einkaufspreis_brutto Float?
+
+  // Receive-Tracking
+  receivedAt    DateTime?
+  receivedByPda String? // device-token / user-email des PDA-Scanners
+  scanCount     Int      @default(0)
+
+  // Bewertung (Phase 5)
+  employeeScore   Int? // 0–100, Mitarbeiter-Einschätzung
+  aiScore         Int? // 0–100, OpenAI-Vision-Score
+  combinedScore   Int? // gewichteter Score
+  verdict         String? // "green" | "yellow" | "red"
+  verdictReason   String?
+  scoredAt        DateTime?
+
+  // Photos (Phase 5)
+  photoCount Int @default(0)
+
+  // Container (Phase 6)
+  containerId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  case      RetoureCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([status])
+  @@index([source])
+  @@index([containerId])
+  @@index([verdict])
 }
 
 // ─────────────────────────────────────────────────────────────────────

@@ -1,0 +1,38 @@
+{
+    "name": "kfzblitz24/kb24-retoure",
+    "description": "kfzBlitz24 — Retoure-Anbindung an das interne RMA-Portal",
+    "type": "shopware-platform-plugin",
+    "license": "proprietary",
+    "version": "0.1.0",
+    "authors": [
+        {
+            "name": "kfzBlitz24",
+            "email": "info@kfzblitz24.de"
+        }
+    ],
+    "require": {
+        "php": ">=8.2",
+        "shopware/core": "~6.5",
+        "shopware/storefront": "~6.5",
+        "symfony/http-client": "^6.0"
+    },
+    "extra": {
+        "shopware-plugin-class": "KbRetoure\\KbRetoure",
+        "label": {
+            "de-DE": "kfzBlitz24 Retoure",
+            "en-GB": "kfzBlitz24 Retoure"
+        },
+        "description": {
+            "de-DE": "Bindet das interne kfzBlitz24-RMA-Portal an die Shopware-Storefront an. Kunden können aus dem Bestell-Detail heraus eine Retoure anmelden.",
+            "en-GB": "Bridges Shopware orders to the internal kfzBlitz24 RMA portal."
+        },
+        "manufacturerLink": {
+            "de-DE": "https://kfzblitz24-group.com"
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "KbRetoure\\": "src/"
+        }
+    }
+}

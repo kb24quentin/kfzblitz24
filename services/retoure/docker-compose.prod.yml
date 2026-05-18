@@ -50,6 +50,10 @@ services:
       DODAJPACZKE_WAREHOUSE_ZIP: ${DODAJPACZKE_WAREHOUSE_ZIP:-}
       DODAJPACZKE_LABEL_FEE_NET: ${DODAJPACZKE_LABEL_FEE_NET:-}
       API_TOKEN: ${API_TOKEN:-}
+      SLA_THRESHOLD_HOURS: ${SLA_THRESHOLD_HOURS:-}
+      SLA_MAIL_TO: ${SLA_MAIL_TO:-}
+      SLA_MAIL_FROM: ${SLA_MAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
     networks:
       - prod_internal
       - traefik_net
@@ -85,15 +89,26 @@ services:
     environment:
       API_TOKEN: ${API_TOKEN}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-1800}
+      TZ: Europe/Berlin
     networks:
       - prod_internal
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         sleep 30
+        LAST_SLA=/tmp/last-sla-day
         while true; do
-          echo "[cron] poll-carriers @ $$(date -Iseconds)"
-          curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" -X POST -H "Authorization: Bearer $$API_TOKEN" http://retoure:3000/api/cron/poll-carriers || echo "[cron] curl failed"
+          NOW=$$(date -Iseconds)
+          echo "[cron] poll-carriers @ $$NOW"
+          curl -sS -o /dev/null -w "  HTTP %{http_code} in %{time_total}s\n" -X POST -H "Authorization: Bearer $$API_TOKEN" http://retoure:3000/api/cron/poll-carriers || echo "[cron] carrier-poll failed"
+
+          HOUR=$$(date +%H)
+          TODAY=$$(date +%Y-%m-%d)
+          if [ "$$HOUR" = "09" ] && [ "$$(cat $$LAST_SLA 2>/dev/null)" != "$$TODAY" ]; then
+            echo "[cron] sla-overdue @ $$NOW"
+            curl -sS -o /dev/null -w "  HTTP %{http_code} in %{time_total}s\n" -X POST -H "Authorization: Bearer $$API_TOKEN" http://retoure:3000/api/cron/sla-overdue && echo "$$TODAY" > $$LAST_SLA || echo "[cron] sla failed"
+          fi
+
           sleep "$$POLL_INTERVAL_SECONDS"
         done
 

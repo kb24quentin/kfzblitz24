@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/platform/trunk/src/Core/System/SystemConfig/Schema/config.xsd">
+
+    <card>
+        <title>kfzBlitz24 Retoure — Verbindung</title>
+        <title lang="en-GB">kfzBlitz24 Retoure — Connection</title>
+
+        <input-field type="bool">
+            <name>enabled</name>
+            <label>Plugin aktiviert</label>
+            <label lang="en-GB">Plugin enabled</label>
+            <helpText>Schaltet die Retoure-Anbindung in der Storefront ein oder aus.</helpText>
+            <helpText lang="en-GB">Enables or disables the storefront integration.</helpText>
+            <defaultValue>true</defaultValue>
+        </input-field>
+
+        <input-field type="url">
+            <name>apiBaseUrl</name>
+            <label>RMA-API Basis-URL</label>
+            <label lang="en-GB">RMA API base URL</label>
+            <helpText>Vollständige URL ohne Trailing-Slash, z.B. https://pda.rma.staging.kfzblitz24-group.com</helpText>
+            <helpText lang="en-GB">Full URL without trailing slash.</helpText>
+            <defaultValue>https://pda.rma.staging.kfzblitz24-group.com</defaultValue>
+        </input-field>
+
+        <input-field type="password">
+            <name>apiToken</name>
+            <label>API-Token (Bearer)</label>
+            <label lang="en-GB">API token (Bearer)</label>
+            <helpText>Wird als Bearer-Header an die RMA-API gesendet. Niemals committen.</helpText>
+            <helpText lang="en-GB">Sent as Bearer header to the RMA API. Never commit.</helpText>
+        </input-field>
+
+    </card>
+</config>

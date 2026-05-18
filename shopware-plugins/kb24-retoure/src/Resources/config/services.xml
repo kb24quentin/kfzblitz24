@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<container xmlns="http://symfony.com/schema/dic/services"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
+    <services>
+
+        <!--
+            HTTP-Client gegen die interne RMA-API.
+            Liest die Konfig aus Shopware\Core\System\SystemConfig\SystemConfigService;
+            Defaults stehen in config.xml und sind im Admin überschreibbar.
+        -->
+        <service id="KbRetoure\Service\RetoureApiClient" public="true">
+            <argument type="service" id="Symfony\Contracts\HttpClient\HttpClientInterface" />
+            <argument type="service" id="Shopware\Core\System\SystemConfig\SystemConfigService" />
+            <argument type="service" id="logger" />
+        </service>
+
+        <!--
+            Event-Subscriber: hängt sich an die Account-Order-Page und
+            stellt der Twig-Template den Prefill-Token / die API-URL bereit.
+        -->
+        <service id="KbRetoure\Storefront\Subscriber\AccountOrderRouteSubscriber">
+            <argument type="service" id="KbRetoure\Service\RetoureApiClient" />
+            <argument type="service" id="Shopware\Core\System\SystemConfig\SystemConfigService" />
+            <tag name="kernel.event_subscriber" />
+        </service>
+
+    </services>
+</container>

@@ -132,6 +132,16 @@ export async function pollOneCase(
       });
       workingStatus = newStatus;
       result.newCaseStatus = newStatus;
+
+      // SLA-Stempel: carrierDeliveredAt setzen wenn DHL "delivered" reportet.
+      // Damit weiß die 9-Uhr-Mail wie lange das Paket schon beim Partner
+      // liegen sollte aber noch nicht physisch gescannt wurde.
+      if (newStatus === "eingang_partner") {
+        await prisma.retoureCase.updateMany({
+          where: { id: caseId, carrierDeliveredAt: null },
+          data: { carrierDeliveredAt: new Date(entry.createdAt.replace(" ", "T").replace(/\.\d+$/, "")) },
+        });
+      }
     }
   }
 

@@ -52,46 +52,77 @@ export interface CreateRetoureCaseInput {
 
 /**
  * Legt einen neuen RetoureCase an und schreibt direkt ein "case_created"
- * Event. Gibt den Case zurück (mit ID).
+ * Event. Items werden zusätzlich zum Snapshot-JSON als echte RetoureItem-Rows
+ * gespeichert (source=registered, status=pending).
  */
 export async function createCase(input: CreateRetoureCaseInput) {
-  const c = await prisma.retoureCase.create({
-    data: {
-      bestellnummer: input.bestellnummer,
-      belegId: input.belegId !== undefined ? String(input.belegId) : null,
-      belegnummer: input.belegnummer ?? null,
-      belegdatum: input.belegdatum ?? null,
-      customerAnrede: input.customer?.anrede ?? null,
-      customerVorname: input.customer?.vorname ?? null,
-      customerName: input.customer?.name ?? null,
-      customerStrasse: input.customer?.strasse ?? null,
-      customerPlz: input.customer?.plz ?? null,
-      customerOrt: input.customer?.ort ?? null,
-      customerEmail: input.customer?.email ?? null,
-      customerTelefon: input.customer?.telefon ?? null,
-      customerHandy: input.customer?.handy ?? null,
-      itemsJson: JSON.stringify(input.items),
-      warenwertBrutto: input.warenwertBrutto,
-      labelFeeBrutto: input.labelFeeBrutto,
-      voraussichtlicheErstattung: input.voraussichtlicheErstattung,
-      shippingMode:
-        input.shippingMode === "unknown" ? "standard" : input.shippingMode,
-      labelRequested: input.labelRequested,
-      labelPaid: input.labelPaid,
-      dhlShipmentId: input.dhlShipmentId ?? null,
-      dhlTrackingNumber: input.dhlTrackingNumber ?? null,
-      dhlRetoureIdc: input.dhlRetoureIdc ?? null,
-      weightSentKg: input.weightSentKg ?? null,
-      status: "angemeldet",
-    },
-  });
+  return await prisma.$transaction(async (tx) => {
+    const c = await tx.retoureCase.create({
+      data: {
+        bestellnummer: input.bestellnummer,
+        belegId: input.belegId !== undefined ? String(input.belegId) : null,
+        belegnummer: input.belegnummer ?? null,
+        belegdatum: input.belegdatum ?? null,
+        customerAnrede: input.customer?.anrede ?? null,
+        customerVorname: input.customer?.vorname ?? null,
+        customerName: input.customer?.name ?? null,
+        customerStrasse: input.customer?.strasse ?? null,
+        customerPlz: input.customer?.plz ?? null,
+        customerOrt: input.customer?.ort ?? null,
+        customerEmail: input.customer?.email ?? null,
+        customerTelefon: input.customer?.telefon ?? null,
+        customerHandy: input.customer?.handy ?? null,
+        // JSON-Snapshot bleibt als Audit-Log der ursprünglichen Anmeldung
+        itemsJson: JSON.stringify(input.items),
+        warenwertBrutto: input.warenwertBrutto,
+        labelFeeBrutto: input.labelFeeBrutto,
+        voraussichtlicheErstattung: input.voraussichtlicheErstattung,
+        shippingMode:
+          input.shippingMode === "unknown" ? "standard" : input.shippingMode,
+        labelRequested: input.labelRequested,
+        labelPaid: input.labelPaid,
+        dhlShipmentId: input.dhlShipmentId ?? null,
+        dhlTrackingNumber: input.dhlTrackingNumber ?? null,
+        dhlRetoureIdc: input.dhlRetoureIdc ?? null,
+        weightSentKg: input.weightSentKg ?? null,
+        status: "angemeldet",
+      },
+    });
 
-  await addEvent(c.id, "case_created", `Retoure angemeldet`, {
-    bestellnummer: input.bestellnummer,
-    itemCount: input.items.length,
-  });
+    // Items als eigene Rows
+    if (input.items.length > 0) {
+      await tx.retoureItem.createMany({
+        data: input.items.map((it) => ({
+          caseId: c.id,
+          source: "registered",
+          status: "pending",
+          artikelnummer: it.artikelnummer ?? null,
+          hersteller: it.hersteller ?? null,
+          beschreibung: it.beschreibung ?? null,
+          menge: it.menge,
+          grund: it.grund,
+          einzelpreis_brutto: it.einzelpreis_brutto ?? null,
+          gesamtpreis_brutto: it.gesamtpreis_brutto ?? null,
+          einzelgewicht_g: it.einzelgewicht_g ?? null,
+        })),
+      });
+    }
 
-  return c;
+    await tx.retoureEvent.create({
+      data: {
+        caseId: c.id,
+        type: "case_created",
+        message: "Retoure angemeldet",
+        meta: JSON.stringify({
+          bestellnummer: input.bestellnummer,
+          itemCount: input.items.length,
+        }),
+        actor: "system",
+      },
+    });
+
+    return c;
+  });
 }
 
 /**
