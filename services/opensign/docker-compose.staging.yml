@@ -31,10 +31,15 @@ services:
       PUBLIC_URL: https://sign.staging.kfzblitz24-group.com
       USE_LOCAL: "TRUE"
       # SMTP (Resend) — Signier-Einladungen + OTP-Mails
+      # SMTP_USERNAME wird vom sendMailv3 als Login an den SMTP-Server
+      # benutzt; SMTP_USER_EMAIL ist die From-Adresse die der Empfänger
+      # sieht. Resend erwartet: username = "resend", password = API-Key.
       SMTP_ENABLE: "true"
+      SMTP_SECURE: "true"
       SMTP_HOST: smtp.resend.com
       SMTP_PORT: "465"
-      SMTP_USER_EMAIL: ${SMTP_USER_EMAIL:-resend}
+      SMTP_USERNAME: ${SMTP_USERNAME:-resend}
+      SMTP_USER_EMAIL: ${SMTP_USER_EMAIL:-noreply@kfzblitz24-group.com}
       SMTP_PASS: ${RESEND_API_KEY}
       MAILGUN_API_KEY: ${MAILGUN_API_KEY:-disabled}
       MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-disabled}

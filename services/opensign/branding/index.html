@@ -16,36 +16,83 @@
   <script type="module" crossorigin src="/assets/main-7uB5Wpkw.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/main-DzkKmA9g.css">
 
-  <!-- ─── kfzBlitz24 Theme-Override ─────────────────────────────────────
-       Überschreibt die daisyUI-CSS-Variablen für das 'opensigncss'-Theme
-       mit den KB24-Markenfarben:
-         primary  #0b3756  (dunkelblau)
-         accent   #ff6600  (orange)
-       Greift ohne Forking des Frontend-Bundles, weil daisyUI alle Farben
-       als HSL-Variablen unter [data-theme="..."] expandiert.
+  <!-- ─── kfzBlitz24 Theme-Override (livonoshop.com Brand-Palette) ──────
+       Brand-Palette aus dem Webshop extrahiert:
+         #1A202C  Dark Slate  → Sidebar / Header
+         #0B3756  KB-Blau     → Sekundär / Logo-Akzent
+         #12476C  Mid-Blau    → Info / Links
+         #FF6600  Orange      → CTA / Primary-Buttons
+         #041622  Footer      → sehr-dunkel
+       daisyUI nutzt HSL-Komponenten unter [data-theme="opensigncss"] —
+       überschreiben wir hier so dass das ganze UI die Marke trägt.
   -->
   <style>
     [data-theme="opensigncss"] {
-      --p:  207 77% 19%;    /* primary  = kfz dunkelblau */
-      --pc: 0 0% 100%;      /* primary-content (Text auf Primary) */
-      --s:  207 78% 14%;    /* secondary = noch dunklerer Blau (Sidebar) */
-      --sc: 220 35% 92%;    /* secondary-content (hellgrauer Text) */
-      --a:  24 100% 50%;    /* accent   = kfz orange */
-      --ac: 0 0% 100%;      /* accent-content */
-      --n:  207 40% 30%;    /* neutral  - muted blue */
-      --nc: 220 35% 92%;
-      --in: 207 80% 50%;    /* info */
+      /* primary = ORANGE — Haupt-CTA (Speichern, Anmelden, Senden …) */
+      --p:  24 100% 50%;    /* #FF6600 */
+      --pc: 0 0% 100%;      /* weiss auf orange */
+      --pf: 24 100% 42%;    /* hover/focus = dunkleres Orange */
+
+      /* secondary = DARK SLATE — Sidebar / Navigation */
+      --s:  217 26% 14%;    /* #1A202C */
+      --sc: 220 30% 92%;    /* hellgrauer Text */
+      --sf: 217 30% 8%;     /* hover/focus = noch dunkler */
+
+      /* accent = BRAND-BLAU — Sekundär-Akzente (active link, badges) */
+      --a:  207 77% 19%;    /* #0B3756 */
+      --ac: 0 0% 100%;
+      --af: 207 60% 12%;
+
+      /* neutral = grau-blau für muted UI-Elemente */
+      --n:  214 32% 91%;    /* hell-grau-blau */
+      --nc: 217 26% 14%;
+
+      /* info = mid-blue */
+      --in: 207 71% 25%;    /* #12476C */
       --inc: 0 0% 100%;
-      --su: 142 70% 45%;    /* success */
+
+      /* success / warning / error */
+      --su: 142 70% 38%;
       --suc: 0 0% 100%;
-      --wa: 38 92% 50%;     /* warning */
+      --wa: 38 92% 50%;
       --wac: 0 0% 0%;
-      --er: 0 84% 60%;      /* error */
+      --er: 0 75% 50%;
       --erc: 0 0% 100%;
+
+      /* base = sehr hellgrau / weiss */
+      --b1: 0 0% 100%;       /* base-100 */
+      --b2: 210 20% 98%;     /* base-200 leichte Tönung */
+      --b3: 210 16% 93%;     /* base-300 für borders/cards */
+      --bc: 217 26% 14%;     /* Haupt-Text = dunkelslate */
     }
 
-    /* Login-Page Hintergrund + Branding-Akzent für Logo-Container */
-    body, .op-bg-base-100 { background-color: #f8fafc; }
+    /* Sidebar (links) — explizit dunkelslate für maximalen Kontrast */
+    aside, .op-bg-secondary, [class*="bg-secondary"] {
+      background-color: #1A202C !important;
+    }
+    aside a, aside button, aside svg { color: #E2E8F0 !important; }
+    aside a:hover, aside button:hover { background-color: #2D3748 !important; }
+    /* Aktiver Sidebar-Link → orange Akzent */
+    aside a.active, aside [aria-current="page"], aside [class*="active"] {
+      background-color: #FF6600 !important;
+      color: #ffffff !important;
+    }
+
+    /* Buttons in der UI: orange-Akzent für die Haupt-CTA-Klasse */
+    .op-btn-primary, button.op-btn-primary {
+      background-color: #FF6600 !important;
+      border-color: #FF6600 !important;
+      color: #ffffff !important;
+    }
+    .op-btn-primary:hover {
+      background-color: #E55A00 !important;
+      border-color: #E55A00 !important;
+    }
+
+    /* Login-Seite: Hintergrund leicht warm, Card weiß auf Slate */
+    body {
+      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    }
 
     /* OpenSign Social-Links + Branding raus (intern für KB24) */
     a[href*="github.com/opensignlabs"],
