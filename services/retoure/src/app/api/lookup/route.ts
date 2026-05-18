@@ -17,7 +17,12 @@ type LookupRequest = {
 };
 
 function normalizePlz(input: string | undefined | null): string {
-  return (input ?? "").replace(/\s+/g, "").trim();
+  const raw = (input ?? "").replace(/\s+/g, "").trim();
+  // Webisco-XML kommt durch fast-xml-parser, der mit parseAttributeValue:true
+  // numerische PLZ wie "04821" zu Zahl 4821 macht — führende Null geht
+  // verloren. Beide Seiten auf 5-stellig DE-PLZ zero-padden, dann passt's.
+  if (/^\d{1,5}$/.test(raw)) return raw.padStart(5, "0");
+  return raw;
 }
 
 /**

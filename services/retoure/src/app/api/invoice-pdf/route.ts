@@ -62,7 +62,11 @@ function ymd(d: Date): string {
 }
 
 function normalizePlz(s: string | undefined | null): string {
-  return (s ?? "").replace(/\s+/g, "").trim();
+  const raw = (s ?? "").replace(/\s+/g, "").trim();
+  // Webisco's parser strips leading zeros ("04821" → 4821). Pad to 5 digits
+  // so user input matches.
+  if (/^\d{1,5}$/.test(raw)) return raw.padStart(5, "0");
+  return raw;
 }
 
 function arrayify<T>(v: T | T[] | undefined | null): T[] {
