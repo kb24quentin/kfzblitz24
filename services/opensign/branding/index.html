@@ -27,71 +27,29 @@
        überschreiben wir hier so dass das ganze UI die Marke trägt.
   -->
   <style>
+    /* Behutsame Brand-Anpassung: NUR die daisyUI-Theme-Variablen, keine
+       direkten Selektor-Stürmer auf <aside> / Button-Klassen — sonst
+       brechen Dropdowns, Modals und Tour-Bubbles.
+       Wir tauschen Primary auf KB-Blau (#0B3756) und Accent auf
+       Orange (#FF6600). Das passt zum Logo und vermeidet die
+       Konflikte der vorherigen aggressiven Sidebar-Overrides.
+    */
     [data-theme="opensigncss"] {
-      /* primary = ORANGE — Haupt-CTA (Speichern, Anmelden, Senden …) */
-      --p:  24 100% 50%;    /* #FF6600 */
-      --pc: 0 0% 100%;      /* weiss auf orange */
-      --pf: 24 100% 42%;    /* hover/focus = dunkleres Orange */
+      /* primary = KB-BLAU — Sidebar-Active, Buttons, Hover, Header-Akzente */
+      --p:  207 77% 19%;     /* #0B3756 */
+      --pc: 0 0% 100%;       /* weiss auf blau */
 
-      /* secondary = DARK SLATE — Sidebar / Navigation */
-      --s:  217 26% 14%;    /* #1A202C */
-      --sc: 220 30% 92%;    /* hellgrauer Text */
-      --sf: 217 30% 8%;     /* hover/focus = noch dunkler */
+      /* secondary = etwas dunklerer Blau (für Akzent-Bereiche) */
+      --s:  207 78% 14%;     /* #082c44 */
+      --sc: 220 30% 92%;
 
-      /* accent = BRAND-BLAU — Sekundär-Akzente (active link, badges) */
-      --a:  207 77% 19%;    /* #0B3756 */
+      /* accent = ORANGE — Highlights, CTAs, Status-Badges */
+      --a:  24 100% 50%;     /* #FF6600 */
       --ac: 0 0% 100%;
-      --af: 207 60% 12%;
 
-      /* neutral = grau-blau für muted UI-Elemente */
-      --n:  214 32% 91%;    /* hell-grau-blau */
-      --nc: 217 26% 14%;
-
-      /* info = mid-blue */
-      --in: 207 71% 25%;    /* #12476C */
+      /* info = mid blue */
+      --in: 207 71% 30%;     /* #12476C */
       --inc: 0 0% 100%;
-
-      /* success / warning / error */
-      --su: 142 70% 38%;
-      --suc: 0 0% 100%;
-      --wa: 38 92% 50%;
-      --wac: 0 0% 0%;
-      --er: 0 75% 50%;
-      --erc: 0 0% 100%;
-
-      /* base = sehr hellgrau / weiss */
-      --b1: 0 0% 100%;       /* base-100 */
-      --b2: 210 20% 98%;     /* base-200 leichte Tönung */
-      --b3: 210 16% 93%;     /* base-300 für borders/cards */
-      --bc: 217 26% 14%;     /* Haupt-Text = dunkelslate */
-    }
-
-    /* Sidebar (links) — explizit dunkelslate für maximalen Kontrast */
-    aside, .op-bg-secondary, [class*="bg-secondary"] {
-      background-color: #1A202C !important;
-    }
-    aside a, aside button, aside svg { color: #E2E8F0 !important; }
-    aside a:hover, aside button:hover { background-color: #2D3748 !important; }
-    /* Aktiver Sidebar-Link → orange Akzent */
-    aside a.active, aside [aria-current="page"], aside [class*="active"] {
-      background-color: #FF6600 !important;
-      color: #ffffff !important;
-    }
-
-    /* Buttons in der UI: orange-Akzent für die Haupt-CTA-Klasse */
-    .op-btn-primary, button.op-btn-primary {
-      background-color: #FF6600 !important;
-      border-color: #FF6600 !important;
-      color: #ffffff !important;
-    }
-    .op-btn-primary:hover {
-      background-color: #E55A00 !important;
-      border-color: #E55A00 !important;
-    }
-
-    /* Login-Seite: Hintergrund leicht warm, Card weiß auf Slate */
-    body {
-      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
     }
 
     /* OpenSign Social-Links + Branding raus (intern für KB24) */
