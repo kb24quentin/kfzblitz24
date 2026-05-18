@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="opensigncss">
+
+<head>
+<script src="/env.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#0b3756" />
+  <meta name="description" content="kfzBlitz24 Sign — Internes Signierportal" />
+
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
+    integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous" />
+  <link rel="stylesheet" href="https://cdn.opensignlabs.com/fonts.css" />
+  <title>kfzBlitz24 Sign</title>
+  <script type="module" crossorigin src="/assets/main-7uB5Wpkw.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/main-DzkKmA9g.css">
+
+  <!-- ─── kfzBlitz24 Theme-Override ─────────────────────────────────────
+       Überschreibt die daisyUI-CSS-Variablen für das 'opensigncss'-Theme
+       mit den KB24-Markenfarben:
+         primary  #0b3756  (dunkelblau)
+         accent   #ff6600  (orange)
+       Greift ohne Forking des Frontend-Bundles, weil daisyUI alle Farben
+       als HSL-Variablen unter [data-theme="..."] expandiert.
+  -->
+  <style>
+    [data-theme="opensigncss"] {
+      --p:  207 77% 19%;    /* primary  = kfz dunkelblau */
+      --pc: 0 0% 100%;      /* primary-content (Text auf Primary) */
+      --s:  207 78% 14%;    /* secondary = noch dunklerer Blau (Sidebar) */
+      --sc: 220 35% 92%;    /* secondary-content (hellgrauer Text) */
+      --a:  24 100% 50%;    /* accent   = kfz orange */
+      --ac: 0 0% 100%;      /* accent-content */
+      --n:  207 40% 30%;    /* neutral  - muted blue */
+      --nc: 220 35% 92%;
+      --in: 207 80% 50%;    /* info */
+      --inc: 0 0% 100%;
+      --su: 142 70% 45%;    /* success */
+      --suc: 0 0% 100%;
+      --wa: 38 92% 50%;     /* warning */
+      --wac: 0 0% 0%;
+      --er: 0 84% 60%;      /* error */
+      --erc: 0 0% 100%;
+    }
+
+    /* Login-Page Hintergrund + Branding-Akzent für Logo-Container */
+    body, .op-bg-base-100 { background-color: #f8fafc; }
+  </style>
+</head>
+
+<body>
+  <div id="root" style="touch-action:pan-x pan-y;"></div>
+</body>
+
+</html>
