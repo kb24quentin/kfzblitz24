@@ -37,12 +37,21 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth;
 
   // ─── PDA-API-Host (pda.rma.*) ───
-  // Nur Bearer-geschützte /api/pda/* + /api/cron/* (für lokale Cron-Sidecars
-  // falls die mal hierher routen). Alles andere 404.
+  // Erlaubt:
+  //   /api/pda/*, /api/cron/* — Bearer-geschützte API
+  //   /pda-app/*              — Web-PDA-Frontend (Demo + Fallback ohne native App)
+  // Root "/" wird zu /pda-app rewritten damit man direkt auf den Host
+  // gehen kann und die App geöffnet ist.
   if (kind === "pda") {
-    const allowed = PDA_ALLOWED_PREFIXES.some(
-      (p) => path === p || path.startsWith(p + "/")
-    );
+    if (path === "/") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/pda-app";
+      return Response.redirect(url);
+    }
+    const allowed =
+      PDA_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + "/")) ||
+      path === "/pda-app" ||
+      path.startsWith("/pda-app/");
     if (!allowed) {
       return new Response("Not Found", {
         status: 404,
@@ -67,12 +76,14 @@ export default auth((req) => {
 
   // ─── Customer-Host (retoure.*) ───
   if (kind === "customer") {
-    // Admin-Routen + Login + PDA-API auf der Customer-Domain blocken
+    // Admin-Routen + Login + PDA-API + PDA-App auf der Customer-Domain blocken
     if (
       path.startsWith("/admin") ||
       path === "/login" ||
       path.startsWith("/api/admin") ||
-      path.startsWith("/api/pda")
+      path.startsWith("/api/pda") ||
+      path === "/pda-app" ||
+      path.startsWith("/pda-app/")
     ) {
       return new Response("Not Found", {
         status: 404,
@@ -88,6 +99,12 @@ export default auth((req) => {
     return Response.redirect(new URL("/admin", req.nextUrl));
   }
   if (CUSTOMER_API_PREFIXES.some((p) => path === p || path.startsWith(p + "/"))) {
+    return new Response("Not Found", {
+      status: 404,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+  if (path === "/pda-app" || path.startsWith("/pda-app/")) {
     return new Response("Not Found", {
       status: 404,
       headers: { "Content-Type": "text/plain; charset=utf-8" },

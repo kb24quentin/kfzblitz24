@@ -15,6 +15,7 @@
 
 import { NextResponse } from "next/server";
 import { checkPdaAuth } from "@/lib/pda-auth";
+import { prisma } from "@/lib/db";
 import {
   createContainer,
   type ContainerType,
@@ -29,6 +30,52 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const ALLOWED_TYPES: ContainerType[] = ["palette", "carton", "bag"];
+
+/**
+ * GET /api/pda/containers
+ *
+ * Paginierte Liste der Container für die PDA-Übersicht.
+ * Filter: ?status=open|closed|shipped|received_supplier, ?type=palette|carton|bag.
+ */
+export async function GET(req: Request) {
+  const auth = checkPdaAuth(req);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { error: auth.status === 503 ? "API_TOKEN nicht konfiguriert" : "Unauthorized" },
+      { status: auth.status }
+    );
+  }
+
+  const url = new URL(req.url);
+  const status = url.searchParams.get("status")?.trim() || undefined;
+  const type = url.searchParams.get("type")?.trim() || undefined;
+  const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") ?? "30") || 30));
+
+  const where: { status?: string; type?: string } = {};
+  if (status) where.status = status;
+  if (type) where.type = type;
+
+  const containers = await prisma.container.findMany({
+    where,
+    orderBy: { openedAt: "desc" },
+    take: limit,
+    include: { items: { select: { id: true } } },
+  });
+
+  return NextResponse.json({
+    containers: containers.map((c) => ({
+      id: c.id,
+      code: c.code,
+      type: c.type,
+      status: c.status,
+      partnerId: c.partnerId,
+      openedAt: c.openedAt.toISOString(),
+      closedAt: c.closedAt?.toISOString() ?? null,
+      maxOpenUntil: c.maxOpenUntil?.toISOString() ?? null,
+      items: c.items,
+    })),
+  });
+}
 
 export async function POST(req: Request) {
   const auth = checkPdaAuth(req);
