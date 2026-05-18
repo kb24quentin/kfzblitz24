@@ -260,9 +260,10 @@ function drawSectionHeading(
   fontBold: PDFFont,
   text: string,
   y: number,
-  size = 11.5
+  size = 11.5,
+  x: number = PAGE_LEFT
 ) {
-  page.drawText(text, { x: PAGE_LEFT, y, size, font: fontBold, color: NAVY });
+  page.drawText(text, { x, y, size, font: fontBold, color: NAVY });
 }
 
 function drawBullet(
@@ -358,7 +359,7 @@ export async function POST(req: Request) {
   const addr = body.rechnungsadresse;
   if (addr) {
     const fullName = [addr.vorname, addr.name].filter(Boolean).join(" ");
-    drawSectionHeading(page, fontBold, "Rechnungsadresse", y);
+    drawSectionHeading(page, fontBold, "Rechnungsadresse", y, 11.5, colSplit);
     let cy = y - 18;
     if (addr.anrede) {
       page.drawText(addr.anrede, {
@@ -538,13 +539,21 @@ export async function POST(req: Request) {
   // Erstattungs-Block: Warenwert → (optional) Abzug Label → Erstattung
   const willChargeLabel =
     body.shippingMode !== "sicher" && body.requestPaidLabel === true;
-  const labelDeductionBrutto = willChargeLabel ? body.labelFeeBrutto ?? 5.36 : 0;
-  const labelDeductionNet = willChargeLabel ? body.labelFeeNet ?? 4.5 : 0;
+  // Brutto explizit aus Netto * 1,19 rechnen damit kein Rundungs-Edge-Case
+  // entsteht (4.50 * 1.19 = 5.355 — IEEE → 5.354... — toFixed(2) gibt "5.35"
+  // statt "5.36"). Plus 0.005 schiebt es eindeutig in die richtige Richtung.
+  const labelNetExact = willChargeLabel ? body.labelFeeNet ?? 4.5 : 0;
+  const labelDeductionBrutto = willChargeLabel
+    ? body.labelFeeBrutto ?? Math.round(labelNetExact * 1.19 * 100 + 1e-6) / 100
+    : 0;
+  const labelDeductionNet = labelNetExact;
   const erstattungFinal = Math.max(0, erstattungTotal - labelDeductionBrutto);
 
   if (erstattungTotal > 0) {
+    // mehr Abstand zur Tabelle für sauberere Optik
+    y -= 12;
+
     // Warenwert
-    y -= 4;
     page.drawText("Warenwert", {
       x: col.grund,
       y,
@@ -559,7 +568,7 @@ export async function POST(req: Request) {
       font,
       color: DARK_GREY,
     });
-    y -= 14;
+    y -= 16;
 
     // Abzug Label (nur wenn anwendbar)
     if (labelDeductionBrutto > 0) {
@@ -574,33 +583,33 @@ export async function POST(req: Request) {
         font,
         color: rgb(0.55, 0.15, 0.15),
       });
-      y -= 14;
+      y -= 16;
     }
 
-    // Highlight-Zeile: Voraussichtliche Erstattung
-    y -= 2;
+    // Highlight-Zeile: Voraussichtliche Erstattung — klar getrennt
+    y -= 6;
     page.drawRectangle({
       x: PAGE_LEFT - 4,
-      y: y - 6,
+      y: y - 8,
       width: PAGE_RIGHT - PAGE_LEFT + 4,
-      height: 24,
+      height: 26,
       color: LIGHT_GREY,
     });
     page.drawText("Voraussichtliche Erstattung", {
       x: col.grund,
-      y: y + 4,
-      size: 10.5,
+      y: y + 1,
+      size: 11,
       font: fontBold,
       color: NAVY,
     });
     page.drawText(fmtEur(erstattungFinal), {
       x: col.summe,
-      y: y + 4,
+      y: y + 1,
       size: 12,
       font: fontBold,
       color: NAVY,
     });
-    y -= 22;
+    y -= 28;
   }
 
   // Refund-Hinweis als Aufzählungszeile
