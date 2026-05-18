@@ -42,7 +42,10 @@ export async function GET(req: Request) {
   // 1. Case-ID
   let c = await prisma.retoureCase.findFirst({
     where: { id: code },
-    include: { events: { orderBy: { createdAt: "asc" } } },
+    include: {
+      events: { orderBy: { createdAt: "asc" } },
+      items: { orderBy: { createdAt: "asc" } },
+    },
   });
   let matchedBy: "id" | "bestellnummer" | "tracking" = "id";
 
@@ -51,7 +54,10 @@ export async function GET(req: Request) {
     c = await prisma.retoureCase.findFirst({
       where: { bestellnummer: code },
       orderBy: { createdAt: "desc" },
-      include: { events: { orderBy: { createdAt: "asc" } } },
+      include: {
+        events: { orderBy: { createdAt: "asc" } },
+        items: { orderBy: { createdAt: "asc" } },
+      },
     });
     matchedBy = "bestellnummer";
   }
@@ -61,7 +67,10 @@ export async function GET(req: Request) {
     c = await prisma.retoureCase.findFirst({
       where: { dhlTrackingNumber: code },
       orderBy: { createdAt: "desc" },
-      include: { events: { orderBy: { createdAt: "asc" } } },
+      include: {
+        events: { orderBy: { createdAt: "asc" } },
+        items: { orderBy: { createdAt: "asc" } },
+      },
     });
     matchedBy = "tracking";
   }
@@ -108,13 +117,35 @@ export async function GET(req: Request) {
         labelFeeBrutto: c.labelFeeBrutto,
         voraussichtlicheErstattung: c.voraussichtlicheErstattung,
       },
-      items: (() => {
-        try {
-          return JSON.parse(c.itemsJson);
-        } catch {
-          return [];
-        }
-      })(),
+      // Echte RetoureItem-Rows (mit source + status + Bewertung).
+      // c.itemsJson bleibt das Audit-Snapshot der Anmeldung — nicht für PDA.
+      items: c.items.map((it) => ({
+        id: it.id,
+        source: it.source,
+        status: it.status,
+        artikelnummer: it.artikelnummer,
+        hersteller: it.hersteller,
+        beschreibung: it.beschreibung,
+        menge: it.menge,
+        grund: it.grund,
+        einzelpreis_brutto: it.einzelpreis_brutto,
+        gesamtpreis_brutto: it.gesamtpreis_brutto,
+        einzelgewicht_g: it.einzelgewicht_g,
+        einkaufspreis_brutto: it.einkaufspreis_brutto,
+        receivedAt: it.receivedAt?.toISOString() ?? null,
+        receivedByPda: it.receivedByPda,
+        scanCount: it.scanCount,
+        score: {
+          employee: it.employeeScore,
+          ai: it.aiScore,
+          combined: it.combinedScore,
+          verdict: it.verdict,
+          verdictReason: it.verdictReason,
+          at: it.scoredAt?.toISOString() ?? null,
+        },
+        photoCount: it.photoCount,
+        containerId: it.containerId,
+      })),
       events: c.events.map((e) => ({
         id: e.id,
         type: e.type,

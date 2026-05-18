@@ -54,6 +54,8 @@ services:
       DODAJPACZKE_LABEL_FEE_NET: ${DODAJPACZKE_LABEL_FEE_NET:-}
       # API Bearer (für Shop-Integration)
       API_TOKEN: ${API_TOKEN:-}
+      # Customer-Portal Public URL (für Prefill-Hand-off-Links)
+      RETOURE_PUBLIC_URL: ${RETOURE_PUBLIC_URL:-}
       # SLA / 9-Uhr-Mail
       SLA_THRESHOLD_HOURS: ${SLA_THRESHOLD_HOURS:-}
       SLA_MAIL_TO: ${SLA_MAIL_TO:-}

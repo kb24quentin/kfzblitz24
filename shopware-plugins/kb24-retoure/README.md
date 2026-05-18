@@ -81,34 +81,52 @@ shopware-plugins/kb24-retoure/
     ├── Resources/
     │   ├── config/
     │   │   ├── config.xml               # Admin-Settings-Form
+    │   │   ├── routes.xml               # Lädt Controller-Annotations
     │   │   └── services.xml             # DI-Container
     │   └── views/storefront/page/account/order-history/
     │       └── order-detail.html.twig   # Button-Injection
     ├── Service/
     │   └── RetoureApiClient.php         # HTTP-Client gegen RMA-API
-    └── Storefront/Subscriber/
-        └── AccountOrderRouteSubscriber.php  # Page-Event-Listener
+    └── Storefront/
+        ├── Controller/
+        │   └── RetoureController.php    # POST /account/order/retoure
+        └── Subscriber/
+            └── AccountOrderRouteSubscriber.php  # Page-Event-Listener
 ```
 
 ## Status & offene Punkte (Phase 9)
 
-Das Plugin ist **Skeleton-vollständig**, aber zwei Bausteine müssen
-in Phase 9 nachgezogen werden:
+**Phase 9 — erledigt (2026-05-18):**
 
-1. **API-Endpoint `/api/retoure/prefill`** im
-   `services/retoure/`-Service. Aktuell ist `RetoureApiClient` ein
-   echter HTTP-Client, der Endpoint existiert aber noch nicht — der
-   Aufruf liefert daher heute 404 und der Client antwortet mit
-   `{ error: 'api_error_404' }`. Verhalten ist sauber, nur eben
-   nicht produktiv nutzbar bis Phase 9 fertig ist.
+1. [x] **API-Endpoint `POST /api/retoure/prefill`** im
+   `services/retoure/`-Service. Erzeugt einen 15-Min-Token + JSON-
+   Snapshot der Bestelldaten in der Tabelle `RetourePrefill` und
+   liefert `{ token, expiresAt, url }` zurück.
+2. [x] **Storefront-Controller `frontend.kb24.retoure.start`**
+   (`src/Storefront/Controller/RetoureController.php`) — nimmt den
+   Klick im Order-Detail entgegen, lädt die Order, mappt sie auf den
+   Prefill-Payload, ruft die RMA-API und leitet den Kunden auf die
+   zurückgegebene Hand-off-URL um.
+3. [x] **routes.xml** registriert die Controller-Annotations.
+4. [x] **RetoureApiClient** ruft tatsächlich
+   `POST {apiBaseUrl}/api/retoure/prefill` auf und liefert
+   `{ token, expiresAt, url }` zurück.
 
-2. **Storefront-Controller `frontend.kb24.retoure.start`**. Das
-   Twig-Template postet zu dieser Route — der zugehörige Controller
-   (`src/Storefront/Controller/RetoureController.php`) ist nicht Teil
-   dieses Skeletons und wird in Phase 9 mit dem API-Endpoint
-   zusammen geliefert.
+**Übersprungen (Folge-Tasks):**
+- PHPUnit-Setup für den Controller (manueller Test im Staging zuerst).
+- CI-Pipeline für das Plugin (Composer-Lint + ECS+PHPStan).
+- README-Hostname-Check (Default ist Staging; Prod muss im Admin manuell umgestellt werden).
 
-Bis dahin ist das Plugin **installierbar und aktivierbar**, der
-Button **rendert** auf der Order-Detail-Page, ein Klick führt aber
-zu einem 404 in der Storefront. Das ist der gewünschte Zwischenstand
-für Phase 8.
+### Neue ENV-Variable im `services/retoure/`
+
+Damit der API-Endpoint die korrekte Hand-off-URL zurückgibt, braucht
+der retoure-Service zusätzlich:
+
+| Variable | Default | Bedeutung |
+|---|---|---|
+| `RETOURE_PUBLIC_URL` | `https://retoure.staging.kfzblitz24-group.com` | Basis-URL des Customer-Portals; an diese URL hängen wir `/start?token=…` an. Auf Prod auf `https://retoure.kfzblitz24-group.com` setzen. |
+
+In den Compose-Files (`docker-compose.staging.yml` /
+`docker-compose.prod.yml` des Retoure-Service) ist die Variable
+bereits durchgereicht — Wert kommt aus `.env.staging` bzw.
+`.env.prod` auf dem VPS.

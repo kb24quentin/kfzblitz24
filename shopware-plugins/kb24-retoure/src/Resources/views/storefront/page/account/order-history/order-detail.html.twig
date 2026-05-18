@@ -21,10 +21,12 @@
             #}
             <form method="POST"
                   action="{{ path('frontend.kb24.retoure.start') }}"
-                  target="_blank"
                   rel="noopener">
                 <input type="hidden" name="orderId" value="{{ page.order.id }}">
-                <input type="hidden" name="_csrf_token" value="{{ sw_csrf('frontend.kb24.retoure.start', {'mode': 'token'}) }}">
+                {# Shopware-CSRF: das sw_csrf-Helper rendert hidden inputs.
+                   Wir setzen es als unsichtbares Element ein — die Server-
+                   Side prüft den Token gem. routes.xml (csrf_protected=true). #}
+                {{ sw_csrf('frontend.kb24.retoure.start') }}
 
                 <button type="submit" class="kb-retoure-btn">
                     Retoure anmelden

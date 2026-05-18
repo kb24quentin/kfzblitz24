@@ -12,11 +12,14 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  *
  * Endpunkte:
  *   POST {apiBaseUrl}/api/retoure/prefill
+ *     Body: { orderId, bestellnummer, customer{…}, items[…], source }
+ *     Resp: { token, expiresAt, url }   — url ist die Hand-off-URL,
+ *           dorthin redirecten wir den Kunden direkt aus dem Controller.
  *
- * Hinweis: Der Endpoint /api/retoure/prefill wird in Phase 9 des
- * Retoure-Service implementiert. Bis dahin ist diese Klasse ein
- * funktionsfähiger Stub — sie führt den HTTP-Call wirklich aus,
- * fängt Fehler aber sauber ab damit die Storefront nie crasht.
+ * Konfiguration kommt aus SystemConfigService (siehe config.xml):
+ *   - KbRetoure.config.enabled    (bool)
+ *   - KbRetoure.config.apiBaseUrl (string, ohne trailing /)
+ *   - KbRetoure.config.apiToken   (string, Bearer-Token der RMA-API)
  */
 class RetoureApiClient
 {
@@ -32,19 +35,28 @@ class RetoureApiClient
 
     /**
      * Fordert einen Prefill-Token bei der RMA-API an. Mit diesem Token
-     * kann der Kunde auf {apiBaseUrl}/start?token=… landen und sieht
-     * eine vorausgefüllte Retoure-Anmeldung (Bestellnr, Artikel, Anschrift).
+     * landet der Kunde auf {apiBaseUrl}/start?token=… und sieht eine
+     * vorausgefüllte Retoure-Anmeldung.
      *
-     * @param string  $orderId      Shopware Order-ID
-     * @param string  $customerId   Shopware Customer-ID
-     * @param mixed[] $items        Liste der zurückzusendenden Positionen
+     * @param array<string,mixed> $payload Bereits passend gemappter Body:
+     *   {
+     *     orderId?: string,
+     *     bestellnummer: string,
+     *     customer?: array,
+     *     items?: array<int, array{artikelnummer:string, menge:int}>,
+     *     source?: string
+     *   }
      *
-     * @return array{token?: string, url?: string, error?: string}
+     * @return array{token?: string, expiresAt?: string, url?: string, error?: string}
      */
-    public function createPrefillToken(string $orderId, string $customerId, array $items): array
+    public function createPrefillToken(array $payload): array
     {
         if (!$this->isEnabled()) {
             return ['error' => 'plugin_disabled'];
+        }
+
+        if (!isset($payload['bestellnummer']) || !is_string($payload['bestellnummer']) || $payload['bestellnummer'] === '') {
+            return ['error' => 'bestellnummer_missing'];
         }
 
         $baseUrl = $this->getBaseUrl();
@@ -66,33 +78,32 @@ class RetoureApiClient
                     'Content-Type'  => 'application/json',
                     'Accept'        => 'application/json',
                 ],
-                'json' => [
-                    'orderId'    => $orderId,
-                    'customerId' => $customerId,
-                    'items'      => $items,
-                    'source'     => 'shopware-kb24-retoure',
-                ],
+                'json'    => $payload,
                 'timeout' => 5.0,
             ]);
 
             $status = $response->getStatusCode();
             if ($status >= 200 && $status < 300) {
-                $data           = $response->toArray(false);
-                $data['url']  ??= $baseUrl . '/start?token=' . ($data['token'] ?? '');
+                $data = $response->toArray(false);
+                // Falls die API mal nur den Token zurückgibt, bauen wir
+                // die URL als Fallback selbst — Defensive.
+                if (!isset($data['url']) && isset($data['token'])) {
+                    $data['url'] = $baseUrl . '/start?token=' . rawurlencode((string) $data['token']);
+                }
 
                 return $data;
             }
 
             $this->logger->warning('[KbRetoure] Prefill-API antwortete nicht 2xx', [
-                'status' => $status,
-                'orderId' => $orderId,
+                'status'        => $status,
+                'bestellnummer' => $payload['bestellnummer'],
             ]);
 
             return ['error' => 'api_error_' . $status];
         } catch (ExceptionInterface $e) {
             $this->logger->error('[KbRetoure] HTTP-Fehler beim Prefill-Call', [
-                'exception' => $e->getMessage(),
-                'orderId'   => $orderId,
+                'exception'     => $e->getMessage(),
+                'bestellnummer' => $payload['bestellnummer'] ?? null,
             ]);
 
             return ['error' => 'http_exception'];

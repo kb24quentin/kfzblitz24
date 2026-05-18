@@ -151,6 +151,7 @@ model RetoureItem {
   updatedAt DateTime @updatedAt
 
   case      RetoureCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  container Container?  @relation(fields: [containerId], references: [id], onDelete: SetNull)
 
   @@index([caseId])
   @@index([status])
@@ -193,4 +194,148 @@ model User {
   role      String   @default("admin")
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Container — Paletten / Kartons / Beutel im Wareneingang (Phase 6)
+//
+// Lebenszyklus:
+//   open → closed → shipped → received_supplier
+//
+// Code-Format: `PAL-YYYY-NNNNNN` (laufende Zahl pro Jahr).
+// `maxOpenUntil` = openedAt + maxAgeDays (Setting; default 14d).
+//
+// Events werden ins gemeinsame RetoureEvent-Log geschrieben, sobald
+// Items auf einen Container gelegt werden (item_linked_to_container).
+// Reine Container-Lifecycle-Events (created/closed) werden nicht ins
+// RetoureEvent-Log gespiegelt, weil sie nicht an einen Case gebunden
+// sind — diese Status-Übergänge sind über `openedAt` / `closedAt` /
+// `status` jederzeit nachvollziehbar.
+// ─────────────────────────────────────────────────────────────────────
+model Container {
+  id           String   @id @default(cuid())
+  code         String   @unique           // PAL-2026-000042 etc.
+  type         String   @default("palette") // "palette" | "carton" | "bag"
+  partnerId    String?                    // Phase 7 — vorerst optional/string
+  status       String   @default("open")  // "open" | "closed" | "shipped" | "received_supplier"
+  openedAt     DateTime @default(now())
+  closedAt     DateTime?
+  maxOpenUntil DateTime?                  // openedAt + maxAgeDays (Setting)
+  createdByPda String?                    // welcher PDA hat angelegt
+  shippedTrackingNumber String?           // Phase 7 ergänzt das
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items        RetoureItem[]              // back-relation zu RetoureItem.containerId
+
+  @@index([status])
+  @@index([partnerId])
+  @@index([openedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Supplier — Stammdaten der Hersteller / Lieferanten, an die Ware
+// nach der Wareneingangsprüfung weiter-retourniert wird.
+//
+// Pro Lieferant pflegen wir Adresse, Kontaktperson, RMA-Policy
+// (Freitext-Hinweise, die das Lager beim Verpacken beachten muss) und
+// eine durchschnittliche "lead-time" für die Hersteller-Retoure.
+// ─────────────────────────────────────────────────────────────────────
+model Supplier {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  contactPerson   String?
+  email           String?
+  phone           String?
+  street          String?
+  postalCode      String?
+  city            String?
+  country         String   @default("DE")
+  /// Freitext-Hinweise zur Hersteller-Retoure
+  /// (z. B. "Bitte Originalverpackung, Retourenschein der Marke beilegen").
+  rmaPolicy       String?
+  /// Typische Bearbeitungsdauer einer Hersteller-Retoure in Tagen.
+  defaultLeadDays Int      @default(30)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  containerReturns SupplierReturn[]
+
+  @@index([active])
+  @@index([name])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SupplierReturn — eine konkrete Retoure-Sendung an einen Lieferanten.
+//
+// Status-Maschine:
+//   vorbereitet → versandt → bei_lieferant → gutschrift_erhalten
+//                                          → abgelehnt
+//
+// `containerId` ist optional, weil manche Lieferanten-Retouren nur
+// einen einzelnen Artikel betreffen (kein Sammel-Container).
+// Die Relation auf Container wird bewusst NICHT als Prisma-Relation
+// modelliert — das Container-Modell und die zugehörige Migration
+// werden parallel von einem anderen Agent erzeugt; ein FK in dieser
+// Migration würde fehlschlagen, wenn er vor der Container-Migration
+// läuft. Stattdessen referenzieren wir die Container-Id als losen
+// String, der von der Anwendungs-Schicht aufgelöst wird.
+// ─────────────────────────────────────────────────────────────────────
+model SupplierReturn {
+  id             String    @id @default(cuid())
+  supplierId     String
+  containerId    String?   // lose String-Referenz auf Container.id (siehe Doc oben)
+  trackingNumber String?
+  /// "vorbereitet" | "versandt" | "bei_lieferant" | "gutschrift_erhalten" | "abgelehnt"
+  status         String    @default("vorbereitet")
+  shippedAt      DateTime?
+  receivedAt     DateTime?
+  refundedAt     DateTime?
+  refundAmount   Float?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  supplier       Supplier  @relation(fields: [supplierId], references: [id])
+
+  @@index([status])
+  @@index([supplierId])
+  @@index([containerId])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// RetourePrefill — Hand-off vom Shop (z.B. Shopware-Plugin) ins Portal
+//
+// Workflow:
+//   1. Shopware-Plugin POSTet auf /api/retoure/prefill mit Bestelldaten.
+//   2. Wir erzeugen einen kurzlebigen Token (15 Min TTL) und speichern
+//      den vollen Payload als JSON-Snapshot. KEINE FK auf RetoureCase —
+//      ein Prefill wird ggf. NIE in einen Case münden (Kunde bricht ab).
+//   3. Antwort enthält {token, expiresAt, url} (url = …/start?token=…).
+//   4. Kunde landet auf /start?token=…, sieht seine Daten read-only und
+//      kann sie bestätigen. Sobald er das tut, setzen wir consumedAt
+//      und leiten ihn in den normalen Customer-Flow (mit Token in der
+//      URL) weiter, wo die Customer-Page die Prefill-Daten als Start-
+//      State nutzen kann.
+//   5. Abgelaufene/konsumierte Token können von einem späteren Cleanup
+//      gelöscht werden (Index auf expiresAt).
+// ─────────────────────────────────────────────────────────────────────
+model RetourePrefill {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  bestellnummer String
+  /// Gesamter Prefill-Body als JSON-Snapshot (orderId, customer, items,
+  /// source). Wir parsen lazy beim /start-Render und legen ihn nicht in
+  /// einzelne Spalten ab, weil die Felder weitgehend optional sind und
+  /// sich ihr Schema im Shop noch verschieben kann.
+  payloadJson   String
+  source        String?
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([token])
+  @@index([expiresAt])
 }

@@ -23,17 +23,6 @@ import {
   setCustomerTrackingAction,
 } from "./actions";
 
-type Item = {
-  artikelnummer?: string;
-  hersteller?: string;
-  beschreibung?: string;
-  menge: number;
-  grund: string;
-  einzelpreis_brutto?: number;
-  gesamtpreis_brutto?: number;
-  einzelgewicht_g?: number;
-};
-
 export default async function CaseDetailPage({
   params,
 }: {
@@ -42,17 +31,51 @@ export default async function CaseDetailPage({
   const { id } = await params;
   const c = await prisma.retoureCase.findUnique({
     where: { id },
-    include: { events: { orderBy: { createdAt: "desc" } } },
+    include: {
+      events: { orderBy: { createdAt: "desc" } },
+      items: { orderBy: { createdAt: "asc" } },
+    },
   });
   if (!c) notFound();
 
-  const items: Item[] = (() => {
+  type Item = {
+    artikelnummer?: string;
+    hersteller?: string;
+    beschreibung?: string;
+    menge: number;
+    grund: string;
+    einzelpreis_brutto?: number;
+    gesamtpreis_brutto?: number;
+    einzelgewicht_g?: number;
+    source?: string;
+    status?: string;
+    verdict?: string | null;
+  };
+
+  // Items aus der echten RetoureItem-Tabelle.
+  // Bei sehr alten Cases noch ohne Item-Rows: Fallback auf JSON-Snapshot.
+  let items: Item[];
+  if (c.items.length > 0) {
+    items = c.items.map((it) => ({
+      artikelnummer: it.artikelnummer ?? undefined,
+      hersteller: it.hersteller ?? undefined,
+      beschreibung: it.beschreibung ?? undefined,
+      menge: it.menge,
+      grund: it.grund ?? "",
+      einzelpreis_brutto: it.einzelpreis_brutto ?? undefined,
+      gesamtpreis_brutto: it.gesamtpreis_brutto ?? undefined,
+      einzelgewicht_g: it.einzelgewicht_g ?? undefined,
+      source: it.source,
+      status: it.status,
+      verdict: it.verdict,
+    }));
+  } else {
     try {
-      return JSON.parse(c.itemsJson);
+      items = JSON.parse(c.itemsJson) as Item[];
     } catch {
-      return [];
+      items = [];
     }
-  })();
+  }
 
   const customer = [c.customerVorname, c.customerName].filter(Boolean).join(" ");
 
