@@ -87,15 +87,12 @@ services:
       - staging_internal
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - >
-        sleep 30;
+      - |
+        sleep 30
         while true; do
-          echo "[cron] poll-carriers @ $$(date -Iseconds)";
-          curl -s -X POST -H "Authorization: Bearer $$API_TOKEN" -H "Content-Type: application/json"
-            http://retoure:3000/api/cron/poll-carriers
-            -o /tmp/last.json
-            -w "%{http_code} %{size_download}b in %{time_total}s\n" || echo "[cron] curl failed";
-          sleep "$$POLL_INTERVAL_SECONDS";
+          echo "[cron] poll-carriers @ $$(date -Iseconds)"
+          curl -sS -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" -X POST -H "Authorization: Bearer $$API_TOKEN" http://retoure:3000/api/cron/poll-carriers || echo "[cron] curl failed"
+          sleep "$$POLL_INTERVAL_SECONDS"
         done
 
 networks:
