@@ -77,7 +77,7 @@ async function loadPrefill(token: string) {
   } catch {
     return { ...row, invalid: "corrupt" as const };
   }
-  return { ...row, invalid: null as const, payload };
+  return { ...row, invalid: null as null, payload };
 }
 
 /**
