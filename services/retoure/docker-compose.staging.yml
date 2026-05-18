@@ -74,6 +74,30 @@ services:
       - traefik.http.routers.rma-staging.service=retoure-staging
       - traefik.http.services.retoure-staging.loadbalancer.server.port=3000
 
+  retoure-cron:
+    image: curlimages/curl:8.10.1
+    container_name: retoure_cron_staging
+    restart: unless-stopped
+    depends_on:
+      - retoure
+    environment:
+      API_TOKEN: ${API_TOKEN}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-1800}
+    networks:
+      - staging_internal
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        sleep 30;
+        while true; do
+          echo "[cron] poll-carriers @ $$(date -Iseconds)";
+          curl -s -X POST -H "Authorization: Bearer $$API_TOKEN" -H "Content-Type: application/json"
+            http://retoure:3000/api/cron/poll-carriers
+            -o /tmp/last.json
+            -w "%{http_code} %{size_download}b in %{time_total}s\n" || echo "[cron] curl failed";
+          sleep "$$POLL_INTERVAL_SECONDS";
+        done
+
 networks:
   staging_internal:
     external: true

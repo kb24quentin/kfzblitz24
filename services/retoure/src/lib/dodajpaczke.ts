@@ -343,3 +343,120 @@ export async function createRetoureLabel(
 function stringErr(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
+
+// ─── History / Tracking ─────────────────────────────────────────────────
+
+export interface ShipmentHistoryEntry {
+  status: string;                 // "new" | "prepared" | "in_transit" | "delivered" | ...
+  additionalStatus?: string;      // Optional, dodajpaczke API tippt "addictionalStatus"
+  message?: string;               // Polnische Carrier-Meldung
+  createdAt: string;              // "YYYY-MM-DD HH:MM:SS.0"
+}
+
+export type ShipmentHistoryResult =
+  | { ok: false; skipped: true; reason: string }
+  | { ok: false; skipped?: false; error: string }
+  | { ok: true; entries: ShipmentHistoryEntry[] };
+
+/**
+ * Holt die komplette Status-Historie einer dodajpaczke-Sendung
+ * (= Carrier-Events von DHL, übersetzt in dodajpaczke-eigene Status-Codes).
+ *
+ * Wird vom Carrier-Polling-Job alle ~30 Min für aktive Cases aufgerufen.
+ */
+export async function fetchShipmentHistory(
+  shipmentId: number | string
+): Promise<ShipmentHistoryResult> {
+  const cfg = getDodajpaczkeConfig();
+  if (!cfg) {
+    return { ok: false, skipped: true, reason: "dodajpaczke nicht konfiguriert" };
+  }
+
+  let res: Response;
+  try {
+    res = await authedFetch(cfg, `/shipments/${shipmentId}/history`);
+  } catch (e) {
+    return { ok: false, error: `history network: ${stringErr(e)}` };
+  }
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    return {
+      ok: false,
+      error: `history HTTP ${res.status}: ${txt.slice(0, 200)}`,
+    };
+  }
+  const json = (await res.json()) as {
+    data?: {
+      entries?: Array<{
+        status?: string;
+        addictionalStatus?: string; // (sic) — Tippfehler in der dodajpaczke API
+        additionalStatus?: string;
+        message?: string;
+        createdAt?: string;
+      }>;
+    };
+    error?: string;
+  };
+  if (json.error) return { ok: false, error: `history: ${json.error}` };
+
+  const entries: ShipmentHistoryEntry[] = (json.data?.entries ?? []).map((e) => ({
+    status: String(e.status ?? ""),
+    additionalStatus: e.additionalStatus ?? e.addictionalStatus,
+    message: e.message,
+    createdAt: String(e.createdAt ?? ""),
+  }));
+  return { ok: true, entries };
+}
+
+/**
+ * Mapping dodajpaczke-Carrier-Status → unser interner Case-Status.
+ * Konservativ: nur klar identifizierbare End-Status triggern automatische
+ * Wechsel. Alles dazwischen bleibt ein Carrier-Event in der Timeline.
+ */
+export function mapCarrierStatusToCaseStatus(
+  carrierStatus: string,
+  currentCaseStatus: string
+): string | null {
+  const s = carrierStatus.toLowerCase();
+
+  // delivered → eingang_partner
+  if (
+    s.includes("deliver") ||
+    s === "doreczona" || // polnisch
+    s === "doręczona" ||
+    s === "completed"
+  ) {
+    if (currentCaseStatus !== "eingang_partner" && currentCaseStatus !== "pruefung") {
+      return "eingang_partner";
+    }
+  }
+
+  // in transit
+  if (
+    s.includes("transit") ||
+    s.includes("delivery") ||
+    s === "w_drodze" ||
+    s === "in_progress"
+  ) {
+    if (currentCaseStatus === "angemeldet" || currentCaseStatus === "versandt") {
+      return "unterwegs";
+    }
+  }
+
+  // first carrier scan → versandt
+  if (
+    s === "shipped" ||
+    s === "wyslana" ||
+    s === "wysłana" ||
+    s === "picked_up" ||
+    s === "in_progress"
+  ) {
+    if (currentCaseStatus === "angemeldet") {
+      return "versandt";
+    }
+  }
+
+  // dodajpaczke-internal "prepared" / "new" → ignorieren
+  // (das ist nur Label-Erzeugung, kein Carrier-Event)
+  return null;
+}
