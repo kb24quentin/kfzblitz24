@@ -17,22 +17,40 @@ import { auth } from "@/lib/auth";
  * via API persistieren wird.
  */
 
-type HostKind = "admin" | "customer" | "unknown";
+type HostKind = "admin" | "customer" | "pda" | "unknown";
 
 function hostKind(host: string): HostKind {
   const h = host.toLowerCase().split(":")[0];
+  if (h.startsWith("pda.")) return "pda"; // pda.rma.*  → vor rma.* prüfen!
   if (h.startsWith("rma.")) return "admin";
   if (h.startsWith("retoure.")) return "customer";
   return "unknown"; // local dev / direct IP / anything else
 }
 
 const CUSTOMER_API_PREFIXES = ["/api/lookup", "/api/pdf", "/api/invoice-pdf"];
+const PDA_ALLOWED_PREFIXES = ["/api/pda", "/api/cron"];
 
 export default auth((req) => {
   const host = req.headers.get("host") ?? "";
   const kind = hostKind(host);
   const path = req.nextUrl.pathname;
   const isLoggedIn = !!req.auth;
+
+  // ─── PDA-API-Host (pda.rma.*) ───
+  // Nur Bearer-geschützte /api/pda/* + /api/cron/* (für lokale Cron-Sidecars
+  // falls die mal hierher routen). Alles andere 404.
+  if (kind === "pda") {
+    const allowed = PDA_ALLOWED_PREFIXES.some(
+      (p) => path === p || path.startsWith(p + "/")
+    );
+    if (!allowed) {
+      return new Response("Not Found", {
+        status: 404,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+    return;
+  }
 
   // Unknown host (local dev, direct IP) — keine Restriktion
   if (kind === "unknown") {
@@ -49,8 +67,13 @@ export default auth((req) => {
 
   // ─── Customer-Host (retoure.*) ───
   if (kind === "customer") {
-    // Admin-Routen + Login auf der Customer-Domain sind nicht verfügbar
-    if (path.startsWith("/admin") || path === "/login" || path.startsWith("/api/admin")) {
+    // Admin-Routen + Login + PDA-API auf der Customer-Domain blocken
+    if (
+      path.startsWith("/admin") ||
+      path === "/login" ||
+      path.startsWith("/api/admin") ||
+      path.startsWith("/api/pda")
+    ) {
       return new Response("Not Found", {
         status: 404,
         headers: { "Content-Type": "text/plain; charset=utf-8" },

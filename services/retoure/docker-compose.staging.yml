@@ -72,6 +72,12 @@ services:
       - traefik.http.routers.rma-staging.tls=true
       - traefik.http.routers.rma-staging.tls.certresolver=letsencrypt
       - traefik.http.routers.rma-staging.service=retoure-staging
+      # PDA-API (Native Android-App, nur /api/pda/* erreichbar)
+      - traefik.http.routers.pda-staging.rule=Host(`pda.rma.staging.kfzblitz24-group.com`)
+      - traefik.http.routers.pda-staging.entrypoints=websecure
+      - traefik.http.routers.pda-staging.tls=true
+      - traefik.http.routers.pda-staging.tls.certresolver=letsencrypt
+      - traefik.http.routers.pda-staging.service=retoure-staging
       - traefik.http.services.retoure-staging.loadbalancer.server.port=3000
 
   retoure-cron:
