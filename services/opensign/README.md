@@ -40,7 +40,7 @@ Datei: `/opt/kfzblitz24/services/opensign/.env.staging` (chmod 600)
 |----------|---------|-------|
 | `MONGO_USER` | nein | default `opensign` |
 | `MONGO_PASSWORD` | **ja** | Random, mind. 20 Zeichen |
-| `APP_ID` | **ja** | 12 Zeichen, alphanumerisch — wird in Frontend + Backend identisch verwendet |
+| `APP_ID` | **ja** | Muss `opensign` sein — die offizielle `opensign/opensign:main` Frontend-Image-Bundle ist mit `REACT_APP_APPID=opensign` gebaut. Backend muss dem matchen, sonst Login fail. (Custom AppId würde einen eigenen Frontend-Build erfordern.) |
 | `MASTER_KEY` | **ja** | Random, gibt Vollzugriff auf alle Daten via Parse-Dashboard |
 | `SMTP_USER_EMAIL` | nein | `resend` (Username bei Resend SMTP) |
 | `RESEND_API_KEY` | **ja** | Resend API-Key — wird als SMTP-Passwort genutzt |
