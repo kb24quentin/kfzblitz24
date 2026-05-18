@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  degrees,
+  type PDFFont,
+  type PDFPage,
+} from "pdf-lib";
 import bwipjs from "bwip-js";
 import { addBelegBemerkung, getWebiscoConfig } from "@/lib/webisco";
 import { createRetoureLabel, type RetoureLabelResult } from "@/lib/dodajpaczke";
@@ -40,9 +47,7 @@ type Body = {
   rechnungsadresse?: Address;
   items: Item[];
   shippingMode: "standard" | "sicher" | "unknown";
-  /** Sichere Rückgabe: Label kostenfrei anfordern */
   requestDHLLabel?: boolean;
-  /** Standard-Versand: Label gegen Gebühr (Abzug von Erstattung) */
   requestPaidLabel?: boolean;
   labelFeeNet?: number;
   labelFeeBrutto?: number;
@@ -67,7 +72,7 @@ type LabelInfo =
   | { mode: "failed"; reason: string };
 
 // ─────────────────────────────────────────────────────────────────────────
-// Bemerkung text (unchanged business logic)
+// Bemerkung text — unchanged business logic
 // ─────────────────────────────────────────────────────────────────────────
 function buildBemerkungText(body: Body, label: LabelInfo): string {
   const ts = new Date();
@@ -156,60 +161,119 @@ async function generateBarcodePng(data: string): Promise<Uint8Array> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Brand Design Tokens (matched to Gewährleistungsantrag PDF)
+// Brand tokens — direct from kfzBlitz24-Formular-Designguide.md
 // ─────────────────────────────────────────────────────────────────────────
-const COLOR_ORANGE = rgb(232 / 255, 122 / 255, 47 / 255);
-const COLOR_NAVY = rgb(26 / 255, 43 / 255, 79 / 255);
-const COLOR_TEXT = rgb(0.15, 0.15, 0.15);
-const COLOR_MUTED = rgb(0.42, 0.42, 0.42);
-const STRIPE_W = 30;
-const CONTENT_X = 60;
-const PAGE_W = 595.28;
-const PAGE_H = 841.89;
+const NAVY = rgb(0x0b / 255, 0x37 / 255, 0x56 / 255);
+const ORANGE = rgb(0xff / 255, 0x66 / 255, 0x00 / 255);
+const LIGHT_GREY = rgb(0xe6 / 255, 0xe8 / 255, 0xeb / 255);
+const MID_GREY = rgb(0x8a / 255, 0x93 / 255, 0xa0 / 255);
+const DARK_GREY = rgb(0x3d / 255, 0x46 / 255, 0x54 / 255);
+const WHITE = rgb(1, 1, 1);
 
-/**
- * Draws the kfzBlitz24 brand chrome on a page:
- * - Orange vertical stripe down the left edge
- * - "kfz" navy + "blitz" orange + "24" navy wordmark in the top-right
- */
-function drawBrandChrome(
-  page: PDFPage,
-  fontBold: PDFFont,
-  font: PDFFont
-): void {
-  page.drawRectangle({ x: 0, y: 0, width: STRIPE_W, height: PAGE_H, color: COLOR_ORANGE });
-  const size = 22;
-  const wKfz = fontBold.widthOfTextAtSize("kfz", size);
-  const wBlitz = fontBold.widthOfTextAtSize("blitz", size);
-  const w24 = fontBold.widthOfTextAtSize("24", size);
-  const total = wKfz + wBlitz + w24;
-  const x = PAGE_W - 40 - total;
-  const y = PAGE_H - 55;
-  page.drawText("kfz", { x, y, size, font: fontBold, color: COLOR_NAVY });
-  page.drawText("blitz", { x: x + wKfz, y, size, font: fontBold, color: COLOR_ORANGE });
-  page.drawText("24", { x: x + wKfz + wBlitz, y, size, font: fontBold, color: COLOR_NAVY });
-  // (font param accepted but unused — kept for symmetry / future use)
-  void font;
+const PAGE_W = 595.27;
+const PAGE_H = 841.89;
+const PAGE_LEFT = 56;
+const PAGE_RIGHT = PAGE_W - 40;
+const LEFT_BAR_W = 14;
+const LEFT_BAR_ORANGE_TOP = 170; // height of orange overlay on the brand bar
+
+const FORM_ID = "RET-KB24";
+const FORM_REV = "05/2026";
+const FORM_VER = "v1.0";
+
+// ─────────────────────────────────────────────────────────────────────────
+// Brand chrome helpers
+// ─────────────────────────────────────────────────────────────────────────
+function drawBrandBar(page: PDFPage) {
+  // Navy full-height
+  page.drawRectangle({ x: 0, y: 0, width: LEFT_BAR_W, height: PAGE_H, color: NAVY });
+  // Orange overlay on top 170pt
+  page.drawRectangle({
+    x: 0,
+    y: PAGE_H - LEFT_BAR_ORANGE_TOP,
+    width: LEFT_BAR_W,
+    height: LEFT_BAR_ORANGE_TOP,
+    color: ORANGE,
+  });
 }
 
-function drawFooter(page: PDFPage, font: PDFFont): void {
-  page.drawLine({
-    start: { x: CONTENT_X, y: 50 },
-    end: { x: PAGE_W - 40, y: 50 },
-    thickness: 0.3,
-    color: rgb(0.85, 0.85, 0.85),
+function drawLogo(page: PDFPage, fontBold: PDFFont, scale = 1.45) {
+  const baseSize = 26;
+  const size = baseSize * scale;
+  const x = PAGE_W - 220;
+  const y = PAGE_H - 70;
+  const wKfz = fontBold.widthOfTextAtSize("kfz", size);
+  const wBlitz = fontBold.widthOfTextAtSize("blitz", size);
+  page.drawText("kfz", { x, y, size, font: fontBold, color: NAVY });
+  page.drawText("blitz", { x: x + wKfz, y, size, font: fontBold, color: ORANGE });
+  page.drawText("24", { x: x + wKfz + wBlitz, y, size, font: fontBold, color: NAVY });
+}
+
+function drawVersionCode(page: PDFPage, font: PDFFont) {
+  page.drawText(`${FORM_ID} · Rev. ${FORM_REV} · ${FORM_VER}`, {
+    x: PAGE_W - 18,
+    y: 60,
+    size: 6.5,
+    font,
+    color: MID_GREY,
+    rotate: degrees(90),
   });
+}
+
+function drawFooter(page: PDFPage, font: PDFFont) {
   page.drawText(
     "kfzBlitz24 · Retourenabteilung · Bei Fragen erreichst du uns unter service@kfzblitz24.de",
-    { x: CONTENT_X, y: 35, size: 8, font, color: COLOR_MUTED }
+    { x: PAGE_LEFT, y: 36, size: 7.5, font, color: MID_GREY }
   );
   page.drawText(`Erstellt am ${new Date().toLocaleString("de-DE")}`, {
-    x: CONTENT_X,
-    y: 22,
+    x: PAGE_LEFT,
+    y: 24,
     size: 7,
     font,
-    color: rgb(0.65, 0.65, 0.65),
+    color: MID_GREY,
   });
+}
+
+function drawPageChrome(page: PDFPage, font: PDFFont, fontBold: PDFFont) {
+  drawBrandBar(page);
+  drawLogo(page, fontBold);
+  drawVersionCode(page, font);
+  drawFooter(page, font);
+}
+
+function drawTitle(page: PDFPage, fontBold: PDFFont, title: string, y: number) {
+  page.drawText(title, { x: PAGE_LEFT, y, size: 30, font: fontBold, color: NAVY });
+  // 56 × 3 pt orange accent under the title
+  page.drawRectangle({
+    x: PAGE_LEFT,
+    y: y - 11,
+    width: 56,
+    height: 3,
+    color: ORANGE,
+  });
+}
+
+function drawSectionHeading(
+  page: PDFPage,
+  fontBold: PDFFont,
+  text: string,
+  y: number,
+  size = 11.5
+) {
+  page.drawText(text, { x: PAGE_LEFT, y, size, font: fontBold, color: NAVY });
+}
+
+function drawBullet(
+  page: PDFPage,
+  font: PDFFont,
+  fontBold: PDFFont,
+  text: string,
+  y: number,
+  size = 9.2
+) {
+  // › marker in orange
+  page.drawText("›", { x: PAGE_LEFT, y, size, font: fontBold, color: ORANGE });
+  page.drawText(text, { x: PAGE_LEFT + 12, y, size, font, color: DARK_GREY });
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -222,7 +286,6 @@ export async function POST(req: Request) {
   } catch {
     return new NextResponse("Invalid JSON", { status: 400 });
   }
-
   if (!body.bestellnummer) {
     return new NextResponse("bestellnummer missing", { status: 400 });
   }
@@ -230,7 +293,7 @@ export async function POST(req: Request) {
     return new NextResponse("no items", { status: 400 });
   }
 
-  // ─── Barcode generieren ───
+  // ─── Barcode ───
   let barcodePng: Uint8Array;
   try {
     barcodePng = await generateBarcodePng(body.bestellnummer);
@@ -241,147 +304,168 @@ export async function POST(req: Request) {
     );
   }
 
-  // ─── PDF aufsetzen ───
+  // ─── PDF setup ───
   const pdf = await PDFDocument.create();
+  pdf.setTitle("Retourenschein – kfzBlitz24");
+  pdf.setAuthor("kfzBlitz24");
+  pdf.setSubject("Retoure / Rücksendung");
+  pdf.setCreator("kfzBlitz24");
+
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
   // ─── Page 1: Retourenschein ─────────────────────────────────────────
   const page = pdf.addPage([PAGE_W, PAGE_H]);
-  const margin = CONTENT_X;
-  drawBrandChrome(page, fontBold, font);
+  drawPageChrome(page, font, fontBold);
+  drawTitle(page, fontBold, "Retourenschein", PAGE_H - 95);
 
-  // Großer Titel + Orange-Underline
-  let y = PAGE_H - 120;
-  page.drawText("Retourenschein", {
-    x: margin,
-    y,
-    size: 34,
-    font: fontBold,
-    color: COLOR_NAVY,
-  });
-  page.drawRectangle({ x: margin, y: y - 8, width: 80, height: 2, color: COLOR_ORANGE });
-
-  // Barcode rechts (unterhalb der Wordmark)
+  // Barcode — direkt unter dem Logo rechts, mit ein wenig Abstand zum Titel
   const barcodeImage = await pdf.embedPng(barcodePng);
-  const barcodeDims = barcodeImage.scale(0.45);
+  const barcodeDims = barcodeImage.scale(0.4);
   page.drawImage(barcodeImage, {
-    x: PAGE_W - 40 - barcodeDims.width,
-    y: PAGE_H - 130,
+    x: PAGE_RIGHT - barcodeDims.width,
+    y: PAGE_H - 140,
     width: barcodeDims.width,
     height: barcodeDims.height,
   });
 
-  // Section-Heading Helper
-  const sectionHeading = (text: string, atY: number, size = 13) => {
-    page.drawText(text, { x: margin, y: atY, size, font: fontBold, color: COLOR_NAVY });
-    const tw = fontBold.widthOfTextAtSize(text, size);
-    page.drawRectangle({
-      x: margin,
-      y: atY - 4,
-      width: Math.min(tw, 60),
-      height: 1.5,
-      color: COLOR_ORANGE,
-    });
-  };
-
   // ─── Bestellung + Rechnungsadresse (2 Spalten) ───
-  y -= 60;
+  let y = PAGE_H - 180;
   const colSplit = PAGE_W / 2 + 10;
-  let leftY = y;
 
-  sectionHeading("Bestellung", leftY);
-  leftY -= 22;
+  drawSectionHeading(page, fontBold, "Bestellung", y);
+  let leftY = y - 18;
   page.drawText(body.bestellnummer, {
-    x: margin,
+    x: PAGE_LEFT,
     y: leftY,
     size: 16,
     font: fontBold,
-    color: COLOR_TEXT,
+    color: NAVY,
   });
   if (body.belegdatum) {
     leftY -= 14;
     page.drawText(`Bestellt am ${body.belegdatum}`, {
-      x: margin,
+      x: PAGE_LEFT,
       y: leftY,
-      size: 9,
+      size: 8,
       font,
-      color: COLOR_MUTED,
+      color: MID_GREY,
     });
   }
 
   const addr = body.rechnungsadresse;
   if (addr) {
     const fullName = [addr.vorname, addr.name].filter(Boolean).join(" ");
-    let cy = y;
-    sectionHeading("Rechnungsadresse", cy);
-    cy -= 22;
+    drawSectionHeading(page, fontBold, "Rechnungsadresse", y);
+    let cy = y - 18;
     if (addr.anrede) {
-      page.drawText(addr.anrede, { x: colSplit, y: cy, size: 10, font, color: COLOR_MUTED });
+      page.drawText(addr.anrede, {
+        x: colSplit,
+        y: cy,
+        size: 9.2,
+        font,
+        color: MID_GREY,
+      });
       cy -= 12;
     }
     if (fullName) {
       page.drawText(fullName, {
         x: colSplit,
         y: cy,
-        size: 11,
+        size: 10,
         font: fontBold,
-        color: COLOR_TEXT,
+        color: NAVY,
       });
       cy -= 13;
     }
     if (addr.strasse) {
-      page.drawText(addr.strasse, { x: colSplit, y: cy, size: 10, font, color: COLOR_TEXT });
+      page.drawText(addr.strasse, {
+        x: colSplit,
+        y: cy,
+        size: 9.2,
+        font,
+        color: DARK_GREY,
+      });
       cy -= 12;
     }
     if (addr.plz || addr.ort) {
       page.drawText([addr.plz, addr.ort].filter(Boolean).join(" "), {
         x: colSplit,
         y: cy,
-        size: 10,
+        size: 9.2,
         font,
-        color: COLOR_TEXT,
+        color: DARK_GREY,
       });
       cy -= 12;
     }
     if (addr.email) {
-      page.drawText(addr.email, { x: colSplit, y: cy, size: 9, font, color: COLOR_MUTED });
+      page.drawText(addr.email, {
+        x: colSplit,
+        y: cy,
+        size: 8,
+        font,
+        color: MID_GREY,
+      });
     }
   }
 
   // ─── Artikel-Tabelle ───
-  y -= 110;
-  sectionHeading("Zurückzusendende Artikel", y);
+  y -= 100;
+  drawSectionHeading(page, fontBold, "Zurückzusendende Artikel", y);
   y -= 22;
 
   const col = {
-    menge: margin,
-    artikel: margin + 40,
-    grund: margin + 260,
-    summe: PAGE_W - 40 - 60,
+    menge: PAGE_LEFT,
+    artikel: PAGE_LEFT + 40,
+    grund: PAGE_LEFT + 260,
+    summe: PAGE_RIGHT - 60,
   };
 
-  // Tabellen-Header (Navy)
+  // Tabellen-Header (Navy mit weißem Text)
   page.drawRectangle({
-    x: margin - 4,
+    x: PAGE_LEFT - 4,
     y: y - 4,
-    width: PAGE_W - margin - 40 + 4,
+    width: PAGE_RIGHT - PAGE_LEFT + 4,
     height: 18,
-    color: COLOR_NAVY,
+    color: NAVY,
   });
-  page.drawText("Menge", { x: col.menge, y, size: 9, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("Artikel", { x: col.artikel, y, size: 9, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("Grund", { x: col.grund, y, size: 9, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("Summe", { x: col.summe, y, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+  page.drawText("Menge", {
+    x: col.menge,
+    y,
+    size: 8.5,
+    font: fontBold,
+    color: WHITE,
+  });
+  page.drawText("Artikel", {
+    x: col.artikel,
+    y,
+    size: 8.5,
+    font: fontBold,
+    color: WHITE,
+  });
+  page.drawText("Grund", {
+    x: col.grund,
+    y,
+    size: 8.5,
+    font: fontBold,
+    color: WHITE,
+  });
+  page.drawText("Summe", {
+    x: col.summe,
+    y,
+    size: 8.5,
+    font: fontBold,
+    color: WHITE,
+  });
   y -= 22;
 
   const fmtEur = (n: number) => n.toFixed(2).replace(".", ",") + " €";
   let erstattungTotal = 0;
 
   for (const it of body.items) {
-    if (y < 200) {
+    if (y < 210) {
       page.drawText("... (weitere Artikel abgeschnitten)", {
-        x: margin,
+        x: PAGE_LEFT,
         y,
         size: 9,
         font,
@@ -394,32 +478,32 @@ export async function POST(req: Request) {
       y,
       size: 10,
       font: fontBold,
-      color: COLOR_TEXT,
+      color: NAVY,
     });
     const descLine = it.beschreibung ?? "";
     const metaLine = [it.artikelnummer, it.hersteller].filter(Boolean).join(" · ");
     page.drawText(descLine.slice(0, 38), {
       x: col.artikel,
       y,
-      size: 10,
+      size: 9.2,
       font,
-      color: COLOR_TEXT,
+      color: DARK_GREY,
     });
     if (metaLine) {
       page.drawText(metaLine.slice(0, 44), {
         x: col.artikel,
         y: y - 11,
-        size: 8,
+        size: 7.5,
         font,
-        color: COLOR_MUTED,
+        color: MID_GREY,
       });
     }
     page.drawText(it.grund.slice(0, 28), {
       x: col.grund,
       y,
-      size: 10,
+      size: 9.2,
       font,
-      color: COLOR_TEXT,
+      color: DARK_GREY,
     });
     if (it.gesamtpreis_brutto !== undefined) {
       page.drawText(fmtEur(it.gesamtpreis_brutto), {
@@ -427,137 +511,139 @@ export async function POST(req: Request) {
         y,
         size: 10,
         font: fontBold,
-        color: COLOR_TEXT,
+        color: NAVY,
       });
       if (it.einzelpreis_brutto !== undefined && it.menge > 1) {
         page.drawText(`${fmtEur(it.einzelpreis_brutto)} / Stk`, {
           x: col.summe,
           y: y - 11,
-          size: 8,
+          size: 7.5,
           font,
-          color: COLOR_MUTED,
+          color: MID_GREY,
         });
       }
       erstattungTotal += it.gesamtpreis_brutto;
     }
     page.drawLine({
-      start: { x: margin - 4, y: y - 16 },
-      end: { x: PAGE_W - 40, y: y - 16 },
-      thickness: 0.3,
-      color: rgb(0.85, 0.85, 0.85),
+      start: { x: PAGE_LEFT - 4, y: y - 16 },
+      end: { x: PAGE_RIGHT, y: y - 16 },
+      thickness: 0.4,
+      color: LIGHT_GREY,
     });
     y -= 28;
   }
 
-  // ─── Erstattungs-Summe (Highlight-Zeile) ───
+  // Erstattungs-Summe (light grey highlight band)
   if (erstattungTotal > 0) {
     y -= 2;
     page.drawRectangle({
-      x: margin - 4,
+      x: PAGE_LEFT - 4,
       y: y - 6,
-      width: PAGE_W - margin - 40 + 4,
+      width: PAGE_RIGHT - PAGE_LEFT + 4,
       height: 24,
-      color: rgb(0.97, 0.97, 0.97),
+      color: LIGHT_GREY,
     });
     page.drawText("Voraussichtliche Erstattung", {
       x: col.grund,
       y: y + 4,
-      size: 11,
+      size: 10.5,
       font: fontBold,
-      color: COLOR_NAVY,
+      color: NAVY,
     });
     page.drawText(fmtEur(erstattungTotal), {
       x: col.summe,
       y: y + 4,
-      size: 13,
+      size: 12,
       font: fontBold,
-      color: COLOR_NAVY,
+      color: NAVY,
     });
     y -= 22;
   }
 
-  // ─── Refund-Hinweis ───
-  y -= 14;
-  page.drawText(
-    "Die Erstattung erfolgt auf das ursprüngliche Zahlungsmittel — in der Regel innerhalb von",
-    { x: margin, y, size: 9, font, color: COLOR_MUTED }
-  );
-  y -= 11;
-  page.drawText("5 Werktagen nach Eingang und Prüfung der Ware.", {
-    x: margin,
-    y,
-    size: 9,
+  // Refund-Hinweis als Aufzählungszeile
+  y -= 16;
+  drawBullet(
+    page,
     font,
-    color: COLOR_MUTED,
+    fontBold,
+    "Die Erstattung erfolgt auf das ursprüngliche Zahlungsmittel — in der Regel",
+    y
+  );
+  y -= 12;
+  page.drawText("innerhalb von 5 Werktagen nach Eingang und Prüfung der Ware.", {
+    x: PAGE_LEFT + 12,
+    y,
+    size: 9.2,
+    font,
+    color: DARK_GREY,
   });
 
   // ─── Versand-Block ───
-  y -= 28;
+  y -= 30;
   if (body.shippingMode === "sicher") {
-    sectionHeading("Sichere Rückgabe", y);
-    y -= 22;
+    drawSectionHeading(page, fontBold, "Sichere Rückgabe", y);
+    y -= 18;
     page.drawText(
       body.requestDHLLabel
         ? "Du hast die Sichere Rückgabe gewählt — das DHL-Retourenlabel liegt auf der nächsten Seite."
         : "Du hast die Sichere Rückgabe gewählt. Bei Bedarf kannst du ein DHL-Label nachfordern.",
-      { x: margin, y, size: 10, font, color: COLOR_TEXT }
+      { x: PAGE_LEFT, y, size: 9.2, font, color: DARK_GREY }
     );
-    y -= 16;
-    page.drawText("1. Lege diesen Retourenschein der Sendung bei.", {
-      x: margin,
-      y,
-      size: 10,
-      font,
-      color: COLOR_TEXT,
-    });
-    y -= 13;
-    page.drawText("2. Verwende das DHL-Label zum Versand (siehe nächste Seite).", {
-      x: margin,
-      y,
-      size: 10,
-      font,
-      color: COLOR_TEXT,
-    });
-    y -= 13;
-    page.drawText("3. Bearbeitung dauert bis zu 5 Werktage nach Eingang.", {
-      x: margin,
-      y,
-      size: 10,
-      font,
-      color: COLOR_TEXT,
-    });
+    y -= 18;
+    const steps = [
+      "Lege diesen Retourenschein der Sendung bei.",
+      "Verwende das DHL-Label zum Versand (siehe nächste Seite).",
+      "Bearbeitung dauert bis zu 5 Werktage nach Eingang.",
+    ];
+    for (const s of steps) {
+      drawBullet(page, font, fontBold, s, y);
+      y -= 12;
+    }
   } else {
-    sectionHeading("Rücksendeadresse", y);
-    y -= 22;
+    drawSectionHeading(page, fontBold, "Rücksendeadresse", y);
+    y -= 18;
     page.drawText("kfzBlitz24 GmbH", {
-      x: margin,
+      x: PAGE_LEFT,
       y,
-      size: 11,
+      size: 10.5,
       font: fontBold,
-      color: COLOR_TEXT,
+      color: NAVY,
     });
     y -= 13;
-    page.drawText("c/o RETOURE", { x: margin, y, size: 10, font, color: COLOR_TEXT });
-    y -= 12;
-    page.drawText("Musterstraße 1", { x: margin, y, size: 10, font, color: COLOR_TEXT });
-    y -= 12;
-    page.drawText("12345 Musterstadt", { x: margin, y, size: 10, font, color: COLOR_TEXT });
-    y -= 20;
-    page.drawText("Bitte frankiere die Sendung ausreichend.", {
-      x: margin,
+    page.drawText("c/o RETOURE", {
+      x: PAGE_LEFT,
       y,
-      size: 9,
+      size: 9.2,
       font,
-      color: COLOR_MUTED,
+      color: DARK_GREY,
     });
-    y -= 11;
-    page.drawText(
+    y -= 12;
+    page.drawText("Musterstraße 1", {
+      x: PAGE_LEFT,
+      y,
+      size: 9.2,
+      font,
+      color: DARK_GREY,
+    });
+    y -= 12;
+    page.drawText("12345 Musterstadt", {
+      x: PAGE_LEFT,
+      y,
+      size: 9.2,
+      font,
+      color: DARK_GREY,
+    });
+    y -= 22;
+    drawBullet(page, font, fontBold, "Bitte frankiere die Sendung ausreichend.", y);
+    y -= 12;
+    drawBullet(
+      page,
+      font,
+      fontBold,
       "Unfrei gesendete Pakete können leider nicht angenommen werden.",
-      { x: margin, y, size: 9, font, color: COLOR_MUTED }
+      y
     );
   }
-
-  drawFooter(page, font);
 
   // ─── Page 2: DHL-Label-Wrapper (wenn Label angefordert) ─────────────
   let labelInfo: LabelInfo = { mode: "none" };
@@ -592,75 +678,49 @@ export async function POST(req: Request) {
     if (labelResult.ok) {
       try {
         const labelPdf = await PDFDocument.load(new Uint8Array(labelResult.pdfBuffer));
-        const embeddedLabelPages = await pdf.embedPdf(labelPdf, labelPdf.getPageIndices());
+        const embeddedLabelPages = await pdf.embedPdf(
+          labelPdf,
+          labelPdf.getPageIndices()
+        );
 
         for (const lp of embeddedLabelPages) {
           const lpage = pdf.addPage([PAGE_W, PAGE_H]);
-          drawBrandChrome(lpage, fontBold, font);
-
-          // Titel + Orange-Underline
-          let ly = PAGE_H - 120;
-          lpage.drawText("DHL-Retourenlabel", {
-            x: margin,
-            y: ly,
-            size: 28,
-            font: fontBold,
-            color: COLOR_NAVY,
-          });
-          lpage.drawRectangle({
-            x: margin,
-            y: ly - 8,
-            width: 80,
-            height: 2,
-            color: COLOR_ORANGE,
-          });
+          drawPageChrome(lpage, font, fontBold);
+          drawTitle(lpage, fontBold, "DHL-Retourenlabel", PAGE_H - 95);
 
           // Anleitung
-          ly -= 50;
-          lpage.drawText("Anleitung", {
-            x: margin,
-            y: ly,
-            size: 13,
-            font: fontBold,
-            color: COLOR_NAVY,
-          });
-          lpage.drawRectangle({
-            x: margin,
-            y: ly - 4,
-            width: Math.min(fontBold.widthOfTextAtSize("Anleitung", 13), 60),
-            height: 1.5,
-            color: COLOR_ORANGE,
-          });
-          ly -= 22;
+          let ly = PAGE_H - 180;
+          drawSectionHeading(lpage, fontBold, "Anleitung", ly);
+          ly -= 18;
           const steps = [
-            "1. Schneide das DHL-Label entlang der gestrichelten Linie aus.",
-            "2. Klebe es gut sichtbar auf die Außenseite der Sendung.",
-            "3. Lege den Retourenschein (Seite 1) ins Paket.",
-            "4. Übergib das Paket bei einer DHL-Filiale oder Packstation.",
+            "Schneide das DHL-Label entlang der gestrichelten Linie aus.",
+            "Klebe es gut sichtbar auf die Außenseite der Sendung.",
+            "Lege den Retourenschein (Seite 1) ins Paket.",
+            "Übergib das Paket bei einer DHL-Filiale oder Packstation.",
           ];
           for (const s of steps) {
-            lpage.drawText(s, { x: margin, y: ly, size: 10, font, color: COLOR_TEXT });
-            ly -= 14;
+            drawBullet(lpage, font, fontBold, s, ly);
+            ly -= 12.2;
           }
-          ly -= 6;
+          ly -= 8;
           lpage.drawText(
-            "Bei Eingang prüfen wir die Ware und veranlassen die Erstattung",
-            { x: margin, y: ly, size: 9, font, color: COLOR_MUTED }
+            "Bei Eingang prüfen wir die Ware und veranlassen die Erstattung innerhalb von",
+            { x: PAGE_LEFT, y: ly, size: 9.2, font, color: MID_GREY }
           );
           ly -= 11;
-          lpage.drawText("innerhalb von 5 Werktagen auf das ursprüngliche Zahlungsmittel.", {
-            x: margin,
+          lpage.drawText("5 Werktagen auf das ursprüngliche Zahlungsmittel.", {
+            x: PAGE_LEFT,
             y: ly,
-            size: 9,
+            size: 9.2,
             font,
-            color: COLOR_MUTED,
+            color: MID_GREY,
           });
 
           // Label zentriert
           const lw = lp.width;
           const lh = lp.height;
           const availTop = ly - 30;
-          const availBottom = 80;
+          const availBottom = 90;
           const avail = availTop - availBottom;
           const lx = (PAGE_W - lw) / 2;
           const lyPos = availBottom + (avail - lh) / 2;
@@ -672,28 +732,26 @@ export async function POST(req: Request) {
             y: lyPos - pad,
             width: lw + 2 * pad,
             height: lh + 2 * pad,
-            borderColor: rgb(0.6, 0.6, 0.6),
+            borderColor: MID_GREY,
             borderWidth: 0.5,
             borderDashArray: [4, 3],
           });
           lpage.drawText("Hier ausschneiden", {
             x: lx - pad,
             y: lyPos + lh + pad + 4,
-            size: 8,
+            size: 7.5,
             font,
-            color: COLOR_MUTED,
+            color: MID_GREY,
           });
 
           // Das eigentliche Label
           lpage.drawPage(lp, { x: lx, y: lyPos, width: lw, height: lh });
 
-          // Tracking-Info im Footer-Bereich
+          // Tracking-Info
           lpage.drawText(
             `Tracking: ${labelResult.trackingNumber ?? "—"}   ·   Bestellnr.: ${body.bestellnummer}`,
-            { x: margin, y: 65, size: 9, font, color: COLOR_MUTED }
+            { x: PAGE_LEFT, y: 70, size: 8, font, color: MID_GREY }
           );
-
-          drawFooter(lpage, font);
         }
 
         labelInfo =
@@ -734,7 +792,7 @@ export async function POST(req: Request) {
 
   const bytes = await pdf.save();
 
-  // ─── Bemerkung an Abisco zurückschreiben (best-effort) ───
+  // ─── Bemerkung an Abisco (best-effort) ───
   const cfg = getWebiscoConfig();
   const belegId = body.belegid ?? body.belegnummer;
   if (cfg && belegId) {
