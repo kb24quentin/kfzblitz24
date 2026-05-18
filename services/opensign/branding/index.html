@@ -46,6 +46,18 @@
 
     /* Login-Page Hintergrund + Branding-Akzent für Logo-Container */
     body, .op-bg-base-100 { background-color: #f8fafc; }
+
+    /* OpenSign Social-Links + Branding raus (intern für KB24) */
+    a[href*="github.com/opensignlabs"],
+    a[href*="github.com/OpenSignLabs"],
+    a[href*="linkedin.com/company/opensign"],
+    a[href*="twitter.com/opensignlabs"],
+    a[href*="x.com/opensignlabs"],
+    a[href*="discord.com/invite"],
+    a[href*="discord.gg/opensign"],
+    a[href*="opensignlabs.com"]:not([href*="cdn.opensignlabs.com"]) {
+      display: none !important;
+    }
   </style>
 </head>
 
