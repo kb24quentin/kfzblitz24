@@ -2,30 +2,22 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Retourenportal — kfzblitz24",
-  description: "Artikel und Bestellungen für Retouren suchen",
+  title: "kfzBlitz24",
+  description: "kfzBlitz24 Retouren-Plattform",
 };
 
+/**
+ * Minimaler Root-Layout — keine Chrome, keine Container-Constraints.
+ * Jede Route-Group bringt ihr eigenes Layout mit:
+ *
+ * - (customer)/layout.tsx → schmaler Header, max-w-4xl, Footer für das Kunden-Portal
+ * - admin/layout.tsx      → breiter Navy-Header, voller Width fürs Dashboard
+ * - login/page.tsx        → full-bleed Navy-Hintergrund
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="de">
-      <body>
-        <div className="min-h-screen">
-          <header className="bg-primary text-white">
-            <div className="max-w-4xl mx-auto px-6 py-5 flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/kfzblitz-logo.svg" alt="kfzblitz24" className="h-8 w-auto" />
-              <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full font-medium">
-                Retouren
-              </span>
-            </div>
-          </header>
-          <main className="max-w-4xl mx-auto px-6 py-10">{children}</main>
-          <footer className="max-w-4xl mx-auto px-6 py-8 text-xs text-text-light text-center">
-            Beta — technischer Prototyp
-          </footer>
-        </div>
-      </body>
+      <body className="bg-[#f4f5f7] text-[#3d4654] antialiased">{children}</body>
     </html>
   );
 }
