@@ -1,4 +1,7 @@
+import { Suspense } from "react";
 import { LoginForm } from "./login-form";
+
+export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
   return (
@@ -18,7 +21,9 @@ export default function LoginPage() {
           <p className="text-sm text-[#8a93a0] mb-6">
             Login fürs Retouren-Admin
           </p>
-          <LoginForm />
+          <Suspense fallback={<div className="text-sm text-[#8a93a0]">Lädt…</div>}>
+            <LoginForm />
+          </Suspense>
         </div>
       </div>
     </div>
