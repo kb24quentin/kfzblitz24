@@ -7,7 +7,7 @@ SMTP via Resend.
 
 Erreichbar unter:
 
-- Staging: <https://signing.staging.kfzblitz24-group.com>
+- Staging: <https://sign.staging.kfzblitz24-group.com>
 
 ## Architektur
 
@@ -56,7 +56,7 @@ Datei: `/opt/kfzblitz24/services/opensign/.env.staging` (chmod 600)
             /opt/kfzblitz24/data/staging/opensign-files
    ```
 3. Erste Bereitstellung via `scripts/deploy.sh staging opensign`
-4. Erstes Admin-Konto auf <https://signing.staging.kfzblitz24-group.com>
+4. Erstes Admin-Konto auf <https://sign.staging.kfzblitz24-group.com>
    anlegen (Sign Up). Sobald angemeldet → in den Admin-Einstellungen
    die User-Selbstregistrierung deaktivieren, damit nur Mitarbeiter
    ein Konto bekommen können.

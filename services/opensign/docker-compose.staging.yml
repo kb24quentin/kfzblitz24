@@ -27,8 +27,8 @@ services:
       MASTER_KEY: ${MASTER_KEY}
       MONGODB_URI: mongodb://${MONGO_USER:-opensign}:${MONGO_PASSWORD}@opensign_db:27017/opensign?authSource=admin
       PARSE_MOUNT: /app
-      SERVER_URL: https://signing.staging.kfzblitz24-group.com/api/app
-      PUBLIC_URL: https://signing.staging.kfzblitz24-group.com
+      SERVER_URL: https://sign.staging.kfzblitz24-group.com/api/app
+      PUBLIC_URL: https://sign.staging.kfzblitz24-group.com
       USE_LOCAL: "TRUE"
       # SMTP (Resend) — Signier-Einladungen + OTP-Mails
       SMTP_ENABLE: "true"
@@ -50,7 +50,7 @@ services:
       - traefik.enable=true
       - traefik.docker.network=traefik_net
       # /api/app/* → server backend (port 8080)
-      - traefik.http.routers.opensign-staging-api.rule=Host(`signing.staging.kfzblitz24-group.com`) && PathPrefix(`/api/app`)
+      - traefik.http.routers.opensign-staging-api.rule=Host(`sign.staging.kfzblitz24-group.com`) && PathPrefix(`/api/app`)
       - traefik.http.routers.opensign-staging-api.entrypoints=websecure
       - traefik.http.routers.opensign-staging-api.tls=true
       - traefik.http.routers.opensign-staging-api.tls.certresolver=letsencrypt
@@ -65,9 +65,9 @@ services:
     depends_on:
       - opensign_server
     environment:
-      PUBLIC_URL: https://signing.staging.kfzblitz24-group.com/
+      PUBLIC_URL: https://sign.staging.kfzblitz24-group.com/
       REACT_APP_APPID: ${APP_ID}
-      REACT_APP_SERVERURL: https://signing.staging.kfzblitz24-group.com/api/app
+      REACT_APP_SERVERURL: https://sign.staging.kfzblitz24-group.com/api/app
     networks:
       - opensign_internal
       - traefik_net
@@ -75,7 +75,7 @@ services:
       - traefik.enable=true
       - traefik.docker.network=traefik_net
       # Catch-all (low priority) → React frontend (port 3000)
-      - traefik.http.routers.opensign-staging-app.rule=Host(`signing.staging.kfzblitz24-group.com`)
+      - traefik.http.routers.opensign-staging-app.rule=Host(`sign.staging.kfzblitz24-group.com`)
       - traefik.http.routers.opensign-staging-app.entrypoints=websecure
       - traefik.http.routers.opensign-staging-app.tls=true
       - traefik.http.routers.opensign-staging-app.tls.certresolver=letsencrypt
