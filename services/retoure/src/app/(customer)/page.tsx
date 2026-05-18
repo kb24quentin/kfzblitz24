@@ -37,6 +37,12 @@ type Position = {
   offene_gutschriftsmenge?: number;
   /** Stückgewicht in Gramm (aus Webisco). */
   einzelgewicht?: number;
+  /**
+   * Abisco-interne Lieferanten-ID (Einspeiser).
+   * Brauchen wir, damit später im Lager die richtige Lieferanten-Palette
+   * gewählt werden kann ("Container = 1 Lieferant").
+   */
+  einspeiserid?: number;
 };
 
 type Adresse = {
@@ -608,6 +614,10 @@ function ReviewStep({
           // Einzelgewicht in Gramm aus Webisco — wir summieren das im
           // Backend für die DHL-Sendungsgröße.
           einzelgewicht_g: a.einzelgewicht,
+          // Lieferanten-ID aus Webisco (Position.einspeiserid).
+          // Wird im Backend gegen die Supplier-Stammdaten aufgelöst,
+          // damit das PDA später die richtige Palette vorschlagen kann.
+          einspeiserid: a.einspeiserid,
         };
       });
   }, [articles, selections]);

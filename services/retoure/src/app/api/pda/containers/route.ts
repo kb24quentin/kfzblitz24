@@ -49,17 +49,22 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status")?.trim() || undefined;
   const type = url.searchParams.get("type")?.trim() || undefined;
+  const supplierId = url.searchParams.get("supplierId")?.trim() || undefined;
   const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") ?? "30") || 30));
 
-  const where: { status?: string; type?: string } = {};
+  const where: { status?: string; type?: string; supplierId?: string } = {};
   if (status) where.status = status;
   if (type) where.type = type;
+  if (supplierId) where.supplierId = supplierId;
 
   const containers = await prisma.container.findMany({
     where,
     orderBy: { openedAt: "desc" },
     take: limit,
-    include: { items: { select: { id: true } } },
+    include: {
+      items: { select: { id: true } },
+      supplier: { select: { id: true, name: true } },
+    },
   });
 
   return NextResponse.json({
@@ -69,6 +74,8 @@ export async function GET(req: Request) {
       type: c.type,
       status: c.status,
       partnerId: c.partnerId,
+      supplierId: c.supplierId,
+      supplierName: c.supplier?.name ?? null,
       openedAt: c.openedAt.toISOString(),
       closedAt: c.closedAt?.toISOString() ?? null,
       maxOpenUntil: c.maxOpenUntil?.toISOString() ?? null,
@@ -89,7 +96,12 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { type?: string; partnerId?: string; createdByPda?: string } = {};
+  let body: {
+    type?: string;
+    partnerId?: string;
+    supplierId?: string;
+    createdByPda?: string;
+  } = {};
   try {
     body = await req.json();
   } catch {
@@ -104,8 +116,36 @@ export async function POST(req: Request) {
     );
   }
 
+  // Supplier ist Pflicht: "Container = 1 Lieferant".
+  // Wir prüfen Existenz hier, damit createContainer einen sauberen
+  // Fehler werfen kann, falls die Stammdaten-Row fehlt.
+  const supplierId = body.supplierId?.trim();
+  if (!supplierId) {
+    return NextResponse.json(
+      { error: "supplierId fehlt — bitte Lieferant (Interparts/Autopartner) wählen" },
+      { status: 400 },
+    );
+  }
+  const supplier = await prisma.supplier.findUnique({
+    where: { id: supplierId },
+    select: { id: true, name: true, active: true },
+  });
+  if (!supplier) {
+    return NextResponse.json(
+      { error: `Supplier nicht gefunden: ${supplierId}` },
+      { status: 404 },
+    );
+  }
+  if (!supplier.active) {
+    return NextResponse.json(
+      { error: `Supplier ${supplier.name} ist inaktiv` },
+      { status: 409 },
+    );
+  }
+
   const container = await createContainer({
     type,
+    supplierId: supplier.id,
     partnerId: body.partnerId?.trim() || undefined,
     createdByPda: body.createdByPda?.trim() || undefined,
   });
@@ -118,8 +158,9 @@ export async function POST(req: Request) {
   } else {
     const zpl = palletLabelZpl({
       palletCode: container.code,
-      // Phase 7 ergänzt echte Partner-Namen; bis dahin Platzhalter.
-      partnerName: container.partnerId ?? "(kein Partner)",
+      // Lieferanten-Name auf das Label — das Lager soll auf einen Blick
+      // sehen, an wen die Palette geht.
+      partnerName: supplier.name,
       createdAt: container.openedAt,
       maxOpenUntil: container.maxOpenUntil ?? container.openedAt,
     });
@@ -132,6 +173,8 @@ export async function POST(req: Request) {
       code: container.code,
       type: container.type,
       partnerId: container.partnerId,
+      supplierId: container.supplierId,
+      supplierName: supplier.name,
       status: container.status,
       openedAt: container.openedAt.toISOString(),
       closedAt: container.closedAt?.toISOString() ?? null,

@@ -147,17 +147,35 @@ model RetoureItem {
   // Container (Phase 6)
   containerId String?
 
+  // Lieferanten-Bindung (Phase 6-Erweiterung):
+  // - `einspeiserid` ist der Snapshot aus Webisco-Position. Achtung: das
+  //   ist die **TecDoc-Einspeiser-ID des Artikels** (= Hersteller-ID,
+  //   z. B. BMW/MANN/Osram), NICHT der Distributor (Interparts/Autopartner).
+  //   Wir speichern den Wert trotzdem als Snapshot — Hersteller-Pivots
+  //   ("welche Marke wird am meisten zurückgeschickt?") nutzen das.
+  // - `supplierId` ist der eigentliche Distributor (Interparts vs
+  //   Autopartner). Webisco liefert das nicht pro Position; gefüllt
+  //   wird das erst beim "Item auf Container legen" — der Container hat
+  //   den Supplier (PDA-Mitarbeiter wählt beim Anlegen), und das Item
+  //   erbt ihn.
+  einspeiserid Int?
+  supplierId   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   case      RetoureCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
   container Container?  @relation(fields: [containerId], references: [id], onDelete: SetNull)
+  supplier  Supplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  photos    RetoureItemPhoto[]
 
   @@index([caseId])
   @@index([status])
   @@index([source])
   @@index([containerId])
   @@index([verdict])
+  @@index([einspeiserid])
+  @@index([supplierId])
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -214,9 +232,14 @@ model User {
 // ─────────────────────────────────────────────────────────────────────
 model Container {
   id           String   @id @default(cuid())
-  code         String   @unique           // PAL-2026-000042 etc.
+  code         String   @unique           // PAL-<supplier-slug>-YYYY-NNNNNN
   type         String   @default("palette") // "palette" | "carton" | "bag"
   partnerId    String?                    // Phase 7 — vorerst optional/string
+  /// Lieferant, an den der Container retourniert wird.
+  /// Geschäftsregel: "Ein Container = 1 Lieferant." Bei der Neuanlage
+  /// über die PDA-API ist das Feld Pflicht; alte Container ohne Supplier
+  /// (vor dieser Migration) bleiben weiter gültig (nullable).
+  supplierId   String?
   status       String   @default("open")  // "open" | "closed" | "shipped" | "received_supplier"
   openedAt     DateTime @default(now())
   closedAt     DateTime?
@@ -228,9 +251,11 @@ model Container {
   updatedAt    DateTime @updatedAt
 
   items        RetoureItem[]              // back-relation zu RetoureItem.containerId
+  supplier     Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([partnerId])
+  @@index([supplierId])
   @@index([openedAt])
 }
 
@@ -262,6 +287,8 @@ model Supplier {
   updatedAt       DateTime @updatedAt
 
   containerReturns SupplierReturn[]
+  containers       Container[]
+  retoureItems     RetoureItem[]
 
   @@index([active])
   @@index([name])
@@ -338,4 +365,37 @@ model RetourePrefill {
 
   @@index([token])
   @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// RetoureItemPhoto — Foto eines RetoureItems (Phase 5)
+//
+// Pro Item lädt der PDA mehrere Fotos hoch (typische Sätze: OVP +
+// Artikel + Detail). Jedes Foto wird auf der Disk (UPLOAD_DIR) unter
+// `retoure-photos/<caseId>/<itemId>/<photoId>.<ext>` abgelegt. Nach
+// dem Upload triggert der Endpoint via `after()` einen OpenAI-Vision-
+// Call (gpt-4o-mini), dessen Ergebnis als JSON in `aiAnalysisJson`
+// persistiert wird: `{score:0-100, reasoning, confidence:0-1, model, runAt}`.
+//
+// `caseId` ist denormalisiert, damit Listings/Lookups ohne Join über
+// RetoureItem möglich sind. Bei DELETE des Items werden die Fotos via
+// Cascade entfernt; das physische File-Cleanup übernimmt der DELETE-
+// Endpoint bzw. ein späterer Janitor-Job.
+// ─────────────────────────────────────────────────────────────────────
+model RetoureItemPhoto {
+  id        String   @id @default(cuid())
+  itemId    String
+  caseId    String   // denormalisiert für schnellen Lookup
+  kind      String   // "ovp" | "artikel" | "detail1" | "detail2" | "other"
+  filename  String
+  path      String   // Pfad unter UPLOAD_DIR
+  mimeType  String
+  sizeBytes Int
+  aiAnalysisJson String?  // {score:0-100, reasoning, confidence:0-1, model, runAt}
+  createdAt DateTime @default(now())
+  item      RetoureItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([caseId])
+  @@index([kind])
 }

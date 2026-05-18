@@ -56,8 +56,33 @@ const CODE_PREFIX: Record<ContainerType, string> = {
   bag: "PAL",
 };
 
+/**
+ * Baut aus einem Supplier-Namen einen kurzen, file-safe Slug für den
+ * Container-Code. Beispiele:
+ *   "BMW Originalteile Großhandel"  → "BMW"
+ *   "MANN+HUMMEL Vertriebs GmbH"    → "MANN"
+ *   "Osram Automotive Lighting"     → "OSRA"
+ * Maximal 6 Zeichen, nur A-Z/0-9, Großbuchstaben, ohne Bindestriche
+ * (würde den Code-Parser irritieren).
+ */
+function supplierSlug(name: string): string {
+  const cleaned = name
+    .normalize("NFKD")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  return cleaned.slice(0, 6) || "X";
+}
+
 export interface CreateContainerOptions {
   type: ContainerType;
+  /**
+   * Lieferant, an den dieser Container retourniert wird. Pflicht über die
+   * PDA-API ("Container = 1 Lieferant"). Bestimmt auch den Code-Slug
+   * (PAL-<slug>-YYYY-NNNNNN). Wird hier als optional getypt, weil die
+   * Lib auch für historische Container ohne Supplier nutzbar sein soll —
+   * der HTTP-Handler erzwingt das Vorhandensein.
+   */
+  supplierId?: string;
   partnerId?: string;
   createdByPda?: string;
   /** Standard 14 Tage — siehe `DEFAULT_MAX_AGE_DAYS`. */
@@ -73,7 +98,12 @@ export interface CreateContainerOptions {
  * `Container.code` fängt das ab und wir retryen einmal.
  */
 async function nextSequenceForYear(year: number): Promise<number> {
-  const pattern = `${CODE_PREFIX.palette}-${year}-%`;
+  // Bewusst über ALLE PAL-*-Codes scannen (mit und ohne Supplier-Slug),
+  // damit die Nummer global pro Jahr eindeutig ist — auch nach Wechseln
+  // im Code-Format. Pattern matched:
+  //   PAL-2026-000001
+  //   PAL-BMW-2026-000002
+  const pattern = `${CODE_PREFIX.palette}-%${year}-%`;
   const rows = await prisma.$queryRawUnsafe<{ code: string }[]>(
     `SELECT "code" FROM "Container" WHERE "code" LIKE $1`,
     pattern,
@@ -109,16 +139,33 @@ export async function createContainer(
   const year = openedAt.getFullYear();
   const prefix = CODE_PREFIX[opts.type];
 
+  // Supplier-Slug (falls vorhanden) zwischen prefix und year einschieben.
+  // Wir validieren hier auch dass der Supplier existiert — die HTTP-API
+  // ruft das ohnehin schon, aber doppelt hält besser (z. B. wenn das Lib
+  // direkt aus einem Script aufgerufen wird).
+  let slug = "";
+  if (opts.supplierId) {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: opts.supplierId },
+      select: { name: true },
+    });
+    if (!supplier) {
+      throw new Error(`Supplier nicht gefunden: ${opts.supplierId}`);
+    }
+    slug = `-${supplierSlug(supplier.name)}`;
+  }
+
   // Einmal retryen wenn UNIQUE-Constraint feuert (race mit parallelem
   // Insert). Beim zweiten Treffer geben wir den Fehler durch.
   for (let attempt = 0; attempt < 2; attempt++) {
     const seq = await nextSequenceForYear(year);
-    const code = `${prefix}-${year}-${formatSequence(seq)}`;
+    const code = `${prefix}${slug}-${year}-${formatSequence(seq)}`;
     try {
       return await prisma.container.create({
         data: {
           code,
           type: opts.type,
+          supplierId: opts.supplierId ?? null,
           partnerId: opts.partnerId ?? null,
           status: "open",
           openedAt,
@@ -167,11 +214,34 @@ export async function linkItemToContainer(
       );
     }
 
+    // Container muss einen Supplier haben — die PDA-API erzwingt das
+    // bereits bei Anlage; alte Container vor der Phase-6-Erweiterung
+    // (ohne supplier) lehnen wir hier ab, damit kein Item ohne
+    // Distributor-Bindung in Umlauf gerät.
+    if (!container.supplierId) {
+      throw new Error(
+        `Container ${container.code} hat keinen Lieferanten zugeordnet — Item-Linking abgelehnt`,
+      );
+    }
+
+    // Wenn das Item bereits einen Supplier hat (z. B. vom Vor-Container),
+    // muss er matchen — sonst werfen wir, damit kein Mischwarenkartons-
+    // Container entsteht. Bei `supplierId === null` (Erstauflage) übernehmen
+    // wir den Container-Supplier kommentarlos.
+    if (item.supplierId && item.supplierId !== container.supplierId) {
+      throw new Error(
+        `Supplier-Konflikt: Artikel ist bereits für Lieferant ${item.supplierId} markiert, Container ${container.code} gehört zu ${container.supplierId}`,
+      );
+    }
+
     const updated = await tx.retoureItem.update({
       where: { id: itemId },
       data: {
         containerId,
         status: "on_pallet",
+        // Supplier vom Container erben (idempotent — entweder identisch
+        // oder vorher null).
+        supplierId: container.supplierId,
       },
     });
 
@@ -184,6 +254,7 @@ export async function linkItemToContainer(
           itemId: item.id,
           containerId: container.id,
           containerCode: container.code,
+          supplierId: container.supplierId,
         }),
         actor,
       },

@@ -61,6 +61,12 @@ services:
       SLA_MAIL_TO: ${SLA_MAIL_TO:-}
       SLA_MAIL_FROM: ${SLA_MAIL_FROM:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Foto-Upload + AI-Scoring (Phase 5)
+      UPLOAD_DIR: /app/uploads
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CUSTOMER_MAIL_FROM: ${CUSTOMER_MAIL_FROM:-}
+    volumes:
+      - /opt/kfzblitz24/data/staging/retoure-photos:/app/uploads/retoure-photos
     networks:
       - staging_internal
       - traefik_net

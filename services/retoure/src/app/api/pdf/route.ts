@@ -40,6 +40,13 @@ type Item = {
   gesamtpreis_brutto?: number;
   /** Stückgewicht in Gramm, kommt aus Webisco-Position. */
   einzelgewicht_g?: number;
+  /**
+   * Abisco-interne Lieferanten-ID (Einspeiser), aus Webisco-Position.
+   * Wird in createCase gegen die Supplier-Stammdaten aufgelöst, damit
+   * das PDA später bei der Container-Anlage automatisch den richtigen
+   * Lieferanten erkennt ("Container = 1 Lieferant").
+   */
+  einspeiserid?: number;
 };
 
 type Body = {
@@ -898,6 +905,7 @@ export async function POST(req: Request) {
         einzelpreis_brutto: it.einzelpreis_brutto,
         gesamtpreis_brutto: it.gesamtpreis_brutto,
         einzelgewicht_g: it.einzelgewicht_g,
+        einspeiserid: it.einspeiserid,
       })),
       warenwertBrutto: warenwert,
       labelFeeBrutto,

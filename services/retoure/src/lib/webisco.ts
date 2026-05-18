@@ -39,6 +39,19 @@ export interface BelegPosition {
   rechnungsdatum?: string;
   offene_gutschriftsmenge?: number;
   einzelgewicht?: number;
+  /**
+   * TecDoc-Einspeiser-ID (per Webisco-Doku S. 23): die ID des
+   * **Herstellers** des Artikels (BMW=…, MANN=…, Osram=… etc.) — NICHT
+   * der Distributor, von dem wir den Artikel bezogen haben. Letzteren
+   * gibt Webisco pro Position nicht heraus (nur am Beleg, und nur bei
+   * Auftragstyp "multiplexer").
+   *
+   * Wir speichern den Wert als Snapshot, weil er für Hersteller-
+   * Statistiken nützlich ist ("welche Marke geht am meisten zurück?").
+   * Die Distributor-Zuordnung (Interparts/Autopartner) erfolgt
+   * stattdessen beim Auflegen auf den Container.
+   */
+  einspeiserid?: number;
 }
 
 export interface Adresse {
@@ -329,6 +342,7 @@ export async function fetchBelegByNumber(
           rechnungsdatum: str(pos.rechnungsdatum),
           offene_gutschriftsmenge: num(pos.offene_gutschriftsmenge),
           einzelgewicht: num(pos.einzelgewicht),
+          einspeiserid: num(pos.einspeiserid),
         };
       }),
     };
@@ -416,6 +430,7 @@ export function mockBelegByNumber(bestellnummer: string): Beleg[] {
             lieferdatum: "2026-03-16",
             offene_gutschriftsmenge: 1,
             einzelgewicht: 2400,
+            einspeiserid: 100, // TecDoc-Einspeiser-ID Hersteller BMW
           },
           {
             id: 9002,
@@ -433,6 +448,7 @@ export function mockBelegByNumber(bestellnummer: string): Beleg[] {
             lieferdatum: "2026-03-16",
             offene_gutschriftsmenge: 2,
             einzelgewicht: 450,
+            einspeiserid: 200, // TecDoc-Einspeiser-ID Hersteller MANN+HUMMEL
           },
           {
             id: 9003,
@@ -450,6 +466,7 @@ export function mockBelegByNumber(bestellnummer: string): Beleg[] {
             lieferdatum: "2026-03-16",
             offene_gutschriftsmenge: 4,
             einzelgewicht: 35,
+            einspeiserid: 300, // TecDoc-Einspeiser-ID Hersteller Osram
           },
         ],
       },

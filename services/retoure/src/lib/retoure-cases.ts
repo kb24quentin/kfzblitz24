@@ -29,6 +29,12 @@ export interface RetoureItemSnapshot {
   einzelpreis_brutto?: number;
   gesamtpreis_brutto?: number;
   einzelgewicht_g?: number;
+  /**
+   * Abisco-interne Lieferanten-ID (Einspeiser), aus der Webisco-Position.
+   * Wird in createCase gegen Supplier.einspeiserId aufgelöst und in
+   * RetoureItem.einspeiserid + .supplierId persistiert.
+   */
+  einspeiserid?: number;
 }
 
 export interface CreateRetoureCaseInput {
@@ -89,7 +95,15 @@ export async function createCase(input: CreateRetoureCaseInput) {
       },
     });
 
-    // Items als eigene Rows
+    // Items als eigene Rows.
+    //
+    // `einspeiserid` ist die TecDoc-Einspeiser-ID des Artikels (=
+    // Hersteller, z. B. BMW/MANN/Osram) — wir speichern den Snapshot
+    // für spätere Hersteller-Pivots. Den **Distributor** (Interparts/
+    // Autopartner) liefert Webisco pro Position NICHT; `supplierId`
+    // bleibt deshalb bei der Anmeldung null und wird erst beim "Item
+    // auf Container legen" gesetzt (Container hat den Supplier vom
+    // PDA-Mitarbeiter geerbt).
     if (input.items.length > 0) {
       await tx.retoureItem.createMany({
         data: input.items.map((it) => ({
@@ -104,6 +118,7 @@ export async function createCase(input: CreateRetoureCaseInput) {
           einzelpreis_brutto: it.einzelpreis_brutto ?? null,
           gesamtpreis_brutto: it.gesamtpreis_brutto ?? null,
           einzelgewicht_g: it.einzelgewicht_g ?? null,
+          einspeiserid: it.einspeiserid ?? null,
         })),
       });
     }

@@ -46,6 +46,7 @@ export async function GET(
           },
         },
       },
+      supplier: { select: { id: true, name: true } },
     },
   });
 
@@ -62,6 +63,8 @@ export async function GET(
       code: container.code,
       type: container.type,
       partnerId: container.partnerId,
+      supplierId: container.supplierId,
+      supplierName: container.supplier?.name ?? null,
       status: container.status,
       openedAt: container.openedAt.toISOString(),
       closedAt: container.closedAt?.toISOString() ?? null,

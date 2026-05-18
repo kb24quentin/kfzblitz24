@@ -11,6 +11,8 @@ interface ContainerSummary {
   openedAt: string;
   maxOpenUntil: string | null;
   closedAt: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
   items: { id: string }[];
 }
 
@@ -84,6 +86,9 @@ export default function PdaContainersListPage() {
                     <p className="font-mono font-semibold">{c.code}</p>
                     <p className="text-xs text-white/60 mt-0.5">
                       {c.type} · {c.items.length} Artikel
+                      {c.supplierName && (
+                        <> · <span className="text-[#ffae80]">{c.supplierName}</span></>
+                      )}
                     </p>
                   </div>
                   <span

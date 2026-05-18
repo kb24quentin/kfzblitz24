@@ -13,6 +13,8 @@ interface PdaContainerDetail {
   openedAt: string;
   closedAt: string | null;
   maxOpenUntil: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
   items: Array<{
     id: string;
     artikelnummer: string | null;
@@ -112,6 +114,11 @@ export default function PdaContainerDetailPage({
       <div className="bg-white/5 border border-white/10 rounded-xl p-4">
         <p className="text-xs text-white/60 uppercase tracking-wider">{c.type}</p>
         <p className="font-mono text-xl font-bold mt-1">{c.code}</p>
+        {c.supplierName && (
+          <p className="text-sm text-[#ffae80] mt-1">
+            → Lieferant: <span className="font-semibold">{c.supplierName}</span>
+          </p>
+        )}
         <div className="flex items-center gap-2 mt-2 text-xs">
           <span
             className={`px-2 py-0.5 rounded-full font-semibold ${
