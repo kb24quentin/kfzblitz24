@@ -560,9 +560,10 @@ function SelectStep({
 // ────────────────────────────────────────────────────────────────────────
 // Step 3: Review + submit
 // ────────────────────────────────────────────────────────────────────────
-const LABEL_FEE_NET = 4.5; // Netto-Kosten für ein über uns erzeugtes DHL-Label
-const VAT_RATE = 0.19;
-const LABEL_FEE_BRUTTO = +(LABEL_FEE_NET * (1 + VAT_RATE)).toFixed(2);
+// DHL-Label-Kosten: feste Werte (keine Berechnung aus VAT, sonst gibt's
+// Rundungs-Edge-Cases wie 5,35 vs 5,36).
+const LABEL_FEE_BRUTTO = 5.5;
+const LABEL_FEE_NET = 4.62; // entspricht 5,50 € / 1,19, gerundet
 
 function ReviewStep({
   beleg,
@@ -729,10 +730,10 @@ function ReviewStep({
                   <span className="text-xs">
                     Kosten:{" "}
                     <strong>
-                      {LABEL_FEE_NET.toFixed(2).replace(".", ",")} € netto
+                      {LABEL_FEE_BRUTTO.toFixed(2).replace(".", ",")} € brutto
                     </strong>{" "}
-                    ({LABEL_FEE_BRUTTO.toFixed(2).replace(".", ",")} € brutto inkl. MwSt.) —
-                    werden von der Erstattung abgezogen.
+                    (entspricht {LABEL_FEE_NET.toFixed(2).replace(".", ",")} € netto
+                    inkl. MwSt.) — werden von der Erstattung abgezogen.
                   </span>
                 </span>
               </label>

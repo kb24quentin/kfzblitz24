@@ -537,16 +537,12 @@ export async function POST(req: Request) {
   }
 
   // Erstattungs-Block: Warenwert → (optional) Abzug Label → Erstattung
+  // Feste Konstanten — 5,50 € brutto / 4,62 € netto — kein Rumrechnen
+  // mit 19% MwSt., sonst gibt's Rundungs-Edge-Cases.
   const willChargeLabel =
     body.shippingMode !== "sicher" && body.requestPaidLabel === true;
-  // Brutto explizit aus Netto * 1,19 rechnen damit kein Rundungs-Edge-Case
-  // entsteht (4.50 * 1.19 = 5.355 — IEEE → 5.354... — toFixed(2) gibt "5.35"
-  // statt "5.36"). Plus 0.005 schiebt es eindeutig in die richtige Richtung.
-  const labelNetExact = willChargeLabel ? body.labelFeeNet ?? 4.5 : 0;
-  const labelDeductionBrutto = willChargeLabel
-    ? body.labelFeeBrutto ?? Math.round(labelNetExact * 1.19 * 100 + 1e-6) / 100
-    : 0;
-  const labelDeductionNet = labelNetExact;
+  const labelDeductionBrutto = willChargeLabel ? body.labelFeeBrutto ?? 5.5 : 0;
+  const labelDeductionNet = willChargeLabel ? body.labelFeeNet ?? 4.62 : 0;
   const erstattungFinal = Math.max(0, erstattungTotal - labelDeductionBrutto);
 
   if (erstattungTotal > 0) {
@@ -832,8 +828,8 @@ export async function POST(req: Request) {
                 mode: "paid",
                 trackingNumber: labelResult.trackingNumber,
                 shipmentId: labelResult.shipmentId,
-                feeNet: body.labelFeeNet ?? 4.5,
-                feeBrutto: body.labelFeeBrutto ?? 5.36,
+                feeNet: body.labelFeeNet ?? 4.62,
+                feeBrutto: body.labelFeeBrutto ?? 5.5,
               };
         console.log(
           `[retoure] DHL label merged (shipment=${labelResult.shipmentId}, tracking=${labelResult.trackingNumber ?? "—"})`

@@ -46,7 +46,7 @@ export function getDodajpaczkeConfig(): DodajpaczkeConfig | null {
     shipperId,
     warehouseName: process.env.DODAJPACZKE_WAREHOUSE_NAME?.trim() || "kfzBlitz24 GmbH",
     warehouseZip: process.env.DODAJPACZKE_WAREHOUSE_ZIP?.trim() || "12345",
-    labelFeeNet: Number(process.env.DODAJPACZKE_LABEL_FEE_NET ?? "4.50"),
+    labelFeeNet: Number(process.env.DODAJPACZKE_LABEL_FEE_NET ?? "4.62"),
   };
 }
 
