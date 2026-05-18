@@ -1,0 +1,90 @@
+services:
+  opensign_db:
+    image: mongo:7
+    container_name: opensign_db_staging
+    restart: unless-stopped
+    command:
+      - --auth
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-opensign}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: opensign
+    volumes:
+      - /opt/kfzblitz24/data/staging/opensign-mongo:/data/db
+    networks:
+      - opensign_internal
+
+  opensign_server:
+    image: opensign/opensignserver:main
+    container_name: opensign_server_staging
+    restart: unless-stopped
+    depends_on:
+      - opensign_db
+    environment:
+      NODE_ENV: production
+      APP_ID: ${APP_ID}
+      appName: kfzBlitz24-Signing
+      MASTER_KEY: ${MASTER_KEY}
+      MONGODB_URI: mongodb://${MONGO_USER:-opensign}:${MONGO_PASSWORD}@opensign_db:27017/opensign?authSource=admin
+      PARSE_MOUNT: /app
+      SERVER_URL: https://signing.staging.kfzblitz24-group.com/api/app
+      PUBLIC_URL: https://signing.staging.kfzblitz24-group.com
+      USE_LOCAL: "TRUE"
+      # SMTP (Resend) — Signier-Einladungen + OTP-Mails
+      SMTP_ENABLE: "true"
+      SMTP_HOST: smtp.resend.com
+      SMTP_PORT: "465"
+      SMTP_USER_EMAIL: ${SMTP_USER_EMAIL:-resend}
+      SMTP_PASS: ${RESEND_API_KEY}
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-disabled}
+      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-disabled}
+      MAILGUN_SENDER: ${MAILGUN_SENDER:-noreply@kfzblitz24-group.com}
+      PFX_BASE64: ${PFX_BASE64:-}
+      PASS_PHRASE: ${PASS_PHRASE:-}
+    volumes:
+      - /opt/kfzblitz24/data/staging/opensign-files:/usr/src/app/files
+    networks:
+      - opensign_internal
+      - traefik_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_net
+      # /api/app/* → server backend (port 8080)
+      - traefik.http.routers.opensign-staging-api.rule=Host(`signing.staging.kfzblitz24-group.com`) && PathPrefix(`/api/app`)
+      - traefik.http.routers.opensign-staging-api.entrypoints=websecure
+      - traefik.http.routers.opensign-staging-api.tls=true
+      - traefik.http.routers.opensign-staging-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.opensign-staging-api.priority=100
+      - traefik.http.routers.opensign-staging-api.service=opensign-staging-api
+      - traefik.http.services.opensign-staging-api.loadbalancer.server.port=8080
+
+  opensign_app:
+    image: opensign/opensign:main
+    container_name: opensign_app_staging
+    restart: unless-stopped
+    depends_on:
+      - opensign_server
+    environment:
+      PUBLIC_URL: https://signing.staging.kfzblitz24-group.com/
+      REACT_APP_APPID: ${APP_ID}
+      REACT_APP_SERVERURL: https://signing.staging.kfzblitz24-group.com/api/app
+    networks:
+      - opensign_internal
+      - traefik_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_net
+      # Catch-all (low priority) → React frontend (port 3000)
+      - traefik.http.routers.opensign-staging-app.rule=Host(`signing.staging.kfzblitz24-group.com`)
+      - traefik.http.routers.opensign-staging-app.entrypoints=websecure
+      - traefik.http.routers.opensign-staging-app.tls=true
+      - traefik.http.routers.opensign-staging-app.tls.certresolver=letsencrypt
+      - traefik.http.routers.opensign-staging-app.priority=10
+      - traefik.http.routers.opensign-staging-app.service=opensign-staging-app
+      - traefik.http.services.opensign-staging-app.loadbalancer.server.port=3000
+
+networks:
+  opensign_internal:
+    driver: bridge
+  traefik_net:
+    external: true
