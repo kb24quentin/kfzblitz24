@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// RetoureCase — eine angemeldete Retoure
+// ─────────────────────────────────────────────────────────────────────
+model RetoureCase {
+  id          String  @id @default(cuid())
+  externalRef String? @unique // optional ext. ID für Shop-Anbindung
+
+  // Bestelldaten aus Webisco
+  bestellnummer String  // KB24-...
+  belegId       String? // numerisch (z.B. "243775570")
+  belegnummer   String? // "A243775570"
+  belegdatum    String? // YYYY-MM-DD
+
+  // Kunden-Snapshot zum Zeitpunkt der Anmeldung
+  customerAnrede   String?
+  customerVorname  String?
+  customerName     String?
+  customerStrasse  String?
+  customerPlz      String?
+  customerOrt      String?
+  customerEmail    String?
+  customerTelefon  String?
+  customerHandy    String?
+
+  // Items + Reasons als JSON-Array
+  // [{artikelnummer, beschreibung, hersteller, menge, grund, einzelpreis_brutto, gesamtpreis_brutto, einzelgewicht_g}, ...]
+  itemsJson String @default("[]")
+
+  // Geld
+  warenwertBrutto             Float @default(0)
+  labelFeeBrutto              Float @default(0)
+  voraussichtlicheErstattung  Float @default(0)
+
+  // Versand-Mode (gem. Beleg-Detektion bzw. Kundenwahl)
+  // "sicher" — Sichere Rückgabe, Label kostenfrei
+  // "standard" — Kunde trägt Versandkosten ODER zahlt 5,50 € für Label über uns
+  shippingMode  String  @default("standard")
+  /// Hat der Kunde im Portal das DHL-Label über uns angefordert (in beiden Modi).
+  labelRequested Boolean @default(false)
+  /// Wenn ja: Label wurde von uns erzeugt und kostet ihn 5,50 €
+  /// (nur im Standard-Mode; bei Sichere Rückgabe gratis).
+  labelPaid     Boolean @default(false)
+
+  // dodajpaczke-DHL-Sendung
+  dhlShipmentId      Int?
+  dhlTrackingNumber  String?
+  dhlRetoureIdc      String?
+  /// Gewicht in kg, das wir an DHL gemeldet haben (inkl. 20% Puffer / 30kg Fallback).
+  weightSentKg       Float?
+
+  // Falls Kunde mit eigenem Label versendet (Phase 2):
+  customerTrackingNumber String?
+
+  // Status-Maschine
+  // angemeldet → versandt → unterwegs → eingang_partner → pruefung → erstattet
+  //                                                                  → abgelehnt
+  //                                                                  → storniert
+  status      String   @default("angemeldet")
+
+  // Admin-Notizen
+  adminNotes  String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  events RetoureEvent[]
+
+  @@index([status])
+  @@index([bestellnummer])
+  @@index([dhlTrackingNumber])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// RetoureEvent — Timeline-Eintrag
+// ─────────────────────────────────────────────────────────────────────
+model RetoureEvent {
+  id        String   @id @default(cuid())
+  caseId    String
+  /// "case_created" | "status_change" | "carrier_event" | "note" |
+  /// "label_generated" | "label_failed" | "abisco_bemerkung_written" |
+  /// "admin_action" | "tracking_added"
+  type      String
+  message   String?
+  /// JSON-Metadaten (z.B. Carrier-Event-Code, old/new status, etc.)
+  meta      String?
+  actor     String?  // "system" | "admin" | "customer" | <user.id>
+  createdAt DateTime @default(now())
+
+  case RetoureCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// User — Admin-Login fürs Dashboard (NextAuth credentials)
+// ─────────────────────────────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String   // bcrypt hash
+  role      String   @default("admin")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}

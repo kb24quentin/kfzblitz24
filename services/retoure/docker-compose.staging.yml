@@ -1,4 +1,22 @@
 services:
+  retoure-db:
+    image: postgres:16-alpine
+    container_name: retoure_db_staging
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: retoure
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: retoure
+    volumes:
+      - /opt/kfzblitz24/data/staging/retoure-postgres:/var/lib/postgresql/data
+    networks:
+      - staging_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retoure -d retoure"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   retoure:
     build:
       context: .
@@ -6,12 +24,26 @@ services:
     image: kfzblitz24/retoure:staging
     container_name: retoure_staging
     restart: unless-stopped
+    depends_on:
+      retoure-db:
+        condition: service_healthy
     environment:
+      DATABASE_URL: postgresql://retoure:${DB_PASSWORD}@retoure-db:5432/retoure
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: https://retoure.staging.kfzblitz24-group.com
+      NEXTAUTH_URL: https://retoure.staging.kfzblitz24-group.com
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      # Webisco / Abisco
       WEBISCO_HOST: ${WEBISCO_HOST:-}
       WEBISCO_USERNAME: ${WEBISCO_USERNAME:-}
       WEBISCO_PASSWORD: ${WEBISCO_PASSWORD:-}
       WEBISCO_ADMIN_ID: ${WEBISCO_ADMIN_ID:-}
       WEBISCO_DEMO_MODE: ${WEBISCO_DEMO_MODE:-}
+      WEBISCO_DEBUG: ${WEBISCO_DEBUG:-}
+      # dodajpaczke.eu (DHL Retoure)
       DODAJPACZKE_BASE_URL: ${DODAJPACZKE_BASE_URL:-}
       DODAJPACZKE_LOGIN: ${DODAJPACZKE_LOGIN:-}
       DODAJPACZKE_PASSWORD: ${DODAJPACZKE_PASSWORD:-}
@@ -19,6 +51,8 @@ services:
       DODAJPACZKE_WAREHOUSE_NAME: ${DODAJPACZKE_WAREHOUSE_NAME:-}
       DODAJPACZKE_WAREHOUSE_ZIP: ${DODAJPACZKE_WAREHOUSE_ZIP:-}
       DODAJPACZKE_LABEL_FEE_NET: ${DODAJPACZKE_LABEL_FEE_NET:-}
+      # API Bearer (für Shop-Integration)
+      API_TOKEN: ${API_TOKEN:-}
     networks:
       - staging_internal
       - traefik_net

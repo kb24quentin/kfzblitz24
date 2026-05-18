@@ -10,6 +10,7 @@ import {
 import bwipjs from "bwip-js";
 import { addBelegBemerkung, getWebiscoConfig } from "@/lib/webisco";
 import { createRetoureLabel, type RetoureLabelResult } from "@/lib/dodajpaczke";
+import { createCase, addEvent } from "@/lib/retoure-cases";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -855,6 +856,75 @@ export async function POST(req: Request) {
 
   const bytes = await pdf.save();
 
+  // ─── DB-Persistenz: RetoureCase anlegen (best-effort, non-blocking) ───
+  let createdCaseId: string | null = null;
+  try {
+    const labelGenerated = labelInfo.mode === "free" || labelInfo.mode === "paid";
+    const dhlData = labelGenerated
+      ? {
+          dhlShipmentId: labelInfo.shipmentId,
+          dhlTrackingNumber: labelInfo.trackingNumber,
+        }
+      : {};
+    // Gewicht das wir an DHL gemeldet haben (nur wenn Label generiert)
+    const rawWeightKg = body.items.reduce((sum, it) => {
+      const g = (it.einzelgewicht_g ?? 0) * it.menge;
+      return sum + g / 1000;
+    }, 0);
+    const sentWeight =
+      rawWeightKg > 0 ? Math.max(0.5, Math.min(30, rawWeightKg * 1.2)) : 30;
+
+    const c = await createCase({
+      bestellnummer: body.bestellnummer!,
+      belegId: body.belegid,
+      belegnummer: body.belegnummer,
+      belegdatum: body.belegdatum,
+      customer: body.rechnungsadresse,
+      items: body.items.map((it) => ({
+        artikelnummer: it.artikelnummer,
+        hersteller: it.hersteller,
+        beschreibung: it.beschreibung,
+        menge: it.menge,
+        grund: it.grund,
+        einzelpreis_brutto: it.einzelpreis_brutto,
+        gesamtpreis_brutto: it.gesamtpreis_brutto,
+        einzelgewicht_g: it.einzelgewicht_g,
+      })),
+      warenwertBrutto: body.items.reduce(
+        (s, it) => s + (it.gesamtpreis_brutto ?? 0),
+        0
+      ),
+      labelFeeBrutto: labelInfo.mode === "paid" ? labelInfo.feeBrutto : 0,
+      voraussichtlicheErstattung:
+        body.items.reduce((s, it) => s + (it.gesamtpreis_brutto ?? 0), 0) -
+        (labelInfo.mode === "paid" ? labelInfo.feeBrutto : 0),
+      shippingMode: body.shippingMode,
+      labelRequested:
+        (body.shippingMode === "sicher" && !!body.requestDHLLabel) ||
+        (body.shippingMode !== "sicher" && !!body.requestPaidLabel),
+      labelPaid: labelInfo.mode === "paid",
+      ...dhlData,
+      weightSentKg: labelGenerated ? sentWeight : undefined,
+    });
+    createdCaseId = c.id;
+
+    // Zusätzliche Events je nach Label-Status
+    if (labelInfo.mode === "free" || labelInfo.mode === "paid") {
+      await addEvent(c.id, "label_generated", `DHL-Label erzeugt`, {
+        shipmentId: labelInfo.shipmentId,
+        trackingNumber: labelInfo.trackingNumber,
+        feeBrutto: labelInfo.mode === "paid" ? labelInfo.feeBrutto : 0,
+      });
+    } else if (labelInfo.mode === "failed") {
+      await addEvent(c.id, "label_failed", labelInfo.reason);
+    }
+    console.log(`[retoure] persisted case ${c.id}`);
+  } catch (e) {
+    console.warn(
+      `[retoure] failed to persist case: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+
   // ─── Bemerkung an Abisco (best-effort) ───
   const cfg = getWebiscoConfig();
   const belegId = body.belegid ?? body.belegnummer;
@@ -863,8 +933,22 @@ export async function POST(req: Request) {
     const res = await addBelegBemerkung(cfg, { typ: "auftrag", id: belegId, text });
     if (res.ok) {
       console.log(`[retoure] Bemerkung written to Abisco beleg ${belegId}`);
+      if (createdCaseId) {
+        await addEvent(
+          createdCaseId,
+          "abisco_bemerkung_written",
+          `Bemerkung an Abisco beleg ${belegId} geschrieben`
+        ).catch(() => {});
+      }
     } else {
       console.warn(`[retoure] Bemerkung failed for beleg ${belegId}: ${res.error}`);
+      if (createdCaseId) {
+        await addEvent(
+          createdCaseId,
+          "note",
+          `Abisco-Bemerkung fehlgeschlagen: ${res.error}`
+        ).catch(() => {});
+      }
     }
   }
 
