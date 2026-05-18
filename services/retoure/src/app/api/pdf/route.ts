@@ -698,11 +698,14 @@ export async function POST(req: Request) {
       const g = (it.einzelgewicht_g ?? 0) * it.menge;
       return sum + g / 1000;
     }, 0);
-    // +20% Puffer für Verpackung/Polsterung. Hardcap bei 30 kg.
-    // Mindestens 0,5 kg (DHL-Minimum). Fallback auf 1 kg falls Webisco
-    // kein Gewicht hatte (z.B. Streckengeschäft ohne hinterlegtes Gewicht).
-    const buffered = (rawWeightKg || 1) * 1.2;
-    const weightInKg = Math.max(0.5, Math.min(30, buffered));
+    // Wenn Webisco kein Gewicht hatte (z.B. Streckengeschäft ohne hinterlegtes
+    // Gewicht): konservativ 30 kg annehmen — lieber zu viel als DHL-Nachporto.
+    // Sonst: gemessenes Gewicht + 20% Verpackungs-Puffer, Hardcap 30 kg,
+    // Mindestens 0,5 kg (DHL-Minimum).
+    const weightInKg =
+      rawWeightKg > 0
+        ? Math.max(0.5, Math.min(30, rawWeightKg * 1.2))
+        : 30;
     try {
       labelResult = await createRetoureLabel({
         customerReference: body.bestellnummer,
