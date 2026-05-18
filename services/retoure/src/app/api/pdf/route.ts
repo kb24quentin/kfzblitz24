@@ -37,6 +37,8 @@ type Item = {
   grund: string;
   einzelpreis_brutto?: number;
   gesamtpreis_brutto?: number;
+  /** Stückgewicht in Gramm, kommt aus Webisco-Position. */
+  einzelgewicht_g?: number;
 };
 
 type Body = {
@@ -533,8 +535,49 @@ export async function POST(req: Request) {
     y -= 28;
   }
 
-  // Erstattungs-Summe (light grey highlight band)
+  // Erstattungs-Block: Warenwert → (optional) Abzug Label → Erstattung
+  const willChargeLabel =
+    body.shippingMode !== "sicher" && body.requestPaidLabel === true;
+  const labelDeductionBrutto = willChargeLabel ? body.labelFeeBrutto ?? 5.36 : 0;
+  const labelDeductionNet = willChargeLabel ? body.labelFeeNet ?? 4.5 : 0;
+  const erstattungFinal = Math.max(0, erstattungTotal - labelDeductionBrutto);
+
   if (erstattungTotal > 0) {
+    // Warenwert
+    y -= 4;
+    page.drawText("Warenwert", {
+      x: col.grund,
+      y,
+      size: 9.5,
+      font,
+      color: DARK_GREY,
+    });
+    page.drawText(fmtEur(erstattungTotal), {
+      x: col.summe,
+      y,
+      size: 10,
+      font,
+      color: DARK_GREY,
+    });
+    y -= 14;
+
+    // Abzug Label (nur wenn anwendbar)
+    if (labelDeductionBrutto > 0) {
+      page.drawText(
+        `DHL-Label-Kosten (${labelDeductionNet.toFixed(2).replace(".", ",")} € netto)`,
+        { x: col.grund, y, size: 9.5, font, color: DARK_GREY }
+      );
+      page.drawText(`– ${fmtEur(labelDeductionBrutto)}`, {
+        x: col.summe,
+        y,
+        size: 10,
+        font,
+        color: rgb(0.55, 0.15, 0.15),
+      });
+      y -= 14;
+    }
+
+    // Highlight-Zeile: Voraussichtliche Erstattung
     y -= 2;
     page.drawRectangle({
       x: PAGE_LEFT - 4,
@@ -550,7 +593,7 @@ export async function POST(req: Request) {
       font: fontBold,
       color: NAVY,
     });
-    page.drawText(fmtEur(erstattungTotal), {
+    page.drawText(fmtEur(erstattungFinal), {
       x: col.summe,
       y: y + 4,
       size: 12,
@@ -649,10 +692,20 @@ export async function POST(req: Request) {
   let labelInfo: LabelInfo = { mode: "none" };
   if (shouldGenerateLabel(body)) {
     let labelResult: RetoureLabelResult;
+    // Echtes Gesamtgewicht aus Webisco-Positionen (einzelgewicht in Gramm)
+    // x angemeldete Menge, summiert über alle ausgewählten Artikel.
+    const totalWeightKg = body.items.reduce((sum, it) => {
+      const g = (it.einzelgewicht_g ?? 0) * it.menge;
+      return sum + g / 1000;
+    }, 0);
+    // DHL erlaubt 0.5–31.5 kg pro Paket; falls Webisco kein Gewicht hat,
+    // fallback auf 1 kg.
+    const weightInKg = Math.max(0.5, Math.min(31.5, totalWeightKg || 1));
     try {
       labelResult = await createRetoureLabel({
         customerReference: body.bestellnummer,
         description: `Retoure ${body.bestellnummer}`,
+        weightInKg,
         customer: addr
           ? {
               salutation: addr.anrede,

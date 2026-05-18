@@ -35,6 +35,8 @@ type Position = {
   status?: string;
   lieferdatum?: string;
   offene_gutschriftsmenge?: number;
+  /** Stückgewicht in Gramm (aus Webisco). */
+  einzelgewicht?: number;
 };
 
 type Adresse = {
@@ -602,6 +604,9 @@ function ReviewStep({
           grund: selections[a.id].grund,
           einzelpreis_brutto: unit,
           gesamtpreis_brutto: unit !== undefined ? unit * menge : undefined,
+          // Einzelgewicht in Gramm aus Webisco — wir summieren das im
+          // Backend für die DHL-Sendungsgröße.
+          einzelgewicht_g: a.einzelgewicht,
         };
       });
   }, [articles, selections]);
