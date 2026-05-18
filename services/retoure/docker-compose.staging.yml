@@ -31,8 +31,9 @@ services:
       DATABASE_URL: postgresql://retoure:${DB_PASSWORD}@retoure-db:5432/retoure
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_TRUST_HOST: "true"
-      AUTH_URL: https://retoure.staging.kfzblitz24-group.com
-      NEXTAUTH_URL: https://retoure.staging.kfzblitz24-group.com
+      # NextAuth läuft auf der RMA-Domain (Customer-Domain hat kein Login)
+      AUTH_URL: https://rma.staging.kfzblitz24-group.com
+      NEXTAUTH_URL: https://rma.staging.kfzblitz24-group.com
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_NAME: ${ADMIN_NAME:-Admin}
@@ -59,10 +60,18 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik_net
+      # Customer-Frontend
       - traefik.http.routers.retoure-staging.rule=Host(`retoure.staging.kfzblitz24-group.com`)
       - traefik.http.routers.retoure-staging.entrypoints=websecure
       - traefik.http.routers.retoure-staging.tls=true
       - traefik.http.routers.retoure-staging.tls.certresolver=letsencrypt
+      - traefik.http.routers.retoure-staging.service=retoure-staging
+      # RMA Admin-Dashboard (gleicher Container, anderer Host)
+      - traefik.http.routers.rma-staging.rule=Host(`rma.staging.kfzblitz24-group.com`)
+      - traefik.http.routers.rma-staging.entrypoints=websecure
+      - traefik.http.routers.rma-staging.tls=true
+      - traefik.http.routers.rma-staging.tls.certresolver=letsencrypt
+      - traefik.http.routers.rma-staging.service=retoure-staging
       - traefik.http.services.retoure-staging.loadbalancer.server.port=3000
 
 networks:

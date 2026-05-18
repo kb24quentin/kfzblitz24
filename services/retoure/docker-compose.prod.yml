@@ -1,4 +1,22 @@
 services:
+  retoure-db:
+    image: postgres:16-alpine
+    container_name: retoure_db_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: retoure
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: retoure
+    volumes:
+      - /opt/kfzblitz24/data/prod/retoure-postgres:/var/lib/postgresql/data
+    networks:
+      - prod_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retoure -d retoure"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   retoure:
     build:
       context: .
@@ -6,12 +24,24 @@ services:
     image: kfzblitz24/retoure:prod
     container_name: retoure_prod
     restart: unless-stopped
+    depends_on:
+      retoure-db:
+        condition: service_healthy
     environment:
+      DATABASE_URL: postgresql://retoure:${DB_PASSWORD}@retoure-db:5432/retoure
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: https://rma.kfzblitz24-group.com
+      NEXTAUTH_URL: https://rma.kfzblitz24-group.com
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
       WEBISCO_HOST: ${WEBISCO_HOST:-}
       WEBISCO_USERNAME: ${WEBISCO_USERNAME:-}
       WEBISCO_PASSWORD: ${WEBISCO_PASSWORD:-}
       WEBISCO_ADMIN_ID: ${WEBISCO_ADMIN_ID:-}
       WEBISCO_DEMO_MODE: ${WEBISCO_DEMO_MODE:-}
+      WEBISCO_DEBUG: ${WEBISCO_DEBUG:-}
       DODAJPACZKE_BASE_URL: ${DODAJPACZKE_BASE_URL:-}
       DODAJPACZKE_LOGIN: ${DODAJPACZKE_LOGIN:-}
       DODAJPACZKE_PASSWORD: ${DODAJPACZKE_PASSWORD:-}
@@ -19,16 +49,25 @@ services:
       DODAJPACZKE_WAREHOUSE_NAME: ${DODAJPACZKE_WAREHOUSE_NAME:-}
       DODAJPACZKE_WAREHOUSE_ZIP: ${DODAJPACZKE_WAREHOUSE_ZIP:-}
       DODAJPACZKE_LABEL_FEE_NET: ${DODAJPACZKE_LABEL_FEE_NET:-}
+      API_TOKEN: ${API_TOKEN:-}
     networks:
       - prod_internal
       - traefik_net
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik_net
+      # Customer-Frontend
       - traefik.http.routers.retoure-prod.rule=Host(`retoure.kfzblitz24-group.com`)
       - traefik.http.routers.retoure-prod.entrypoints=websecure
       - traefik.http.routers.retoure-prod.tls=true
       - traefik.http.routers.retoure-prod.tls.certresolver=letsencrypt
+      - traefik.http.routers.retoure-prod.service=retoure-prod
+      # RMA Admin-Dashboard
+      - traefik.http.routers.rma-prod.rule=Host(`rma.kfzblitz24-group.com`)
+      - traefik.http.routers.rma-prod.entrypoints=websecure
+      - traefik.http.routers.rma-prod.tls=true
+      - traefik.http.routers.rma-prod.tls.certresolver=letsencrypt
+      - traefik.http.routers.rma-prod.service=retoure-prod
       - traefik.http.services.retoure-prod.loadbalancer.server.port=3000
 
 networks:
