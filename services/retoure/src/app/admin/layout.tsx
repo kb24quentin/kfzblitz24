@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/lib/auth";
 import { auth } from "@/lib/auth";
-import { LayoutDashboard, LogOut, Factory, PackageOpen, Boxes } from "lucide-react";
+import { LayoutDashboard, LogOut, Factory, PackageOpen, Boxes, Warehouse } from "lucide-react";
 
 export default async function AdminLayout({
   children,
@@ -48,6 +48,12 @@ export default async function AdminLayout({
                 className="px-3 py-1.5 rounded-md hover:bg-white/10 inline-flex items-center gap-1.5"
               >
                 <PackageOpen className="w-4 h-4" /> Lieferanten-Retouren
+              </Link>
+              <Link
+                href="/admin/inventory"
+                className="px-3 py-1.5 rounded-md hover:bg-white/10 inline-flex items-center gap-1.5"
+              >
+                <Warehouse className="w-4 h-4" /> Inventory
               </Link>
             </nav>
           </div>
