@@ -692,15 +692,17 @@ export async function POST(req: Request) {
   let labelInfo: LabelInfo = { mode: "none" };
   if (shouldGenerateLabel(body)) {
     let labelResult: RetoureLabelResult;
-    // Echtes Gesamtgewicht aus Webisco-Positionen (einzelgewicht in Gramm)
-    // x angemeldete Menge, summiert über alle ausgewählten Artikel.
-    const totalWeightKg = body.items.reduce((sum, it) => {
+    // Gesamtgewicht aus Webisco-Positionen (einzelgewicht in Gramm)
+    // × angemeldete Menge, summiert über alle ausgewählten Artikel.
+    const rawWeightKg = body.items.reduce((sum, it) => {
       const g = (it.einzelgewicht_g ?? 0) * it.menge;
       return sum + g / 1000;
     }, 0);
-    // DHL erlaubt 0.5–31.5 kg pro Paket; falls Webisco kein Gewicht hat,
-    // fallback auf 1 kg.
-    const weightInKg = Math.max(0.5, Math.min(31.5, totalWeightKg || 1));
+    // +20% Puffer für Verpackung/Polsterung. Hardcap bei 30 kg.
+    // Mindestens 0,5 kg (DHL-Minimum). Fallback auf 1 kg falls Webisco
+    // kein Gewicht hatte (z.B. Streckengeschäft ohne hinterlegtes Gewicht).
+    const buffered = (rawWeightKg || 1) * 1.2;
+    const weightInKg = Math.max(0.5, Math.min(30, buffered));
     try {
       labelResult = await createRetoureLabel({
         customerReference: body.bestellnummer,
