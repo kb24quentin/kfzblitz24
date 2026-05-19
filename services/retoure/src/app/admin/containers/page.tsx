@@ -61,6 +61,7 @@ export default async function ContainersListPage({
       orderBy: { openedAt: "desc" },
       take: PAGE_SIZE,
       skip: (page - 1) * PAGE_SIZE,
+      include: { supplier: { select: { id: true, name: true } } },
     }),
     prisma.container.count({ where }),
     prisma.container.groupBy({
@@ -185,7 +186,7 @@ export default async function ContainersListPage({
               <tr className="text-left text-xs font-semibold text-[#8a93a0] uppercase tracking-wide">
                 <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">Typ</th>
-                <th className="px-4 py-3">Partner</th>
+                <th className="px-4 py-3">Lieferant</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Geöffnet</th>
                 <th className="px-4 py-3">Max. offen bis</th>
@@ -219,7 +220,16 @@ export default async function ContainersListPage({
                       {TYPE_LABEL[c.type as ContainerType] ?? c.type}
                     </td>
                     <td className="px-4 py-3 text-xs text-[#3d4654]">
-                      {c.partnerId ?? (
+                      {c.supplier?.name ? (
+                        <Link
+                          href={`/admin/suppliers/${c.supplier.id}`}
+                          className="text-[#0b3756] font-semibold hover:underline"
+                        >
+                          {c.supplier.name}
+                        </Link>
+                      ) : c.partnerId ? (
+                        <span className="text-[#8a93a0]">{c.partnerId}</span>
+                      ) : (
                         <span className="text-[#8a93a0]">—</span>
                       )}
                     </td>

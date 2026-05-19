@@ -34,7 +34,13 @@ export async function GET(
     where: { id },
     include: {
       events: { orderBy: { createdAt: "asc" } },
-      items: { orderBy: { createdAt: "asc" } },
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          supplier: { select: { id: true, name: true } },
+          container: { select: { id: true, code: true } },
+        },
+      },
     },
   });
   if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -102,6 +108,7 @@ export function serializeItem(it: {
   gesamtpreis_brutto: number | null;
   einzelgewicht_g: number | null;
   einkaufspreis_brutto: number | null;
+  einspeiserid?: number | null;
   receivedAt: Date | null;
   receivedByPda: string | null;
   scanCount: number;
@@ -113,6 +120,9 @@ export function serializeItem(it: {
   scoredAt: Date | null;
   photoCount: number;
   containerId: string | null;
+  supplierId?: string | null;
+  supplier?: { id: string; name: string } | null;
+  container?: { id: string; code: string } | null;
 }) {
   return {
     id: it.id,
@@ -127,9 +137,13 @@ export function serializeItem(it: {
     gesamtpreis_brutto: it.gesamtpreis_brutto,
     einzelgewicht_g: it.einzelgewicht_g,
     einkaufspreis_brutto: it.einkaufspreis_brutto,
+    einspeiserid: it.einspeiserid ?? null,
     receivedAt: it.receivedAt?.toISOString() ?? null,
     receivedByPda: it.receivedByPda,
     scanCount: it.scanCount,
+    // Flach + verschachtelt: das PDA-UI nutzt item.verdict direkt; der
+    // Admin-Detail-View liest .score.* — beides versorgen.
+    verdict: it.verdict,
     score: {
       employee: it.employeeScore,
       ai: it.aiScore,
@@ -140,6 +154,9 @@ export function serializeItem(it: {
     },
     photoCount: it.photoCount,
     containerId: it.containerId,
+    containerCode: it.container?.code ?? null,
+    supplierId: it.supplierId ?? null,
+    supplierName: it.supplier?.name ?? null,
   };
 }
 

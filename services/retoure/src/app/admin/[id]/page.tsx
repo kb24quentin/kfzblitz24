@@ -33,7 +33,13 @@ export default async function CaseDetailPage({
     where: { id },
     include: {
       events: { orderBy: { createdAt: "desc" } },
-      items: { orderBy: { createdAt: "asc" } },
+      items: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          supplier: { select: { id: true, name: true } },
+          container: { select: { id: true, code: true } },
+        },
+      },
     },
   });
   if (!c) notFound();
@@ -50,6 +56,10 @@ export default async function CaseDetailPage({
     source?: string;
     status?: string;
     verdict?: string | null;
+    supplierId?: string | null;
+    supplierName?: string | null;
+    containerId?: string | null;
+    containerCode?: string | null;
   };
 
   // Items aus der echten RetoureItem-Tabelle.
@@ -68,6 +78,10 @@ export default async function CaseDetailPage({
       source: it.source,
       status: it.status,
       verdict: it.verdict,
+      supplierId: it.supplierId,
+      supplierName: it.supplier?.name ?? null,
+      containerId: it.containerId,
+      containerCode: it.container?.code ?? null,
     }));
   } else {
     try {
@@ -183,6 +197,42 @@ export default async function CaseDetailPage({
                           ? ` · ${(it.einzelgewicht_g / 1000).toFixed(2).replace(".", ",")} kg/Stk`
                           : ""}
                       </p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        {it.status && (
+                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#e6e8eb] text-[#3d4654]">
+                            {it.status}
+                          </span>
+                        )}
+                        {it.verdict && (
+                          <span
+                            className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                              it.verdict === "green"
+                                ? "bg-green-100 text-green-800"
+                                : it.verdict === "yellow"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            ● {it.verdict}
+                          </span>
+                        )}
+                        {it.supplierName && (
+                          <Link
+                            href={`/admin/suppliers/${it.supplierId}`}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-[#0b3756]/10 text-[#0b3756] font-semibold hover:bg-[#0b3756]/20"
+                          >
+                            → {it.supplierName}
+                          </Link>
+                        )}
+                        {it.containerCode && it.containerId && (
+                          <Link
+                            href={`/admin/containers/${it.containerId}`}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-[#ff6600]/10 text-[#ff6600] font-mono font-semibold hover:bg-[#ff6600]/20"
+                          >
+                            {it.containerCode}
+                          </Link>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-[#3d4654]">{it.grund}</td>
                     <td className="px-4 py-3 text-right font-semibold text-[#3d4654]">

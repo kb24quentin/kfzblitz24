@@ -17,6 +17,11 @@ interface PdaItem {
   einzelpreis_brutto: number | null;
   gesamtpreis_brutto: number | null;
   einzelgewicht_g: number | null;
+  /** Vom Container vererbt sobald Item auf Palette liegt. */
+  supplierId?: string | null;
+  supplierName?: string | null;
+  containerCode?: string | null;
+  verdict?: "green" | "yellow" | "red" | null;
 }
 
 interface CaseDetail {
@@ -37,6 +42,19 @@ interface CaseDetail {
   items: PdaItem[];
 }
 
+interface Supplier {
+  id: string;
+  name: string;
+}
+
+interface OpenContainer {
+  id: string;
+  code: string;
+  supplierId: string | null;
+  supplierName: string | null;
+  items: { id: string }[];
+}
+
 export default function CasePdaDetailPage({
   params,
 }: {
@@ -48,6 +66,14 @@ export default function CasePdaDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  // Inline-Picker-State: welches Item, welcher Supplier, welche Container
+  const [pickerItemId, setPickerItemId] = useState<string | null>(null);
+  const [pickerSupplierId, setPickerSupplierId] = useState<string | null>(null);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [openContainers, setOpenContainers] = useState<OpenContainer[]>([]);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [pickerLoading, setPickerLoading] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -64,6 +90,16 @@ export default function CasePdaDetailPage({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Suppliers cachen — werden bei jedem geöffneten Picker gebraucht.
+  useEffect(() => {
+    if (suppliers.length > 0) return;
+    api<{ suppliers: Supplier[] }>("/api/pda/suppliers")
+      .then((r) => setSuppliers(r.suppliers))
+      .catch((e) => {
+        console.warn("[case-detail] suppliers load failed:", e);
+      });
+  }, [suppliers.length]);
 
   const onReceive = async () => {
     setActionBusy("receive");
@@ -92,6 +128,104 @@ export default function CasePdaDetailPage({
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  /**
+   * Öffnet die Inline-Auswahl "Auf Palette legen" für ein Item.
+   * Wenn das Item schon eine Supplier-Vorbelegung hat (z. B. weil vorher
+   * auf eine Palette gelegt und dort wieder runtergenommen), nutzen wir
+   * die direkt. Sonst muss der Mitarbeiter erst den Supplier wählen.
+   */
+  const openPicker = (item: PdaItem) => {
+    setPickerError(null);
+    setPickerItemId(item.id);
+    if (item.supplierId) {
+      setPickerSupplierId(item.supplierId);
+      void loadOpenContainers(item.supplierId);
+    } else {
+      setPickerSupplierId(null);
+      setOpenContainers([]);
+    }
+  };
+
+  const closePicker = () => {
+    setPickerItemId(null);
+    setPickerSupplierId(null);
+    setOpenContainers([]);
+    setPickerError(null);
+  };
+
+  const loadOpenContainers = async (supplierId: string) => {
+    setPickerLoading(true);
+    setPickerError(null);
+    try {
+      const r = await api<{ containers: OpenContainer[] }>(
+        `/api/pda/containers?status=open&supplierId=${encodeURIComponent(supplierId)}&limit=20`,
+      );
+      setOpenContainers(r.containers);
+    } catch (err) {
+      setPickerError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPickerLoading(false);
+    }
+  };
+
+  const chooseSupplier = (supplierId: string) => {
+    setPickerSupplierId(supplierId);
+    void loadOpenContainers(supplierId);
+  };
+
+  /** Item auf existierenden offenen Container legen. */
+  const linkToContainer = async (containerId: string) => {
+    if (!pickerItemId) return;
+    setActionBusy(`link-${pickerItemId}`);
+    setPickerError(null);
+    try {
+      await api(`/api/pda/containers/${containerId}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: pickerItemId, actor: getPdaId() }),
+      });
+      closePicker();
+      await load();
+    } catch (err) {
+      setPickerError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  /** Neue Palette für den gewählten Supplier anlegen + Item direkt drauflegen. */
+  const createPaletteAndLink = async () => {
+    if (!pickerItemId || !pickerSupplierId) return;
+    setActionBusy(`new-${pickerItemId}`);
+    setPickerError(null);
+    try {
+      const r = await api<{ container: { id: string; code: string } }>(
+        "/api/pda/containers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "palette",
+            supplierId: pickerSupplierId,
+            createdByPda: getPdaId(),
+          }),
+        },
+      );
+      // Direkt drauflegen
+      await api(`/api/pda/containers/${r.container.id}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: pickerItemId, actor: getPdaId() }),
+      });
+      closePicker();
+      await load();
+    } catch (err) {
+      setPickerError(err instanceof Error ? err.message : String(err));
     } finally {
       setActionBusy(null);
     }
@@ -159,13 +293,36 @@ export default function CasePdaDetailPage({
           Artikel ({c.items.length})
         </h2>
         {c.items.map((it) => (
-          <ItemRow
-            key={it.id}
-            item={it}
-            busy={actionBusy?.startsWith(`scan-${it.id}-`) ?? false}
-            onScan={(present) => onScanItem(it.id, present)}
-            caseId={id}
-          />
+          <div key={it.id} className="space-y-2">
+            <ItemRow
+              item={it}
+              busy={
+                (actionBusy?.startsWith(`scan-${it.id}-`) ?? false) ||
+                actionBusy === `link-${it.id}` ||
+                actionBusy === `new-${it.id}`
+              }
+              onScan={(present) => onScanItem(it.id, present)}
+              onPickContainer={() => openPicker(it)}
+              caseId={id}
+            />
+            {pickerItemId === it.id && (
+              <PalettePicker
+                item={it}
+                suppliers={suppliers}
+                supplierId={pickerSupplierId}
+                openContainers={openContainers}
+                loading={pickerLoading}
+                busy={
+                  actionBusy === `link-${it.id}` || actionBusy === `new-${it.id}`
+                }
+                error={pickerError}
+                onChooseSupplier={chooseSupplier}
+                onLinkToContainer={linkToContainer}
+                onCreatePaletteAndLink={createPaletteAndLink}
+                onClose={closePicker}
+              />
+            )}
+          </div>
         ))}
       </div>
 
@@ -206,14 +363,18 @@ function ItemRow({
   item,
   busy,
   onScan,
+  onPickContainer,
   caseId,
 }: {
   item: PdaItem;
   busy: boolean;
   onScan: (present: boolean) => void;
+  onPickContainer: () => void;
   caseId: string;
 }) {
   const isReceived = item.status === "received";
+  const isAssessed = item.status === "assessed";
+  const isOnPallet = item.status === "on_pallet";
   const isMissing = item.status === "missing";
 
   return (
@@ -229,7 +390,7 @@ function ItemRow({
           {item.grund && (
             <p className="text-xs text-white/50 mt-0.5">{item.grund}</p>
           )}
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             {item.source !== "registered" && (
               <span className="text-[10px] bg-[#ff6600]/30 text-[#ff6600] px-1.5 py-0.5 rounded uppercase">
                 {item.source}
@@ -237,7 +398,11 @@ function ItemRow({
             )}
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
-                isReceived
+                isOnPallet
+                  ? "bg-blue-500/30 text-blue-200"
+                  : isAssessed
+                  ? "bg-purple-500/30 text-purple-200"
+                  : isReceived
                   ? "bg-green-500/30 text-green-200"
                   : isMissing
                   ? "bg-red-500/30 text-red-200"
@@ -246,6 +411,24 @@ function ItemRow({
             >
               {item.status}
             </span>
+            {item.verdict && (
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
+                  item.verdict === "green"
+                    ? "bg-green-500/30 text-green-200"
+                    : item.verdict === "yellow"
+                    ? "bg-yellow-500/30 text-yellow-100"
+                    : "bg-red-500/30 text-red-200"
+                }`}
+              >
+                ● {item.verdict}
+              </span>
+            )}
+            {item.containerCode && (
+              <span className="text-[10px] bg-white/10 text-white/70 px-1.5 py-0.5 rounded font-mono">
+                {item.containerCode}
+              </span>
+            )}
           </div>
         </div>
         {item.gesamtpreis_brutto !== null && (
@@ -255,7 +438,7 @@ function ItemRow({
         )}
       </div>
 
-      {!isReceived && !isMissing && (
+      {!isReceived && !isMissing && !isAssessed && !isOnPallet && (
         <div className="flex gap-2">
           <button
             onClick={() => onScan(true)}
@@ -279,9 +462,152 @@ function ItemRow({
           href={`/pda-app/cases/${caseId}/items/${item.id}/assess`}
           className="block text-center bg-[#ff6600]/20 text-[#ffb380] text-xs font-medium py-2 rounded-lg active:bg-[#ff6600]/30"
         >
-          → Bewertung & Fotos
+          → Bewertung &amp; Fotos
         </a>
       )}
+
+      {isAssessed && (
+        <button
+          onClick={onPickContainer}
+          disabled={busy}
+          className="w-full bg-[#ff6600] text-white text-sm font-semibold py-3 rounded-lg active:bg-[#ff7a26] disabled:opacity-40"
+        >
+          → Auf Palette legen
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Inline-Picker für die Container-Auswahl. Erscheint unter dem Item nach
+ * Tap auf "→ Auf Palette legen". Stufen:
+ *   1. Falls Item noch keinen Supplier → Lieferanten-Liste zeigen
+ *   2. Falls Supplier gewählt (oder vom Item geerbt) → offene Container
+ *      dieses Suppliers + Option "Neue Palette anlegen"
+ */
+function PalettePicker({
+  item,
+  suppliers,
+  supplierId,
+  openContainers,
+  loading,
+  busy,
+  error,
+  onChooseSupplier,
+  onLinkToContainer,
+  onCreatePaletteAndLink,
+  onClose,
+}: {
+  item: PdaItem;
+  suppliers: Supplier[];
+  supplierId: string | null;
+  openContainers: OpenContainer[];
+  loading: boolean;
+  busy: boolean;
+  error: string | null;
+  onChooseSupplier: (id: string) => void;
+  onLinkToContainer: (containerId: string) => void;
+  onCreatePaletteAndLink: () => void;
+  onClose: () => void;
+}) {
+  const chosenSupplier = suppliers.find((s) => s.id === supplierId);
+
+  return (
+    <div className="bg-white/10 border border-[#ff6600]/40 rounded-xl p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-[#ff6600] uppercase tracking-wider">
+          Auf Palette legen
+        </p>
+        <button
+          onClick={onClose}
+          className="text-xs text-white/60 underline"
+        >
+          Abbrechen
+        </button>
+      </div>
+
+      {!supplierId && (
+        <div className="space-y-2">
+          <p className="text-xs text-white/70">
+            An welchen Lieferanten geht dieser Artikel zurück?
+          </p>
+          {suppliers.length === 0 ? (
+            <p className="text-xs text-yellow-200 bg-yellow-500/15 rounded p-2">
+              Keine Lieferanten gepflegt. Bitte erst im Admin-Dashboard
+              unter <span className="font-mono">/admin/suppliers</span> anlegen.
+            </p>
+          ) : (
+            suppliers.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => onChooseSupplier(s.id)}
+                className="w-full bg-white/10 hover:bg-white/15 active:bg-white/20 text-white text-left py-3 px-4 rounded-lg font-semibold text-sm"
+              >
+                {s.name}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+
+      {supplierId && (
+        <div className="space-y-2">
+          <p className="text-xs text-white/70">
+            Lieferant:{" "}
+            <span className="text-white font-semibold">
+              {chosenSupplier?.name ?? supplierId}
+            </span>
+          </p>
+
+          {loading ? (
+            <p className="text-xs text-white/50 italic">Container laden…</p>
+          ) : openContainers.length === 0 ? (
+            <p className="text-xs text-white/60">
+              Keine offene Palette für {chosenSupplier?.name ?? "diesen Lieferanten"}.
+              Neue Palette anlegen?
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {openContainers.map((cc) => (
+                <button
+                  key={cc.id}
+                  onClick={() => onLinkToContainer(cc.id)}
+                  disabled={busy}
+                  className="w-full bg-white/5 hover:bg-white/10 active:bg-white/15 text-white text-left py-3 px-4 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between gap-2"
+                >
+                  <span className="font-mono font-semibold text-sm">
+                    {cc.code}
+                  </span>
+                  <span className="text-[10px] text-white/50">
+                    {cc.items.length} Artikel
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={onCreatePaletteAndLink}
+            disabled={busy}
+            className="w-full bg-[#ff6600] hover:bg-[#ff7a26] active:bg-[#e85f00] text-white font-semibold py-3 rounded-lg text-sm disabled:opacity-40 mt-2"
+          >
+            {busy
+              ? "Lege an…"
+              : `+ Neue Palette für ${chosenSupplier?.name ?? "Lieferant"}`}
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-500/20 border border-red-400/40 text-red-100 rounded-lg p-2 text-xs">
+          {error}
+        </div>
+      )}
+
+      <p className="text-[10px] text-white/40">
+        Item: {[item.artikelnummer, item.hersteller].filter(Boolean).join(" · ")}
+      </p>
     </div>
   );
 }

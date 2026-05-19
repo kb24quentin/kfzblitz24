@@ -51,6 +51,7 @@ export default async function ContainerDetailPage({
   const c = await prisma.container.findUnique({
     where: { id },
     include: {
+      supplier: { select: { id: true, name: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -123,12 +124,21 @@ export default async function ContainerDetailPage({
             </div>
             <div className="text-sm text-[#3d4654]">
               {TYPE_LABEL[c.type] ?? c.type}
-              {c.partnerId && (
+              {c.supplier && (
                 <>
                   {" · "}
-                  <span className="text-[#0b3756] font-medium">
-                    {c.partnerId}
-                  </span>
+                  <Link
+                    href={`/admin/suppliers/${c.supplier.id}`}
+                    className="text-[#0b3756] font-semibold hover:underline"
+                  >
+                    → {c.supplier.name}
+                  </Link>
+                </>
+              )}
+              {!c.supplier && c.partnerId && (
+                <>
+                  {" · "}
+                  <span className="text-[#8a93a0]">{c.partnerId}</span>
                 </>
               )}
             </div>
