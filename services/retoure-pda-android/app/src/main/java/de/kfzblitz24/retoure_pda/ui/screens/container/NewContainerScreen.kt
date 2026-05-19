@@ -57,6 +57,8 @@ fun NewContainerScreen(
     var printing by remember { mutableStateOf(false) }
     var printMessage by remember { mutableStateOf<String?>(null) }
     var printError by remember { mutableStateOf<String?>(null) }
+    /** Sentinel damit der Auto-Print-Effekt pro Container nur einmal feuert. */
+    var autoPrintFiredForId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         caseRepository.getSuppliers()
@@ -71,6 +73,37 @@ fun NewContainerScreen(
             }
             .onFailure { error = it.message ?: "Lieferanten laden fehlgeschlagen." }
         loadingSuppliers = false
+    }
+
+    /**
+     * Auto-Print: sobald Container angelegt UND Drucker konfiguriert ist
+     * UND wir für diese createdId noch nicht gefeuert haben → Druck-Job
+     * direkt starten. Der User sieht "Drucke…" statt "Drucken"-Button.
+     * Wenn kein Drucker da ist, bleibt der Setup-Hint sichtbar.
+     */
+    LaunchedEffect(createdId) {
+        val id = createdId ?: return@LaunchedEffect
+        if (autoPrintFiredForId == id) return@LaunchedEffect
+        if (!printerStore.has()) return@LaunchedEffect
+
+        autoPrintFiredForId = id
+        printing = true
+        printMessage = null
+        printError = null
+        when (val r = printerRepository.printContainerLabel(id)) {
+            is PrinterRepository.PrintOutcome.Ok -> {
+                printMessage = "✓ Auto-gedruckt auf ${r.printerName} (${r.durationMs} ms)"
+            }
+            PrinterRepository.PrintOutcome.NoPrinterConfigured -> {
+                // Race-Case: zwischen has()-Check und Druckversuch hat User
+                // den Drucker entfernt. Selten, aber sauber abfangen.
+                printError = "Kein Drucker konfiguriert."
+            }
+            is PrinterRepository.PrintOutcome.Err -> {
+                printError = r.message
+            }
+        }
+        printing = false
     }
 
     Scaffold(
@@ -131,7 +164,10 @@ fun NewContainerScreen(
                 }
                 Spacer(Modifier.height(8.dp))
 
-                // ── Print-Block ────────────────────────────────────
+                // ── Print-Block (Auto-Print) ───────────────────────
+                // Sobald oben der LaunchedEffect(createdId) gefeuert hat,
+                // läuft der Druck-Job. Wir zeigen nur den Status — keinen
+                // manuellen "Drucken"-Button, ausser für Re-Try nach Fehler.
                 val hasPrinter = printerStore.has()
                 val printerName = printerStore.get()?.name ?: "—"
                 Column(
@@ -141,62 +177,93 @@ fun NewContainerScreen(
                         .background(Color.White.copy(alpha = 0.06f))
                         .padding(16.dp),
                 ) {
-                    Text(
-                        if (hasPrinter) "Drucker: $printerName" else "Kein Drucker konfiguriert",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    if (hasPrinter) {
-                        BigButton(
-                            text = if (printing) "Drucke…" else "🖨 Label drucken",
-                            onClick = {
-                                printing = true
-                                printMessage = null
-                                printError = null
-                                scope.launch {
-                                    when (val r = printerRepository.printContainerLabel(createdId!!)) {
-                                        is PrinterRepository.PrintOutcome.Ok -> {
-                                            printMessage = "✓ Gedruckt auf ${r.printerName} (${r.durationMs} ms)"
-                                        }
-                                        PrinterRepository.PrintOutcome.NoPrinterConfigured -> {
-                                            printError = "Kein Drucker konfiguriert."
-                                        }
-                                        is PrinterRepository.PrintOutcome.Err -> {
-                                            printError = r.message
-                                        }
-                                    }
-                                    printing = false
-                                }
-                            },
-                            loading = printing,
-                            enabled = !printing,
-                        )
-                    } else {
-                        Text(
-                            "Bitte in den Einstellungen einen Bluetooth-Drucker auswählen.",
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontSize = 12.sp,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onOpenPrinterSettings,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                        ) {
-                            Text("Drucker auswählen", color = Color.White)
+                    when {
+                        // 1) Druck läuft gerade
+                        printing -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    color = Orange,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    "Drucke auf $printerName …",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                )
+                            }
                         }
-                    }
-
-                    // Print-Feedback
-                    printMessage?.let { msg ->
-                        Spacer(Modifier.height(8.dp))
-                        Text(msg, color = Color(0xFFB9F6CA), fontSize = 13.sp)
-                    }
-                    printError?.let { err ->
-                        Spacer(Modifier.height(8.dp))
-                        Text(err, color = Color(0xFFEF9A9A), fontSize = 13.sp)
+                        // 2) Druck war erfolgreich
+                        printMessage != null -> {
+                            Text(
+                                printMessage!!,
+                                color = Color(0xFFB9F6CA),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        // 3) Druck schlug fehl → Re-Try-Button
+                        printError != null -> {
+                            Text(
+                                "Druck fehlgeschlagen",
+                                color = Color(0xFFEF9A9A),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                printError!!,
+                                color = Color(0xFFFFCDD2),
+                                fontSize = 12.sp,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            BigButton(
+                                text = "Erneut drucken",
+                                onClick = {
+                                    val id = createdId ?: return@BigButton
+                                    printing = true
+                                    printMessage = null
+                                    printError = null
+                                    scope.launch {
+                                        when (val r = printerRepository.printContainerLabel(id)) {
+                                            is PrinterRepository.PrintOutcome.Ok ->
+                                                printMessage = "✓ Gedruckt auf ${r.printerName} (${r.durationMs} ms)"
+                                            PrinterRepository.PrintOutcome.NoPrinterConfigured ->
+                                                printError = "Kein Drucker konfiguriert."
+                                            is PrinterRepository.PrintOutcome.Err ->
+                                                printError = r.message
+                                        }
+                                        printing = false
+                                    }
+                                },
+                                enabled = true,
+                            )
+                        }
+                        // 4) Kein Drucker konfiguriert → Setup-Hinweis
+                        !hasPrinter -> {
+                            Text(
+                                "Kein Drucker konfiguriert",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Bitte in den Einstellungen einen Bluetooth-Drucker auswählen — danach druckt jede neue Palette automatisch.",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = onOpenPrinterSettings,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                            ) {
+                                Text("Drucker auswählen", color = Color.White)
+                            }
+                        }
                     }
                 }
 
