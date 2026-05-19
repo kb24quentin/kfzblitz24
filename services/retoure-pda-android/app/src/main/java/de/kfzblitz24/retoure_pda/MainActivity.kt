@@ -5,6 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -37,6 +40,24 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Immersive Mode (sticky): blendet Status- + Navigation-Bar dauerhaft
+        // aus. Wenn der Mitarbeiter vom oberen oder unteren Bildschirmrand
+        // wischt, erscheinen die Bars für ~3s — danach selbst wieder weg.
+        // Verhindert effektiv, dass der Lager-Mitarbeiter unbeabsichtigt
+        // Home/Back drückt während er ein Paket bearbeitet.
+        //
+        // Hinweis: das ist KEIN echter Kiosk-Mode — wer das Display vom
+        // Rand wischt + auf Home tippt, kommt trotzdem raus. Echter Kiosk
+        // (Lock-Task-Mode) braucht entweder Device-Owner-Setup via MDM
+        // oder ADB-Befehl `dpm set-device-owner` — kommt in einer
+        // späteren Iteration.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
 
         val app = applicationContext as RetourePdaApp
 
