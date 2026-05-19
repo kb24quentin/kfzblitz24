@@ -2,6 +2,7 @@ package de.kfzblitz24.retoure_pda.data.repo
 
 import de.kfzblitz24.retoure_pda.data.api.RetoureApi
 import de.kfzblitz24.retoure_pda.data.api.dto.PhotoDto
+import de.kfzblitz24.retoure_pda.data.api.safeApi
 import de.kfzblitz24.retoure_pda.data.auth.TokenStore
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -13,16 +14,17 @@ class PhotoRepository(
     private val api: RetoureApi,
     private val tokenStore: TokenStore,
 ) {
-    suspend fun getPhotos(caseId: String, itemId: String): Result<List<PhotoDto>> = runCatching {
-        api.getPhotos(caseId, itemId).photos
-    }
+    suspend fun getPhotos(caseId: String, itemId: String): Result<List<PhotoDto>> =
+        safeApi("Fotos laden") {
+            api.getPhotos(caseId, itemId).photos
+        }
 
     suspend fun uploadPhoto(
         caseId: String,
         itemId: String,
         file: File,
         kind: String,   // "ovp" | "artikel" | "detail1" | "detail2"
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = safeApi("Foto-Upload") {
         val pdaId = tokenStore.getPdaId() ?: "unknown"
 
         val mimeType = when (file.extension.lowercase()) {

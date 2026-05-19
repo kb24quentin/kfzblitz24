@@ -2,6 +2,7 @@ package de.kfzblitz24.retoure_pda.data.repo
 
 import de.kfzblitz24.retoure_pda.data.api.RetoureApi
 import de.kfzblitz24.retoure_pda.data.api.dto.PairRequest
+import de.kfzblitz24.retoure_pda.data.api.friendlyMessage
 import de.kfzblitz24.retoure_pda.data.auth.TokenStore
 
 class PairRepository(
@@ -25,8 +26,8 @@ class PairRepository(
             tokenStore.setToken(response.token)
             tokenStore.setPdaId(response.pdaId)
             Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (e: Throwable) {
+            Result.failure(RuntimeException(e.friendlyMessage("Pairing")))
         }
     }
 
