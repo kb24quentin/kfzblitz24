@@ -76,8 +76,14 @@ private val QUESTIONS = listOf(
     ),
 )
 
-/** Mindestanzahl Fotos die hochgeladen sein müssen bevor man bewerten kann. */
-private const val MIN_PHOTOS = 2
+/**
+ * Mindestanzahl Fotos für die Bewertung.
+ *
+ * DEMO-Modus: 0 → Fotos sind nur empfohlen, kein Block.
+ * Production später: auf 2 setzen → Mitarbeiter muss min. 2 Fotos
+ * hochladen bevor er bewerten kann.
+ */
+private const val MIN_PHOTOS = 0
 
 @Composable
 fun AssessStep(
@@ -172,32 +178,22 @@ fun AssessStep(
             }
         }
 
-        // ── Foto-Pflicht ────────────────────────────────────────────
-        val photoBg = if (photosOk) Color(0x2200C853) else Color(0x33F44336)
-        val photoText = if (photosOk) Color(0xFFB9F6CA) else Color(0xFFEF9A9A)
+        // ── Fotos (DEMO: optional) ──────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .background(photoBg)
+                .background(Color.White.copy(alpha = 0.06f))
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                if (photosOk) "✓ Fotos vorhanden ($photoCount)"
-                else "📷 Fotos erforderlich — mindestens $MIN_PHOTOS",
-                color = photoText,
+                if (photoCount > 0) "✓ Fotos vorhanden ($photoCount)"
+                else "📷 Fotos aufnehmen (optional)",
+                color = if (photoCount > 0) Color(0xFFB9F6CA) else Color.White.copy(alpha = 0.85f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
-            if (!photosOk) {
-                Text(
-                    "Vor der Bewertung müssen min. $MIN_PHOTOS Fotos hochgeladen werden " +
-                        "(OVP + Artikel, ggf. Detail-Aufnahmen).",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp,
-                )
-            }
             Button(
                 onClick = { onOpenPhotos(caseId, current.id) },
                 modifier = Modifier.fillMaxWidth(),
@@ -286,16 +282,12 @@ fun AssessStep(
 
         // ── Speichern ────────────────────────────────────────────────
         BigButton(
-            text = when {
-                !photosOk            -> "Fotos fehlen"
-                !allAnswered         -> "Alle Fragen beantworten"
-                else                 -> "Speichern + weiter"
-            },
+            text = if (!allAnswered) "Alle Fragen beantworten" else "Speichern + weiter",
             onClick = {
                 onAssess(current.id, score, reason.trim().takeIf { it.isNotEmpty() })
             },
             loading = actionLoading,
-            enabled = photosOk && allAnswered,
+            enabled = allAnswered,
         )
     }
 }
