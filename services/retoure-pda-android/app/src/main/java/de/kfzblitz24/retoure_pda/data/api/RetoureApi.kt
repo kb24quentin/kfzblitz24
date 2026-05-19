@@ -7,7 +7,7 @@ import okhttp3.ResponseBody
 import retrofit2.http.*
 
 /**
- * Retrofit-Interface gegen /api/pda/*
+ * Retrofit-Interface gegen `/api/pda/...`
  *
  * Endpunkte spiegeln exakt die Next.js Route-Handler unter
  * services/retoure/src/app/api/pda/

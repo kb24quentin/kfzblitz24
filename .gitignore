@@ -9,10 +9,20 @@
 id_rsa*
 id_ed25519*
 
-# Docker
-**/data/
+# Docker volumes (Pfade unter /opt/kfzblitz24/data/...).
+# WICHTIG: NICHT `**/data/` benutzen — das matcht auch Kotlin-Source-
+# Packages wie `services/retoure-pda-android/.../retoure_pda/data/`.
+/data/
+data/staging/
+data/prod/
 **/volumes/
 **/letsencrypt/
+
+# Android build outputs
+**/build/
+**/.gradle/
+**/.kotlin/
+**/local.properties
 
 # OS / Editor
 .DS_Store
