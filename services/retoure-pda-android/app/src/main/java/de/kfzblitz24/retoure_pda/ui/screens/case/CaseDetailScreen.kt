@@ -40,6 +40,23 @@ fun CaseDetailScreen(
     )
     val state by vm.uiState.collectAsState()
 
+    // Auto-Receive: sobald der Case geladen ist UND noch keine
+    // partnerReceivedAt gesetzt hat, sofort POST /receive. Mitarbeiter
+    // hat den Lookup ja schon bestätigt — die "Paket angenommen"-Hürde
+    // entfällt damit.
+    var autoReceived by remember { mutableStateOf(false) }
+    LaunchedEffect(state.caseDetail?.id, state.caseDetail?.partnerReceivedAt) {
+        val detail = state.caseDetail
+        if (!autoReceived &&
+            detail != null &&
+            detail.partnerReceivedAt == null &&
+            !state.actionLoading
+        ) {
+            autoReceived = true
+            vm.receiveCase()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

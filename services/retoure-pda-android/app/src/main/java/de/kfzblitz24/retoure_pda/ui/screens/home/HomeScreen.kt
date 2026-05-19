@@ -39,6 +39,14 @@ fun HomeScreen(
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.Factory(caseRepository))
     val state by vm.uiState.collectAsState()
 
+    // Auto-Navigate sobald lookup erfolgreich war.
+    LaunchedEffect(state.foundCaseId) {
+        state.foundCaseId?.let { id ->
+            onCaseClick(id)
+            vm.consumeFoundCase()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -136,65 +144,8 @@ fun HomeScreen(
                 )
             }
 
-            // ── Ergebnisliste ──────────────────────────────────────────
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.results) { c ->
-                    CaseSummaryCard(
-                        summary = c,
-                        onClick = { onCaseClick(c.id) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CaseSummaryCard(summary: CaseSummary, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.08f))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column {
-            Text(
-                summary.bestellnummer,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = 15.sp,
-            )
-            summary.belegnummer?.let {
-                Text(it, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
-            }
-        }
-
-        // Status-Badge
-        val badgeColor = when (summary.status) {
-            "angemeldet"      -> Color(0xFF1565C0)
-            "eingang_partner" -> Orange
-            "pruefung"        -> Color(0xFF6A1B9A)
-            "erstattet"       -> Color(0xFF2E7D32)
-            "abgelehnt"       -> Color(0xFFC62828)
-            else              -> Color(0xFF37474F)
-        }
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(badgeColor)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-        ) {
-            Text(
-                summary.status.replace("_", " "),
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            // Keine Ergebnisliste mehr — gefundener Case öffnet sich
+            // direkt (siehe LaunchedEffect oben).
         }
     }
 }

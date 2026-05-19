@@ -11,9 +11,14 @@ import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val query: String = "",
-    val results: List<CaseSummary> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null,
+    /**
+     * Wenn lookup gerade erfolgreich war, ist hier die Case-ID — die
+     * UI navigiert dann automatisch dorthin (LaunchedEffect in
+     * HomeScreen). Danach wird das Feld wieder genullt.
+     */
+    val foundCaseId: String? = null,
 )
 
 class HomeViewModel(private val caseRepository: CaseRepository) : ViewModel() {
@@ -25,6 +30,12 @@ class HomeViewModel(private val caseRepository: CaseRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(query = q, error = null)
     }
 
+    /** Nach erfolgreicher Navigation zurücksetzen, damit nicht
+     *  unbeabsichtigt doppelt navigiert wird. */
+    fun consumeFoundCase() {
+        _uiState.value = _uiState.value.copy(foundCaseId = null)
+    }
+
     fun search() {
         val q = _uiState.value.query.trim()
         if (q.isEmpty()) return
@@ -33,13 +44,13 @@ class HomeViewModel(private val caseRepository: CaseRepository) : ViewModel() {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
             caseRepository.lookup(q)
                 .onSuccess { resp ->
-                    // Backend liefert immer genau einen Treffer (oder 404).
-                    // Wir wrappen in eine 1-Element-Liste, damit die UI
-                    // wiederverwendbar bleibt.
+                    // Direkt zur Case-Detail-Page springen. Kein Result-
+                    // Listing — UX-Anforderung: "wenn Order gefunden,
+                    // soll sie direkt sich öffnen".
                     _uiState.value = _uiState.value.copy(
                         loading = false,
-                        results = listOf(resp.case),
-                        error = null,
+                        foundCaseId = resp.case.id,
+                        query = "",   // input für nächste Suche freimachen
                     )
                 }
                 .onFailure { e ->
