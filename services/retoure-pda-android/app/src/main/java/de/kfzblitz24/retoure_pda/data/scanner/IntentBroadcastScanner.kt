@@ -139,19 +139,18 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
                     ?: intent.getStringExtra(EXTRA_GENERIC_CORRECT)
             }
             ACTION_HS_BARCODE_SEND, ACTION_HS_DCS -> {
-                // Netum Q900 / Honeywell-HS-Wrapper-Firmware. Wir kennen
-                // den Extra-Key noch nicht exakt — probieren der Reihe
-                // nach die wahrscheinlichsten Kandidaten. Das Logging in
-                // onReceive() zeigt im Logcat welche Keys tatsächlich da
-                // sind, dann können wir das hier präzisieren.
-                intent.getStringExtra("barcode_string")
+                // Netum Q900 / Honeywell-HS-Wrapper-Firmware.
+                // Real-Logcat-Trace zeigt: der Q900 sendet beide Keys —
+                //   original_result  → CLEAN (z. B. "PAL-INTERP-2026-000002")
+                //   scanner_result   → mit \r am Ende
+                // Wir nehmen original_result; fallen sonst auf scanner_result
+                // zurück (.trim() in onReceive entfernt das \r ohnehin).
+                intent.getStringExtra("original_result")
+                    ?: intent.getStringExtra("scanner_result")
+                    ?: intent.getStringExtra("barcode_string")
                     ?: intent.getStringExtra("barcode")
                     ?: intent.getStringExtra("barocode")
                     ?: intent.getStringExtra("data")
-                    ?: intent.getStringExtra("result")
-                    ?: intent.getStringExtra("BarcodeData")
-                    ?: intent.getStringExtra("scannerdata")
-                    ?: intent.getStringExtra("SCAN_RESULT")
             }
             else -> null
         }
