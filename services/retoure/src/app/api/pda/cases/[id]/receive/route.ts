@@ -58,17 +58,26 @@ export async function POST(
 
   const actor = body.pdaId ? `pda:${body.pdaId}` : "pda";
 
-  await addEvent(id, "partner_received", "Paket vom Partner-Lager gescannt", {
-    pdaId: body.pdaId,
-  }, actor);
-
-  // Status weiter, sofern wir noch nicht in pruefung/erstattet/etc. sind
-  const ACTIVE_PRE_RECEIVE = ["angemeldet", "versandt", "unterwegs", "eingang_partner"];
-  if (ACTIVE_PRE_RECEIVE.includes(c.status) && c.status !== "eingang_partner") {
+  // Status-Übergang (schreibt selbst `status_change` ins Event-Log) —
+  // bewusst KEIN separater `partner_received`-Event mehr, das wäre eine
+  // Doppelung der gleichen Aktion in der Timeline.
+  const ACTIVE_PRE_RECEIVE = ["angemeldet", "versandt", "unterwegs"];
+  if (ACTIVE_PRE_RECEIVE.includes(c.status)) {
     await transitionStatus(id, "eingang_partner", {
       actor,
-      message: "Partner-Scan: physisch eingegangen",
+      message: "Paket beim Partner-Lager eingegangen",
     });
+  } else {
+    // Edge-Case: Case ist in einem Status den wir nicht erwartet hatten
+    // (z. B. pruefung). Wir wollen zumindest einen Eintrag in der Timeline,
+    // dass der Partner-Scan trotzdem passiert ist.
+    await addEvent(
+      id,
+      "partner_received",
+      "Paket beim Partner-Lager eingegangen",
+      { pdaId: body.pdaId },
+      actor,
+    );
   }
 
   return NextResponse.json({
