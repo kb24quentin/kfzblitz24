@@ -6,6 +6,7 @@ package de.kfzblitz24.retoure_pda.data.api
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import de.kfzblitz24.retoure_pda.data.auth.TokenStore
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -61,35 +62,29 @@ class ApiClient(private val tokenStore: TokenStore) {
      */
     private val baseUrlInterceptor = Interceptor { chain ->
         val originalRequest = chain.request()
-        val baseUrl = tokenStore.getBaseUrl().trimEnd('/')
-        val originalUrl = originalRequest.url
+        val baseUrlString = tokenStore.getBaseUrl().trimEnd('/')
 
-        // Nur umschreiben wenn die URL noch auf das Dummy-Placeholder zeigt.
-        // In der Praxis: Retrofit baut die URL aus der @GET/@POST-Annotation
-        // relativ zu BASE_PLACEHOLDER — wir ersetzen Host + Schema mit
-        // der echten gespeicherten URL.
-        val newUrl = originalUrl.newBuilder()
-            .scheme(if (baseUrl.startsWith("http://")) "http" else "https")
-            .host(
-                baseUrl
-                    .removePrefix("https://")
-                    .removePrefix("http://")
-                    .split("/")[0]
-            )
-            .port(
-                // Expliziten Port aus der Base-URL verwenden, falls gesetzt
-                run {
-                    val hostPart = baseUrl
-                        .removePrefix("https://")
-                        .removePrefix("http://")
-                        .split("/")[0]
-                    if (hostPart.contains(":")) hostPart.split(":")[1].toIntOrNull() ?: -1
-                    else -1
-                }
-            )
+        // Über OkHttp's eigenen URL-Parser gehen — der prüft Schema,
+        // Host und Port korrekt und liefert immer einen gültigen Port
+        // (Default 80 für http, 443 für https). Eigene String-Parserei
+        // war fehleranfällig: `port(-1)` (= kein expliziter Port) wirft
+        // bei OkHttp eine IllegalArgumentException, weil der erlaubte
+        // Bereich [1..65535] ist.
+        val newBase = baseUrlString.toHttpUrlOrNull()
+        if (newBase == null) {
+            // Base-URL ist unbrauchbar — Request unverändert weitergeben,
+            // damit der Server-Call mit klarem Fehler scheitert statt die
+            // ganze App zu killen.
+            return@Interceptor chain.proceed(originalRequest)
+        }
+
+        val rewritten = originalRequest.url.newBuilder()
+            .scheme(newBase.scheme)
+            .host(newBase.host)
+            .port(newBase.port)
             .build()
 
-        chain.proceed(originalRequest.newBuilder().url(newUrl).build())
+        chain.proceed(originalRequest.newBuilder().url(rewritten).build())
     }
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
