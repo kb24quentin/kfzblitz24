@@ -13,11 +13,10 @@
  * Origin (0,0) ist oben links wenn DIRECTION=1, sonst unten links.
  */
 
-/** Standard print density (alle kfzBlitz24 Label-Drucker). */
-export const DPI_203 = 203;
-
-/** Millimeters → dots at 203 dpi (identisch zur ZPL-Version). */
-export const mmToDotsTspl = (mm: number): number => Math.round((mm / 25.4) * DPI_203);
+// DPI-Konstante + mm-to-dots-Helfer liegen in ./zpl.
+// TSPL braucht intern keinen eigenen Konverter weil unsere Layouts
+// SIZE in mm und Elemente in dots ausdrücken — beide kommen direkt
+// vom Caller bzw. den TSPL_LABEL_*_MM-Konstanten.
 
 /**
  * Label-Dimensionen in mm. TSPL erwartet `SIZE` in mm (oder inch),
