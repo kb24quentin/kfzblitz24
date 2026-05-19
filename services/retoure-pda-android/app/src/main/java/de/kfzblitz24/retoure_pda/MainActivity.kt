@@ -18,6 +18,7 @@ import de.kfzblitz24.retoure_pda.ui.screens.container.NewContainerScreen
 import de.kfzblitz24.retoure_pda.ui.screens.home.HomeScreen
 import de.kfzblitz24.retoure_pda.ui.screens.pair.PairScreen
 import de.kfzblitz24.retoure_pda.ui.screens.photos.ItemPhotosScreen
+import de.kfzblitz24.retoure_pda.ui.screens.settings.PrinterSettingsScreen
 import de.kfzblitz24.retoure_pda.ui.screens.settings.SettingsScreen
 import de.kfzblitz24.retoure_pda.ui.theme.RetourePdaTheme
 
@@ -26,12 +27,13 @@ import de.kfzblitz24.retoure_pda.ui.theme.RetourePdaTheme
  * Navigation passiert.
  */
 private object Routes {
-    const val PAIR          = "pair"
-    const val HOME          = "home"
-    const val CASE          = "case/{caseId}"
-    const val PHOTOS        = "photos/{caseId}/{itemId}"
-    const val SETTINGS      = "settings"
-    const val NEW_CONTAINER = "container/new"
+    const val PAIR             = "pair"
+    const val HOME             = "home"
+    const val CASE             = "case/{caseId}"
+    const val PHOTOS           = "photos/{caseId}/{itemId}"
+    const val SETTINGS         = "settings"
+    const val NEW_CONTAINER    = "container/new"
+    const val PRINTER_SETTINGS = "settings/printer"
 
     fun case(caseId: String)               = "case/$caseId"
     fun photos(caseId: String, itemId: String) = "photos/$caseId/$itemId"
@@ -108,7 +110,12 @@ class MainActivity : ComponentActivity() {
                         NewContainerScreen(
                             caseRepository = app.caseRepository,
                             containerRepository = app.containerRepository,
+                            printerRepository = app.printerRepository,
+                            printerStore = app.printerStore,
                             onBack = { navController.popBackStack() },
+                            onOpenPrinterSettings = {
+                                navController.navigate(Routes.PRINTER_SETTINGS)
+                            },
                         )
                     }
 
@@ -159,6 +166,18 @@ class MainActivity : ComponentActivity() {
                                     popUpTo(0) { inclusive = true }
                                 }
                             },
+                            onOpenPrinterSettings = {
+                                navController.navigate(Routes.PRINTER_SETTINGS)
+                            },
+                        )
+                    }
+
+                    // ── Printer-Settings ──────────────────────────────────
+                    composable(Routes.PRINTER_SETTINGS) {
+                        PrinterSettingsScreen(
+                            printerStore = app.printerStore,
+                            bluetoothPrinter = app.bluetoothPrinter,
+                            onBack = { navController.popBackStack() },
                         )
                     }
                 }

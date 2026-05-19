@@ -16,6 +16,23 @@
     -->
     <uses-permission android:name="com.honeywell.decode.permission.DECODE" />
 
+    <!--
+        Bluetooth-Drucker (Munbyn RW403B u. Ä.). Wir verwenden Classic
+        Bluetooth (SPP-Profil, RFCOMM-Socket), kein BLE. Auf Android 12+
+        sind die alten BLUETOOTH/BLUETOOTH_ADMIN-Permissions ersetzt
+        durch BLUETOOTH_CONNECT (verbinden zu bereits gepairten Geräten)
+        und BLUETOOTH_SCAN (Discovery neuer Geräte). Wir benutzen für
+        den Druck-Flow nur bereits in den System-Settings gepairte
+        Drucker, daher reicht BLUETOOTH_CONNECT — Scan bleibt sicherheits-
+        halber mit drin falls wir später In-App-Pairing anbieten.
+        BLUETOOTH/BLUETOOTH_ADMIN sind für Android ≤ 11 (Legacy-Devices).
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+
     <application
         android:name=".RetourePdaApp"
         android:allowBackup="false"

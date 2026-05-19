@@ -31,6 +31,7 @@ fun SettingsScreen(
     tokenStore: TokenStore,
     onBack: () -> Unit,
     onLogout: () -> Unit,
+    onOpenPrinterSettings: () -> Unit = {},
 ) {
     var baseUrl by remember { mutableStateOf(tokenStore.getBaseUrl()) }
     var manualToken by remember { mutableStateOf(tokenStore.getToken() ?: "") }
@@ -169,6 +170,24 @@ fun SettingsScreen(
                         .padding(10.dp),
                 ) {
                     Text(msg, color = Color(0xFFB9F6CA), fontSize = 13.sp)
+                }
+            }
+
+            Divider(color = Color.White.copy(alpha = 0.12f))
+
+            // ── Drucker ───────────────────────────────────────────────
+            SettingsSection(title = "Drucker") {
+                Text(
+                    "Bluetooth-Drucker (Munbyn RW403B u. Ä.) für Paletten-Labels.",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 12.sp,
+                )
+                Button(
+                    onClick = onOpenPrinterSettings,
+                    colors = ButtonDefaults.buttonColors(containerColor = Orange),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text("Drucker verwalten")
                 }
             }
 

@@ -16,6 +16,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.kfzblitz24.retoure_pda.data.api.dto.SupplierDto
+import de.kfzblitz24.retoure_pda.data.printer.PrinterRepository
+import de.kfzblitz24.retoure_pda.data.printer.PrinterStore
 import de.kfzblitz24.retoure_pda.data.repo.CaseRepository
 import de.kfzblitz24.retoure_pda.data.repo.ContainerRepository
 import de.kfzblitz24.retoure_pda.ui.components.BigButton
@@ -36,7 +38,10 @@ import kotlinx.coroutines.launch
 fun NewContainerScreen(
     caseRepository: CaseRepository,
     containerRepository: ContainerRepository,
+    printerRepository: PrinterRepository,
+    printerStore: PrinterStore,
     onBack: () -> Unit,
+    onOpenPrinterSettings: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -46,14 +51,23 @@ fun NewContainerScreen(
     var creating by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var createdCode by remember { mutableStateOf<String?>(null) }
+    var createdId by remember { mutableStateOf<String?>(null) }
+
+    // Print-State
+    var printing by remember { mutableStateOf(false) }
+    var printMessage by remember { mutableStateOf<String?>(null) }
+    var printError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         caseRepository.getSuppliers()
             .onSuccess { list ->
                 suppliers = list
-                // Default: ersten Supplier vorselektieren — bei nur einem
-                // aktiven (Interparts) erspart das den Tap.
-                if (list.size == 1) selectedSupplierId = list.first().id
+                // Default-Logik (siehe PaletteStep für Begründung):
+                //   1. "Interparts" — Stand jetzt unser Standard-Distributor.
+                //   2. Bei nur einem Supplier: der einzige.
+                //   3. Sonst nichts vorselektieren — User muss tappen.
+                selectedSupplierId = list.firstOrNull { it.name.equals("Interparts", ignoreCase = true) }?.id
+                    ?: if (list.size == 1) list.first().id else null
             }
             .onFailure { error = it.message ?: "Lieferanten laden fehlgeschlagen." }
         loadingSuppliers = false
@@ -92,7 +106,7 @@ fun NewContainerScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ── Erfolgs-Anzeige ──────────────────────────────────────
-            if (createdCode != null) {
+            if (createdCode != null && createdId != null) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -114,20 +128,88 @@ fun NewContainerScreen(
                         fontSize = 20.sp,
                         modifier = Modifier.padding(top = 8.dp),
                     )
-                    Text(
-                        "Label-Druck (ZPL) wurde versucht — falls kein Drucker konfiguriert ist, kann das PDF aus dem Admin geholt werden.",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
                 }
+                Spacer(Modifier.height(8.dp))
+
+                // ── Print-Block ────────────────────────────────────
+                val hasPrinter = printerStore.has()
+                val printerName = printerStore.get()?.name ?: "—"
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = 0.06f))
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        if (hasPrinter) "Drucker: $printerName" else "Kein Drucker konfiguriert",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (hasPrinter) {
+                        BigButton(
+                            text = if (printing) "Drucke…" else "🖨 Label drucken",
+                            onClick = {
+                                printing = true
+                                printMessage = null
+                                printError = null
+                                scope.launch {
+                                    when (val r = printerRepository.printContainerLabel(createdId!!)) {
+                                        is PrinterRepository.PrintOutcome.Ok -> {
+                                            printMessage = "✓ Gedruckt auf ${r.printerName} (${r.durationMs} ms)"
+                                        }
+                                        PrinterRepository.PrintOutcome.NoPrinterConfigured -> {
+                                            printError = "Kein Drucker konfiguriert."
+                                        }
+                                        is PrinterRepository.PrintOutcome.Err -> {
+                                            printError = r.message
+                                        }
+                                    }
+                                    printing = false
+                                }
+                            },
+                            loading = printing,
+                            enabled = !printing,
+                        )
+                    } else {
+                        Text(
+                            "Bitte in den Einstellungen einen Bluetooth-Drucker auswählen.",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 12.sp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onOpenPrinterSettings,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Drucker auswählen", color = Color.White)
+                        }
+                    }
+
+                    // Print-Feedback
+                    printMessage?.let { msg ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(msg, color = Color(0xFFB9F6CA), fontSize = 13.sp)
+                    }
+                    printError?.let { err ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(err, color = Color(0xFFEF9A9A), fontSize = 13.sp)
+                    }
+                }
+
                 Spacer(Modifier.height(8.dp))
                 BigButton(
                     text = "Weitere Palette anlegen",
                     onClick = {
                         createdCode = null
+                        createdId = null
                         selectedSupplierId = null
                         error = null
+                        printMessage = null
+                        printError = null
                     },
                 )
                 OutlinedButton(
@@ -211,6 +293,7 @@ fun NewContainerScreen(
                         containerRepository.createContainer(sid)
                             .onSuccess { created ->
                                 createdCode = created.code
+                                createdId = created.id
                                 creating = false
                             }
                             .onFailure { e ->

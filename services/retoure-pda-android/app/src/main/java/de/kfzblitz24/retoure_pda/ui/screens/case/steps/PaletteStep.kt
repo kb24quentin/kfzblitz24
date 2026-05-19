@@ -60,10 +60,16 @@ fun PaletteStep(
     val completed = caseDetail.items.count { it.status == "on_pallet" }
     val totalToPalettize = queue.size + completed
 
-    // Supplier-Default-Logik: bevorzugt der schon am Item gesetzte
-    // Supplier (vom vorherigen Auflegen), sonst der erste aktive.
+    // Supplier-Default-Logik (Reihenfolge):
+    //   1. Schon am Item gesetzter Supplier (vom vorherigen Auflegen).
+    //   2. "Interparts" — Stand jetzt unser Standard-Distributor.
+    //      Backend sortiert alphabetisch, deshalb wäre `first()` sonst
+    //      Autopartner — Bug der bei der Demo aufgefallen ist.
+    //   3. Erster aktiver Supplier in der Liste (Fallback).
     val defaultSupplierId =
-        current?.supplierId ?: suppliers.firstOrNull()?.id
+        current?.supplierId
+            ?: suppliers.firstOrNull { it.name.equals("Interparts", ignoreCase = true) }?.id
+            ?: suppliers.firstOrNull()?.id
     var selectedSupplierId by remember(current?.id, defaultSupplierId) {
         mutableStateOf(defaultSupplierId)
     }

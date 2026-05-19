@@ -5,6 +5,9 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import de.kfzblitz24.retoure_pda.data.api.ApiClient
 import de.kfzblitz24.retoure_pda.data.auth.TokenStore
+import de.kfzblitz24.retoure_pda.data.printer.BluetoothLabelPrinter
+import de.kfzblitz24.retoure_pda.data.printer.PrinterRepository
+import de.kfzblitz24.retoure_pda.data.printer.PrinterStore
 import de.kfzblitz24.retoure_pda.data.repo.CaseRepository
 import de.kfzblitz24.retoure_pda.data.repo.ContainerRepository
 import de.kfzblitz24.retoure_pda.data.repo.PairRepository
@@ -50,6 +53,14 @@ class RetourePdaApp : Application(), ImageLoaderFactory {
     lateinit var compositeScanner: CompositeScanner
         private set
 
+    // Drucker (Bluetooth + ZPL — siehe data/printer/)
+    lateinit var printerStore: PrinterStore
+        private set
+    lateinit var bluetoothPrinter: BluetoothLabelPrinter
+        private set
+    lateinit var printerRepository: PrinterRepository
+        private set
+
     override fun onCreate() {
         super.onCreate()
 
@@ -64,6 +75,14 @@ class RetourePdaApp : Application(), ImageLoaderFactory {
         compositeScanner = CompositeScanner(
             keyboard = KeyboardWedgeScanner(),
             intent   = IntentBroadcastScanner(this),
+        )
+
+        printerStore       = PrinterStore(this)
+        bluetoothPrinter   = BluetoothLabelPrinter(this)
+        printerRepository  = PrinterRepository(
+            api = apiClient.api,
+            printerStore = printerStore,
+            bluetoothPrinter = bluetoothPrinter,
         )
     }
 

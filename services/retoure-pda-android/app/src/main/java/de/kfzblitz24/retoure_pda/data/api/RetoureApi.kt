@@ -129,4 +129,24 @@ interface RetoureApi {
         @Path("containerId") containerId: String,
         @Body body: AddItemToContainerRequest,
     ): GenericSuccess
+
+    // ── Label-Print ───────────────────────────────────────────────────────────
+
+    /**
+     * Holt das ZPL-II-Label eines Containers als raw byte-Stream.
+     *
+     * Achtung: Pfad ist `/api/admin/...` (nicht `/api/pda/...`), weil der
+     * Endpoint Auth sowohl per NextAuth-Session als auch per Bearer-Token
+     * akzeptiert — siehe `isAuthorized()` in der Route. Funktioniert weil
+     * der OkHttp-Interceptor unseren Bearer-Header für ALLE Requests
+     * gegen die Base-URL draufpackt.
+     *
+     * Body landet direkt in einem `BluetoothSocket.outputStream` → der
+     * Drucker druckt was zwischen `^XA` und `^XZ` steht.
+     */
+    @Streaming
+    @GET("api/admin/containers/{containerId}/label-zpl")
+    suspend fun getContainerLabelZpl(
+        @Path("containerId") containerId: String,
+    ): ResponseBody
 }
