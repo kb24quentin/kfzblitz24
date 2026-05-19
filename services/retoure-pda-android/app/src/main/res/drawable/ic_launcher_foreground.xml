@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Monogram "K" in ORANGE auf NAVY.
+    Designentscheidung: Das Wortmark ("kfz"+"blitz"+"24") ist als Adaptive-Icon
+    zu filigran (zu viel Text für 108x108dp safe-zone). Daher ein einzelnes
+    fettes "K" in ORANGE auf NAVY als Kompromiss — erkennbar, konsistent mit Brand.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- NAVY Hintergrund -->
+    <path
+        android:fillColor="#0b3756"
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z" />
+
+    <!-- "K" Monogram in ORANGE, zentriert in der Safe-Zone (18,18)-(90,90) -->
+    <path
+        android:fillColor="#ff6600"
+        android:pathData="
+            M32,24 L44,24 L44,50 L64,24 L80,24 L56,52 L82,84 L66,84 L44,57 L44,84 L32,84 Z
+        " />
+</vector>

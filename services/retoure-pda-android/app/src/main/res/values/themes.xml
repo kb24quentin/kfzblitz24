@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme — Compose handles all theming, this is just for the window chrome -->
+    <style name="Theme.RetourePda" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#0b3756</item>
+        <item name="android:statusBarColor">#0b3756</item>
+        <item name="android:navigationBarColor">#0b3756</item>
+    </style>
+</resources>
