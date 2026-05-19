@@ -129,6 +129,13 @@ export function line(x1: number, y1: number, x2: number, y2: number, thickness: 
  * @param commands Array of ZPL fragments (e.g. from `text`, `barcode128`).
  * @param printWidth Optional `^PW` setting in dots. Defaults to 4"×6" width.
  * @param labelLength Optional `^LL` setting in dots. Defaults to 4"×6" height.
+ *
+ * Compatibility notes for Zebra-Clone-Drucker:
+ * - `^MMT` setzt Tear-Off-Mode statt Continuous → Drucker stoppt am
+ *   Label-Rand. Manche ZPL-II-Subset-Drucker (z. B. Munbyn RW403B)
+ *   drucken sonst gar nicht weil sie auf das Mode-Token warten.
+ * - `^PQ1,0,0,Y` zwingt explizit 1 Druck — ohne `^PQ` ignorieren
+ *   einige Clones den ganzen Job still.
  */
 export function buildZpl(
   commands: string[],
@@ -138,10 +145,13 @@ export function buildZpl(
   return [
     "^XA",
     "^CI28", // UTF-8 input — needed for Umlaute (ä ö ü ß).
+    "^MMT",  // Tear-Off-Mode (kein Continuous) — manche Subset-Drucker
+             //   weigern sich sonst zu drucken.
     `^PW${printWidth}`,
     `^LL${labelLength}`,
     "^LH0,0",
     ...commands,
+    "^PQ1,0,0,Y", // Print quantity: 1 Label, no pause, no replicate, Yes-cut.
     "^XZ",
   ].join("\n");
 }
