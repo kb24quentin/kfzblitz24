@@ -8,6 +8,14 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
+    <!--
+        Honeywell-Scanner Broadcast-Decode-Permission. Wird gebraucht
+        damit der `scan.rcv.message`-Receiver auf Honeywell-HS7-basierten
+        PDAs (Netum Q900, Q500, …) tatsächlich Scan-Events bekommt.
+        Ohne diese Permission feuert der Receiver still, ohne Daten.
+    -->
+    <uses-permission android:name="com.honeywell.decode.permission.DECODE" />
+
     <application
         android:name=".RetourePdaApp"
         android:allowBackup="false"
