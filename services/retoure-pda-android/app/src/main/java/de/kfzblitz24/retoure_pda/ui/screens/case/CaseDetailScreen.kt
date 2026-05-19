@@ -219,6 +219,7 @@ fun CaseDetailScreen(
                             caseDetail = detail,
                             suppliers = state.suppliers,
                             containerRepository = containerRepository,
+                            scanner = scanner,
                             actionLoading = state.actionLoading,
                             onLinkToContainer = { containerId, itemId ->
                                 vm.addItemToContainer(containerId, itemId)
