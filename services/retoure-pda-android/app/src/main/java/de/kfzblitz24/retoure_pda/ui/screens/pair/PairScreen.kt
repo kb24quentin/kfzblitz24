@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.camera.core.ExperimentalGetImage
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -147,6 +148,7 @@ fun PairScreen(
 
 // ── QR-Scanner-Karte mit CameraX + ML Kit ────────────────────────────────────
 
+@OptIn(ExperimentalGetImage::class)
 @Composable
 private fun QrScannerCard(onQrDetected: (String) -> Unit) {
     val context = LocalContext.current
@@ -209,7 +211,6 @@ private fun QrScannerCard(onQrDetected: (String) -> Unit) {
                                 imageProxy.close()
                                 return@setAnalyzer
                             }
-                            @androidx.camera.core.ExperimentalGetImage
                             val mediaImage = imageProxy.image
                             if (mediaImage != null) {
                                 val image = InputImage.fromMediaImage(

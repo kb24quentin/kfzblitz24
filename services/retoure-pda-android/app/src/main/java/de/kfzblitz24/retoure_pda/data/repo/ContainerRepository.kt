@@ -1,0 +1,34 @@
+package de.kfzblitz24.retoure_pda.data.repo
+
+import de.kfzblitz24.retoure_pda.data.api.RetoureApi
+import de.kfzblitz24.retoure_pda.data.api.dto.*
+import de.kfzblitz24.retoure_pda.data.auth.TokenStore
+
+class ContainerRepository(
+    private val api: RetoureApi,
+    private val tokenStore: TokenStore,
+) {
+    suspend fun getOpenContainers(supplierId: String): Result<List<ContainerDto>> = runCatching {
+        api.getContainers(status = "open", supplierId = supplierId).containers
+    }
+
+    suspend fun createContainer(supplierId: String): Result<ContainerCreated> = runCatching {
+        val pdaId = tokenStore.getPdaId() ?: "unknown"
+        api.createContainer(
+            CreateContainerRequest(
+                type = "palette",
+                supplierId = supplierId,
+                createdByPda = pdaId,
+            ),
+        ).container
+    }
+
+    suspend fun addItemToContainer(containerId: String, itemId: String): Result<Unit> = runCatching {
+        val pdaId = tokenStore.getPdaId() ?: "unknown"
+        api.addItemToContainer(
+            containerId,
+            AddItemToContainerRequest(itemId = itemId, actor = pdaId),
+        )
+        Unit
+    }
+}

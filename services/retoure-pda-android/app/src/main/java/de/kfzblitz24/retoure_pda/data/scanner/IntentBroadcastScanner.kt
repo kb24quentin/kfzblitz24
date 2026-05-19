@@ -1,0 +1,136 @@
+package de.kfzblitz24.retoure_pda.data.scanner
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+
+/**
+ * Scanner-Adapter für PDA-Hardware mit System-Intent-Broadcasting.
+ *
+ * Unterstützte Hersteller:
+ *   - Newland          → Action: `nlscan.action.SCANNER_RESULT`
+ *                         Extra: `SCAN_BARCODE1`
+ *   - Honeywell        → Action: `com.honeywell.aidc.action.ACTION_BARCODE_DATA`
+ *                         Extra: `data`
+ *   - Zebra DataWedge  → Action: `com.symbol.datawedge.api.RESULT_ACTION`
+ *                         Extra: `com.symbol.datawedge.data_string`
+ *   - Generisch (CN)   → Action: `scan.rcv.message`
+ *                         Extra: `barocode` (sic — Tippfehler in Firmware!) ODER `barcode`
+ *
+ * Lifecycle:
+ *   startListening() registriert den BroadcastReceiver dynamisch.
+ *   stopListening() meldet ihn wieder ab. Kein statischer Eintrag in
+ *   AndroidManifest.xml nötig (mit Ausnahme älterer Newland-Firmware,
+ *   siehe Kommentar im Manifest).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * VENDOR-SDK PLUG-IN-PUNKT
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Einige Hersteller bieten SDKs an, die direkte Callback-Registrierung
+ * (ohne Broadcast) ermöglichen — typischerweise zuverlässiger und schneller.
+ *
+ * Um ein Vendor-SDK einzustöpseln:
+ *   1. Füge die SDK-AAR/Dependency zur app/build.gradle.kts hinzu.
+ *   2. Erstelle eine neue Klasse `VendorXyzScanner : BarcodeScanner`.
+ *   3. Initialisiere den SDK-Scanner im Konstruktor.
+ *   4. Im CompositeScanner: ergänze die neue Instanz neben keyboard + intent.
+ *
+ * Auskommentierter Stub für Referenz:
+ *
+ *   class VendorSdkScanner(private val context: Context) : BarcodeScanner {
+ *       private val _scans = MutableSharedFlow<String>(extraBufferCapacity = 32)
+ *       override val scans: Flow<String> = _scans
+ *
+ *       // Vendor-SDK-Instanz (hier als Platzhalter):
+ *       // private val barcodeReader = BarcodeReaderFactory.create(context)
+ *
+ *       override fun startListening() {
+ *           // barcodeReader.addBarcodeListener { barcode ->
+ *           //     _scans.tryEmit(barcode.barcodeData)
+ *           // }
+ *           // barcodeReader.claim()
+ *       }
+ *
+ *       override fun stopListening() {
+ *           // barcodeReader.release()
+ *       }
+ *   }
+ */
+class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
+
+    private val _scans = MutableSharedFlow<String>(extraBufferCapacity = 32)
+    override val scans: Flow<String> = _scans
+
+    private var receiver: BroadcastReceiver? = null
+
+    override fun startListening() {
+        if (receiver != null) return  // already registered
+
+        val br = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                val barcode = extractBarcode(intent ?: return) ?: return
+                if (barcode.isNotBlank()) _scans.tryEmit(barcode.trim())
+            }
+        }
+
+        val filter = IntentFilter().apply {
+            addAction(ACTION_NEWLAND)
+            addAction(ACTION_HONEYWELL)
+            addAction(ACTION_ZEBRA)
+            addAction(ACTION_GENERIC)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(br, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            context.registerReceiver(br, filter)
+        }
+        receiver = br
+    }
+
+    override fun stopListening() {
+        receiver?.let {
+            try {
+                context.unregisterReceiver(it)
+            } catch (_: IllegalArgumentException) {
+                // Schon abgemeldet — ignorieren
+            }
+        }
+        receiver = null
+    }
+
+    private fun extractBarcode(intent: Intent): String? {
+        return when (intent.action) {
+            ACTION_NEWLAND    -> intent.getStringExtra(EXTRA_NEWLAND)
+            ACTION_HONEYWELL  -> intent.getStringExtra(EXTRA_HONEYWELL)
+            ACTION_ZEBRA      -> intent.getStringExtra(EXTRA_ZEBRA)
+            ACTION_GENERIC    -> {
+                // Generische chinesische Firmware hat Tippfehler "barocode"
+                intent.getStringExtra(EXTRA_GENERIC_TYPO)
+                    ?: intent.getStringExtra(EXTRA_GENERIC_CORRECT)
+            }
+            else -> null
+        }
+    }
+
+    companion object {
+        // Intent-Actions
+        const val ACTION_NEWLAND   = "nlscan.action.SCANNER_RESULT"
+        const val ACTION_HONEYWELL = "com.honeywell.aidc.action.ACTION_BARCODE_DATA"
+        const val ACTION_ZEBRA     = "com.symbol.datawedge.api.RESULT_ACTION"
+        const val ACTION_GENERIC   = "scan.rcv.message"
+
+        // Extra-Keys
+        const val EXTRA_NEWLAND          = "SCAN_BARCODE1"
+        const val EXTRA_HONEYWELL        = "data"
+        const val EXTRA_ZEBRA            = "com.symbol.datawedge.data_string"
+        const val EXTRA_GENERIC_TYPO     = "barocode"  // sic — Firmware-Tippfehler
+        const val EXTRA_GENERIC_CORRECT  = "barcode"
+    }
+}
