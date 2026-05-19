@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import de.kfzblitz24.retoure_pda.ui.screens.case.CaseDetailScreen
+import de.kfzblitz24.retoure_pda.ui.screens.container.NewContainerScreen
 import de.kfzblitz24.retoure_pda.ui.screens.home.HomeScreen
 import de.kfzblitz24.retoure_pda.ui.screens.pair.PairScreen
 import de.kfzblitz24.retoure_pda.ui.screens.photos.ItemPhotosScreen
@@ -25,11 +26,12 @@ import de.kfzblitz24.retoure_pda.ui.theme.RetourePdaTheme
  * Navigation passiert.
  */
 private object Routes {
-    const val PAIR     = "pair"
-    const val HOME     = "home"
-    const val CASE     = "case/{caseId}"
-    const val PHOTOS   = "photos/{caseId}/{itemId}"
-    const val SETTINGS = "settings"
+    const val PAIR          = "pair"
+    const val HOME          = "home"
+    const val CASE          = "case/{caseId}"
+    const val PHOTOS        = "photos/{caseId}/{itemId}"
+    const val SETTINGS      = "settings"
+    const val NEW_CONTAINER = "container/new"
 
     fun case(caseId: String)               = "case/$caseId"
     fun photos(caseId: String, itemId: String) = "photos/$caseId/$itemId"
@@ -94,6 +96,18 @@ class MainActivity : ComponentActivity() {
                             onSettingsClick = {
                                 navController.navigate(Routes.SETTINGS)
                             },
+                            onNewContainerClick = {
+                                navController.navigate(Routes.NEW_CONTAINER)
+                            },
+                        )
+                    }
+
+                    // ── Neuer Container ─────────────────────────────────
+                    composable(Routes.NEW_CONTAINER) {
+                        NewContainerScreen(
+                            caseRepository = app.caseRepository,
+                            containerRepository = app.containerRepository,
+                            onBack = { navController.popBackStack() },
                         )
                     }
 

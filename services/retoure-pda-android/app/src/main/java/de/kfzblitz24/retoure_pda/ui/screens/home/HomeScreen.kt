@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -35,6 +36,7 @@ fun HomeScreen(
     caseRepository: CaseRepository,
     onCaseClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
+    onNewContainerClick: () -> Unit = {},
 ) {
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.Factory(caseRepository))
     val state by vm.uiState.collectAsState()
@@ -66,6 +68,13 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onNewContainerClick) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Neuer Container",
+                            tint = Orange,
+                        )
+                    }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Einstellungen", tint = Color.White)
                     }
