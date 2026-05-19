@@ -310,6 +310,21 @@ export default async function ContainerDetailPage({
             <p className="text-[10px] text-[#8a93a0] mt-2">
               PDF in neuem Tab — von dort über Browser-Drucken an Bluetooth-/AirPrint-/jeden Drucker schicken.
             </p>
+
+            {/* ZPL-Direkt-Download: für Drucker die ZPL nativ sprechen
+                (Munbyn RW403B, Zebra ZD/GK/GX). Datei kann an die
+                Hersteller-App übergeben oder via `nc <ip> 9100` auf
+                einen Netzwerk-Drucker geschickt werden. */}
+            <a
+              href={`/api/admin/containers/${c.id}/label-zpl`}
+              download={`${c.code}.zpl`}
+              className="mt-2 block w-full text-center px-3 py-2 bg-white text-[#0b3756] text-sm rounded-lg border border-[#0b3756] hover:bg-[#f6f8fa]"
+            >
+              Label als ZPL (.zpl-Datei)
+            </a>
+            <p className="text-[10px] text-[#8a93a0] mt-2">
+              Für Drucker mit nativem ZPL-Support (Munbyn RW403B, Zebra). Datei an die Hersteller-App übergeben oder `cat label.zpl | nc &lt;ip&gt; 9100`.
+            </p>
           </div>
 
           {/* Close */}
