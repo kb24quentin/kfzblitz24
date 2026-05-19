@@ -135,11 +135,15 @@ interface RetoureApi {
     /**
      * Holt das ZPL-II-Label eines Containers als raw byte-Stream.
      *
-     * Pfad ist `/api/pda/containers/.../label-zpl` (NICHT `/api/admin/...`):
+     * Pfad liegt unter `api/pda/containers/...` (nicht unter `api/admin/...`):
      * Die Middleware in services/retoure/src/middleware.ts blockt auf dem
-     * `pda.rma.*`-Host alles ausser `/api/pda/*` und `/api/cron/*` mit
-     * HTTP 404. Wir haben deshalb zwei spiegel-gleiche Endpoints für
+     * pda.rma.-Host alle Pfade ausser denen unter api/pda/ und api/cron/
+     * mit HTTP 404. Wir haben deshalb zwei spiegel-gleiche Endpoints für
      * Label-ZPL — einen für die Admin-UI und einen für uns.
+     *
+     * Achtung beim Editieren: Asterisk-Slash-Sequenzen in KDoc lassen
+     * Kotlin denken es seien nested block-comments — deshalb hier KEINE
+     * Wildcards mit Slash-Stern schreiben.
      *
      * Body landet direkt in einem `BluetoothSocket.outputStream` → der
      * Drucker druckt was zwischen `^XA` und `^XZ` steht.
