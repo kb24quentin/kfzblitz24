@@ -29,9 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import de.kfzblitz24.retoure_pda.data.printer.BluetoothLabelPrinter
+import de.kfzblitz24.retoure_pda.data.printer.PrinterRepository
 import de.kfzblitz24.retoure_pda.data.printer.PrinterStore
 import de.kfzblitz24.retoure_pda.ui.theme.Navy
 import de.kfzblitz24.retoure_pda.ui.theme.Orange
+import kotlinx.coroutines.launch
 
 /**
  * Drucker-Einstellungen: Liste der vom System gepairten Bluetooth-
@@ -50,9 +52,14 @@ import de.kfzblitz24.retoure_pda.ui.theme.Orange
 fun PrinterSettingsScreen(
     printerStore: PrinterStore,
     bluetoothPrinter: BluetoothLabelPrinter,
+    printerRepository: PrinterRepository,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    var testError by remember { mutableStateOf<String?>(null) }
     var devices by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
     var current by remember { mutableStateOf(printerStore.get()) }
     var btReady by remember { mutableStateOf(bluetoothPrinter.isReady()) }
@@ -188,6 +195,54 @@ fun PrinterSettingsScreen(
                                 Text(langLabel, fontWeight = FontWeight.Bold)
                             }
                         }
+                    }
+
+                    // ── Test-Druck ───────────────────────────────────
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            testing = true
+                            testResult = null
+                            testError = null
+                            scope.launch {
+                                when (val r = printerRepository.printTestLabel()) {
+                                    is PrinterRepository.PrintOutcome.Ok ->
+                                        testResult = "✓ Test gedruckt (${r.durationMs} ms)"
+                                    PrinterRepository.PrintOutcome.NoPrinterConfigured ->
+                                        testError = "Kein Drucker konfiguriert."
+                                    is PrinterRepository.PrintOutcome.Err ->
+                                        testError = r.message
+                                }
+                                testing = false
+                            }
+                        },
+                        enabled = !testing,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1565C0),
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        if (testing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Drucke Test…")
+                        } else {
+                            Text("🖨 Test-Druck (Hello World)")
+                        }
+                    }
+                    testResult?.let { msg ->
+                        Spacer(Modifier.height(6.dp))
+                        Text(msg, color = Color(0xFFB9F6CA), fontSize = 12.sp)
+                    }
+                    testError?.let { err ->
+                        Spacer(Modifier.height(6.dp))
+                        Text(err, color = Color(0xFFEF9A9A), fontSize = 12.sp)
                     }
 
                     Spacer(Modifier.height(8.dp))

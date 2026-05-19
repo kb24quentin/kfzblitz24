@@ -177,6 +177,7 @@ class MainActivity : ComponentActivity() {
                         PrinterSettingsScreen(
                             printerStore = app.printerStore,
                             bluetoothPrinter = app.bluetoothPrinter,
+                            printerRepository = app.printerRepository,
                             onBack = { navController.popBackStack() },
                         )
                     }

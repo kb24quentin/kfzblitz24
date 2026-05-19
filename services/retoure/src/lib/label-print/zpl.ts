@@ -142,6 +142,8 @@ export function buildZpl(
   printWidth: number = LABEL_4x6.width,
   labelLength: number = LABEL_4x6.height,
 ): string {
+  // CRLF damit Munbyn/portable Drucker mit serial-style Parser den
+  // Stream sauber lesen — reine \n verschluckt manche Subset-Firmware.
   return [
     "^XA",
     "^CI28", // UTF-8 input — needed for Umlaute (ä ö ü ß).
@@ -153,5 +155,6 @@ export function buildZpl(
     ...commands,
     "^PQ1,0,0,Y", // Print quantity: 1 Label, no pause, no replicate, Yes-cut.
     "^XZ",
-  ].join("\n");
+    "", // trailing CRLF
+  ].join("\r\n");
 }

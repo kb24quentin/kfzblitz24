@@ -13,7 +13,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkPdaAuth } from "@/lib/pda-auth";
-import { palletLabelTspl, palletLabelZpl } from "@/lib/label-print";
+import {
+  buildTsplHelloTest,
+  palletLabelTspl,
+  palletLabelZpl,
+} from "@/lib/label-print";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,6 +51,27 @@ export async function GET(
   const rawFormat = (url.searchParams.get("format") ?? "tspl").toLowerCase();
   const format: LabelFormat =
     rawFormat === "zpl" ? "zpl" : "tspl"; // alles andere → tspl
+
+  // ── Diagnose-Modus: ?test=hello ────────────────────────────────────
+  // Liefert ein minimales "TEST kfzBlitz24"-Label OHNE DB-Lookup.
+  // Praktisch um zu prüfen ob der Drucker den ?format=-Wert
+  // grundsätzlich frisst — wenn DAS druckt, weiss man dass nur
+  // unser komplexes Palette-Layout das Problem ist.
+  if (url.searchParams.get("test") === "hello") {
+    const test = format === "zpl"
+      ? "^XA^CI28^MMT^PW812^LL609^LH0,0^FO40,60^A0N,80,80^FDTEST^FS^FO40,180^A0N,50,50^FDkfzBlitz24^FS^PQ1,0,0,Y^XZ\r\n"
+      : buildTsplHelloTest();
+    const ext = format === "zpl" ? "zpl" : "tspl";
+    return new Response(test, {
+      status: 200,
+      headers: {
+        "content-type": `application/${ext}; charset=utf-8`,
+        "content-length": String(Buffer.byteLength(test, "utf8")),
+        "content-disposition": `inline; filename="hello.${ext}"`,
+        "cache-control": "no-store",
+      },
+    });
+  }
 
   const container = await prisma.container.findUnique({
     where: { id: containerId },

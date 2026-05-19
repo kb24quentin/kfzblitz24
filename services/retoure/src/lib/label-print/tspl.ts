@@ -21,10 +21,14 @@
 /**
  * Label-Dimensionen in mm. TSPL erwartet `SIZE` in mm (oder inch),
  * NICHT in dots — anders als ZPL!
+ *
+ * Wir benutzen INTEGER-Werte (100/150 statt 101.6/152.4) weil einige
+ * Munbyn-Firmware-Versionen den Dezimal-Parser nicht mögen und das
+ * SIZE-Token dann ignorieren — was zu "keine Reaktion" führt.
  */
-export const TSPL_LABEL_4x6_MM  = { widthMm: 101.6, heightMm: 152.4 } as const;
-export const TSPL_LABEL_A6_MM   = { widthMm: 105,   heightMm: 148  } as const;
-export const TSPL_LABEL_50x30_MM = { widthMm: 50,   heightMm: 30   } as const;
+export const TSPL_LABEL_4x6_MM  = { widthMm: 100, heightMm: 150 } as const;
+export const TSPL_LABEL_A6_MM   = { widthMm: 105, heightMm: 148 } as const;
+export const TSPL_LABEL_50x30_MM = { widthMm: 50, heightMm: 30  } as const;
 
 /**
  * Built-in TSPL-Schriften — Fixed-Bitmap-Fonts.
@@ -159,6 +163,10 @@ export function buildTspl(
   widthMm: number = TSPL_LABEL_4x6_MM.widthMm,
   heightMm: number = TSPL_LABEL_4x6_MM.heightMm,
 ): string {
+  // CRLF (\r\n) ist Pflicht für Munbyn-Portable-Drucker — sie behandeln
+  // den Bluetooth-SPP-Stream wie eine serielle Verbindung und erwarten
+  // klassisch-serielle Line-Endings. Mit reinem \n verschluckt der
+  // Parser die ganze Sequenz und macht stillschweigend nichts.
   return [
     `SIZE ${widthMm} mm, ${heightMm} mm`,
     `GAP 2 mm, 0 mm`,
@@ -168,5 +176,27 @@ export function buildTspl(
     `CLS`,
     ...commands,
     `PRINT 1,1`,
-  ].join("\n");
+    ``, // trailing CRLF damit das letzte Kommando sauber terminiert
+  ].join("\r\n");
+}
+
+/**
+ * Minimaler TSPL-Test-Druck — eine Zeile "TEST kfzBlitz24" auf der
+ * gewählten Label-Größe. Praktisch um zu diagnostizieren ob der Drucker
+ * TSPL versteht (= das hier druckt) oder ob das ZPL-Modus braucht oder
+ * gar kein Bluetooth-Print-Mode aktiv ist (= nix passiert).
+ */
+export function buildTsplHelloTest(
+  widthMm: number = TSPL_LABEL_4x6_MM.widthMm,
+  heightMm: number = TSPL_LABEL_4x6_MM.heightMm,
+): string {
+  return buildTspl(
+    [
+      tsplText(40, 60, "TEST", { font: "0", xMultiplier: 6, yMultiplier: 6 }),
+      tsplText(40, 200, "kfzBlitz24", { font: "0", xMultiplier: 4, yMultiplier: 4 }),
+      tsplText(40, 320, new Date().toLocaleString("de-DE"), { font: "3" }),
+    ],
+    widthMm,
+    heightMm,
+  );
 }

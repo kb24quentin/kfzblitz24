@@ -158,4 +158,17 @@ interface RetoureApi {
         @Path("containerId") containerId: String,
         @Query("format") format: String = "tspl",
     ): ResponseBody
+
+    /**
+     * Diagnose-Druck-Endpoint — gleicher Pfad wie das normale Label,
+     * aber mit `?test=hello` macht der Server keinen Container-Lookup
+     * und liefert ein minimales "TEST kfzBlitz24"-Label.
+     */
+    @Streaming
+    @GET("api/pda/containers/{containerId}/label-zpl")
+    suspend fun getContainerLabelTest(
+        @Path("containerId") containerId: String,
+        @Query("format") format: String = "tspl",
+        @Query("test") testMarker: String = "hello",
+    ): ResponseBody
 }

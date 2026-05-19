@@ -28,6 +28,50 @@ class PrinterRepository(
     }
 
     /**
+     * Schickt einen Diagnose-Druck "TEST kfzBlitz24" an den gespeicherten
+     * Drucker. Nutzt den `?test=hello`-Param des Endpoints — kein
+     * Container-Lookup. Wenn DAS druckt, weiss man:
+     *   - Bluetooth-Transport ok
+     *   - Druckersprache passt (TSPL bzw. ZPL je nach Setting)
+     *   - Nur das Pallet-Layout könnte noch Probleme machen
+     * Wenn NICHT druckt, ist die Wahl der Druckersprache wahrscheinlich
+     * falsch — User soll TSPL/ZPL im Settings-Screen umschalten.
+     *
+     * Wir benutzen eine Dummy-Container-ID — der Test-Modus checkt sie
+     * nicht.
+     */
+    suspend fun printTestLabel(): PrintOutcome {
+        val saved = printerStore.get() ?: return PrintOutcome.NoPrinterConfigured
+
+        val body: String = try {
+            val resp = api.getContainerLabelTest(
+                containerId = "test",
+                format = saved.language,
+                testMarker = "hello",
+            )
+            resp.string()
+        } catch (e: Throwable) {
+            return PrintOutcome.Err(e.friendlyMessage("Test-Druck"))
+        }
+
+        if (body.isBlank()) {
+            return PrintOutcome.Err("Server hat ein leeres Test-Label zurückgegeben.")
+        }
+
+        return when (saved.transport) {
+            PrinterStore.TRANSPORT_BLUETOOTH -> {
+                when (val r = bluetoothPrinter.print(macAddress = saved.address, zpl = body)) {
+                    is BluetoothLabelPrinter.Result.Ok ->
+                        PrintOutcome.Ok(printerName = saved.name, durationMs = r.durationMs)
+                    is BluetoothLabelPrinter.Result.Err ->
+                        PrintOutcome.Err(r.message)
+                }
+            }
+            else -> PrintOutcome.Err("Test-Druck nur für Bluetooth implementiert.")
+        }
+    }
+
+    /**
      * Druckt das Container-Label auf den gespeicherten Default-Drucker.
      * Holt sich die Label-Bytes (ZPL oder TSPL je nach Druckersprache)
      * selbst vom Backend.
