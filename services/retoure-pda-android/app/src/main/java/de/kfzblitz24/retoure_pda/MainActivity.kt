@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                     composable(Routes.HOME) {
                         HomeScreen(
                             caseRepository = app.caseRepository,
+                            scanner = app.compositeScanner,
                             onCaseClick = { caseId ->
                                 navController.navigate(Routes.case(caseId))
                             },

@@ -1,10 +1,7 @@
 package de.kfzblitz24.retoure_pda.ui.screens.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,28 +15,45 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import de.kfzblitz24.retoure_pda.data.api.dto.CaseSummary
 import de.kfzblitz24.retoure_pda.data.repo.CaseRepository
+import de.kfzblitz24.retoure_pda.data.scanner.BarcodeScanner
 import de.kfzblitz24.retoure_pda.ui.theme.Navy
 import de.kfzblitz24.retoure_pda.ui.theme.Orange
 
+/**
+ * Home-Screen für die Lager-Mitarbeiter.
+ *
+ * Production-Design: kein Eingabefeld, kein "Suchen"-Button — nur eine
+ * große Aufforderung "Bitte Paket / Retourenschein scannen". Der
+ * Mitarbeiter drückt den Hardware-Trigger am PDA, der Broadcast-Intent
+ * geht in den `BarcodeScanner` (Composite hört auf alle bekannten OEM-
+ * Actions), wir füttern den Code in `vm.search()` und navigieren bei
+ * Erfolg direkt in die Case-Detail-View.
+ *
+ * Fallback (z. B. wenn der Scanner kaputt ist oder beim Dev-Test ohne
+ * Q900): am Bildschirm-Ende ein kleiner "Manuell eingeben"-Link → öffnet
+ * ein Dialog mit Input-Feld + Suchen-Knopf.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     caseRepository: CaseRepository,
+    scanner: BarcodeScanner,
     onCaseClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
     onNewContainerClick: () -> Unit = {},
 ) {
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.Factory(caseRepository))
     val state by vm.uiState.collectAsState()
+
+    var manualOpen by remember { mutableStateOf(false) }
 
     // Auto-Navigate sobald lookup erfolgreich war.
     LaunchedEffect(state.foundCaseId) {
@@ -49,11 +63,27 @@ fun HomeScreen(
         }
     }
 
+    // Scanner-Lifecycle: nur lauschen während HomeScreen sichtbar ist.
+    DisposableEffect(Unit) {
+        scanner.startListening()
+        onDispose { scanner.stopListening() }
+    }
+
+    // Auf Scan-Events reagieren — Code direkt an vm.search() füttern.
+    LaunchedEffect(scanner) {
+        scanner.scans.collect { code ->
+            val cleaned = code.trim()
+            if (cleaned.isNotEmpty()) {
+                vm.onQueryChange(cleaned)
+                vm.search()
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    // kfzBlitz24 Wordmark
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("kfz", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text("blitz", color = Orange, fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -87,17 +117,134 @@ fun HomeScreen(
         },
         containerColor = Color(0xFF0D1B2A),
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(padding),
+            contentAlignment = Alignment.Center,
         ) {
-            // ── Suchfeld ───────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                // Großes Scanner-Icon
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(RoundedCornerShape(60.dp))
+                        .background(Orange.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "▢",
+                        color = Orange,
+                        fontSize = 64.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+
+                // Loading-State zeigt einen subtilen Progress unterm Icon
+                if (state.loading) {
+                    LinearProgressIndicator(
+                        color = Orange,
+                        trackColor = Orange.copy(alpha = 0.2f),
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(3.dp),
+                    )
+                }
+
+                Text(
+                    "Bitte Paket oder Retourenschein scannen",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+
+                Text(
+                    "Halte den Scanner über den Barcode und drücke den Trigger.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center,
+                )
+
+                state.error?.let { err ->
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33F44336))
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            err,
+                            color = Color(0xFFEF9A9A),
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            // Fallback ganz unten: kleiner Link zur manuellen Eingabe
+            TextButton(
+                onClick = { manualOpen = true },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp),
+            ) {
+                Text(
+                    "Manuell eingeben",
+                    color = Color.White.copy(alpha = 0.35f),
+                    fontSize = 12.sp,
+                )
+            }
+        }
+
+        if (manualOpen) {
+            ManualEntryDialog(
+                initial = state.query,
+                loading = state.loading,
+                onDismiss = { manualOpen = false },
+                onSubmit = { code ->
+                    vm.onQueryChange(code)
+                    vm.search()
+                    manualOpen = false
+                },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ManualEntryDialog(
+    initial: String,
+    loading: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var input by remember { mutableStateOf(initial) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Manuell eingeben",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
             OutlinedTextField(
-                value = state.query,
-                onValueChange = vm::onQueryChange,
+                value = input,
+                onValueChange = { input = it },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = {
                     Text(
@@ -114,47 +261,35 @@ fun HomeScreen(
                     imeAction = ImeAction.Search,
                     autoCorrect = false,
                 ),
-                keyboardActions = KeyboardActions(onSearch = { vm.search() }),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        if (input.isNotBlank()) onSubmit(input.trim())
+                    },
+                ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Orange,
                     unfocusedBorderColor = Orange.copy(alpha = 0.4f),
                     cursorColor = Orange,
-                    focusedContainerColor = Color.White.copy(alpha = 0.06f),
-                    unfocusedContainerColor = Color.White.copy(alpha = 0.04f),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
                 ),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
             )
-
+        },
+        confirmButton = {
             Button(
-                onClick = vm::search,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                enabled = state.query.isNotBlank() && !state.loading,
-                shape = RoundedCornerShape(12.dp),
+                onClick = { if (input.isNotBlank()) onSubmit(input.trim()) },
+                enabled = input.isNotBlank() && !loading,
                 colors = ButtonDefaults.buttonColors(containerColor = Orange),
             ) {
-                if (state.loading) {
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                } else {
-                    Text("Suchen", fontWeight = FontWeight.Bold)
-                }
+                Text("Suchen", fontWeight = FontWeight.Bold)
             }
-
-            // ── Fehler ─────────────────────────────────────────────────
-            state.error?.let { err ->
-                Text(
-                    err,
-                    color = Color(0xFFEF9A9A),
-                    fontSize = 13.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x22F44336))
-                        .padding(10.dp),
-                )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Abbrechen", color = Color.White.copy(alpha = 0.6f))
             }
-
-            // Keine Ergebnisliste mehr — gefundener Case öffnet sich
-            // direkt (siehe LaunchedEffect oben).
-        }
-    }
+        },
+        containerColor = Navy,
+    )
 }
