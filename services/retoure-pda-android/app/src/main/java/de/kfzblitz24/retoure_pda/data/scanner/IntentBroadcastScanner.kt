@@ -98,6 +98,8 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
             addAction(ACTION_HONEYWELL)
             addAction(ACTION_ZEBRA)
             addAction(ACTION_GENERIC)
+            addAction(ACTION_HS_BARCODE_SEND)
+            addAction(ACTION_HS_DCS)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -136,6 +138,21 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
                 intent.getStringExtra(EXTRA_GENERIC_TYPO)
                     ?: intent.getStringExtra(EXTRA_GENERIC_CORRECT)
             }
+            ACTION_HS_BARCODE_SEND, ACTION_HS_DCS -> {
+                // Netum Q900 / Honeywell-HS-Wrapper-Firmware. Wir kennen
+                // den Extra-Key noch nicht exakt — probieren der Reihe
+                // nach die wahrscheinlichsten Kandidaten. Das Logging in
+                // onReceive() zeigt im Logcat welche Keys tatsächlich da
+                // sind, dann können wir das hier präzisieren.
+                intent.getStringExtra("barcode_string")
+                    ?: intent.getStringExtra("barcode")
+                    ?: intent.getStringExtra("barocode")
+                    ?: intent.getStringExtra("data")
+                    ?: intent.getStringExtra("result")
+                    ?: intent.getStringExtra("BarcodeData")
+                    ?: intent.getStringExtra("scannerdata")
+                    ?: intent.getStringExtra("SCAN_RESULT")
+            }
             else -> null
         }
     }
@@ -144,10 +161,13 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
         private const val TAG = "PdaScanner"
 
         // Intent-Actions
-        const val ACTION_NEWLAND   = "nlscan.action.SCANNER_RESULT"
-        const val ACTION_HONEYWELL = "com.honeywell.aidc.action.ACTION_BARCODE_DATA"
-        const val ACTION_ZEBRA     = "com.symbol.datawedge.api.RESULT_ACTION"
-        const val ACTION_GENERIC   = "scan.rcv.message"
+        const val ACTION_NEWLAND          = "nlscan.action.SCANNER_RESULT"
+        const val ACTION_HONEYWELL        = "com.honeywell.aidc.action.ACTION_BARCODE_DATA"
+        const val ACTION_ZEBRA            = "com.symbol.datawedge.api.RESULT_ACTION"
+        const val ACTION_GENERIC          = "scan.rcv.message"
+        // Netum Q900 (Honeywell HS7 + "hs"-Wrapper-Firmware):
+        const val ACTION_HS_BARCODE_SEND  = "com.android.hs.action.BARCODE_SEND"
+        const val ACTION_HS_DCS           = "com.hs.dcsservice.action"
 
         // Extra-Keys
         const val EXTRA_NEWLAND          = "SCAN_BARCODE1"
