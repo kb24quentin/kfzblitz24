@@ -18,10 +18,20 @@
         android:theme="@style/Theme.RetourePda"
         android:hardwareAccelerated="true">
 
+        <!--
+            ML Kit Barcode-Scanning Metadata.
+            Sagt Google Play Services Bescheid dass die App das Barcode-
+            Modul nutzt; falls nicht installiert, wird's nachgeladen.
+        -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.RetourePda">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

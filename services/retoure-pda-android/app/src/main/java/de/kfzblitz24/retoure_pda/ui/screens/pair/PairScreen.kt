@@ -18,7 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+// LocalLifecycleOwner — neuer Pfad seit Compose 1.7 (lifecycle-runtime-compose).
+// Der alte `androidx.compose.ui.platform.LocalLifecycleOwner` ist deprecated.
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -94,20 +96,10 @@ fun PairScreen(
             fontSize = 14.sp,
         )
 
-        // ── QR-Scanner ────────────────────────────────────────────────
-        QrScannerCard(
-            onQrDetected = { qrValue ->
-                vm.pair(qrValue)
-            },
-        )
-
-        Divider(color = Color.White.copy(alpha = 0.15f))
-
-        Text(
-            "oder Code manuell eingeben:",
-            color = Color.White.copy(alpha = 0.6f),
-            fontSize = 13.sp,
-        )
+        // ── Code-Feld (PRIMÄR-Eingabe) ────────────────────────────────
+        // Mit Q900 oder vergleichbarem 2D-Scanner einfach den QR-Code
+        // direkt auf dieses Feld richten — Scanner tippt URL/Code in
+        // das fokussierte Input. Kein In-App-Kamera-Scan nötig.
 
         // ── Manuelles Code-Feld ────────────────────────────────────────
         OutlinedTextField(
@@ -142,6 +134,34 @@ fun PairScreen(
 
         state.error?.let { err ->
             ErrorCard(message = err)
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Kamera-Scan ist optional und bewusst opt-in, weil der CameraX/
+        // ML-Kit-Setup auf manchen PDAs gerne crasht (Race-Condition mit
+        // dem Lifecycle). Mit Q900 ist die Kamera eh redundant — der
+        // Scanner liest QR-Codes direkt als Keyboard-Input in das
+        // obige Code-Feld. Wer trotzdem die Kamera nutzen will, kann
+        // dies hier opt-in tun.
+        var cameraOpen by remember { mutableStateOf(false) }
+        if (!cameraOpen) {
+            TextButton(
+                onClick = { cameraOpen = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    "📷 Stattdessen Kamera für QR-Scan benutzen (Beta)",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp,
+                )
+            }
+        } else {
+            QrScannerCard(
+                onQrDetected = { qrValue ->
+                    vm.pair(qrValue)
+                },
+            )
         }
     }
 }
