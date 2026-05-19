@@ -295,6 +295,21 @@ export default async function ContainerDetailPage({
                 </p>
               )}
             </form>
+
+            {/* PDF-Fallback: solange kein ZPL-Drucker da ist, kann das
+                Label als A6-PDF heruntergeladen und über einen
+                beliebigen (z. B. Bluetooth-)Drucker ausgegeben werden. */}
+            <a
+              href={`/api/admin/containers/${c.id}/label-pdf`}
+              target="_blank"
+              rel="noopener"
+              className="mt-2 block w-full text-center px-3 py-2 bg-[#ff6600] text-white text-sm rounded-lg hover:bg-[#e65a00]"
+            >
+              Label als PDF (A6)
+            </a>
+            <p className="text-[10px] text-[#8a93a0] mt-2">
+              PDF in neuem Tab — von dort über Browser-Drucken an Bluetooth-/AirPrint-/jeden Drucker schicken.
+            </p>
           </div>
 
           {/* Close */}

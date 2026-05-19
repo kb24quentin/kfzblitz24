@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "../../pda-client";
+import { api, openAuthenticatedPdf } from "../../pda-client";
 
 interface PdaContainerDetail {
   id: string;
@@ -197,6 +197,21 @@ export default function PdaContainerDetailPage({
           {closing ? "…" : "Container schließen"}
         </button>
       )}
+
+      <button
+        onClick={async () => {
+          try {
+            await openAuthenticatedPdf(
+              `/api/admin/containers/${c.id}/label-pdf`,
+            );
+          } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+          }
+        }}
+        className="w-full bg-white/5 text-white/80 font-medium py-2.5 rounded-xl active:bg-white/10 text-sm"
+      >
+        📄 Label-PDF öffnen / drucken
+      </button>
 
       <a
         href="/pda-app/containers"

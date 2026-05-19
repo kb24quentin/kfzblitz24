@@ -32,6 +32,37 @@ export function setPdaId(v: string) {
   else localStorage.removeItem(PDA_ID_KEY);
 }
 
+/**
+ * Bearer-Auth-Helper für Binär-Endpoints (z. B. PDFs).
+ * Lädt die Resource als Blob, öffnet sie in einem neuen Tab via
+ * Object-URL. Funktioniert auf Android-Chrome + iOS-Safari.
+ *
+ * Wird gebraucht für `/api/admin/containers/:id/label-pdf` — der
+ * Browser kann da kein Bearer-Header von sich aus mitschicken, deshalb
+ * holen wir das PDF programmatisch und stellen es danach lokal bereit.
+ */
+export async function openAuthenticatedPdf(path: string): Promise<void> {
+  const token = getToken();
+  if (!token) {
+    throw new Error("Kein API-Token gesetzt.");
+  }
+  const res = await fetch(path, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(t || `HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  // Neues Tab — Mobile-Browser zeigen PDFs inline und bieten Share/Print
+  window.open(url, "_blank");
+  // Object-URL nach 60s freigeben — bis dahin sollte der Tab das PDF
+  // geladen haben.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export async function api<T = unknown>(
   path: string,
   init?: RequestInit

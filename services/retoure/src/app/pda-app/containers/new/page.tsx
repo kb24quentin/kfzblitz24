@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, getPdaId } from "../../pda-client";
+import { api, getPdaId, openAuthenticatedPdf } from "../../pda-client";
 
 interface CreateContainerResponse {
   container: {
@@ -109,6 +109,27 @@ export default function NewContainerPage() {
             ? `✓ Label gedruckt (${result.printResult.durationMs ?? "?"} ms)`
             : `⚠ Druck übersprungen: ${result.printResult.error ?? "?"}`}
         </div>
+
+        {/* PDF-Fallback: wenn kein ZPL-Drucker konfiguriert ist (noch
+            kein Netzwerk-Drucker da), kann das Label als A6-PDF geöffnet
+            werden — User druckt es dann per Browser-Share auf einem
+            Bluetooth-Drucker. */}
+        {!result.printResult.ok && (
+          <button
+            onClick={async () => {
+              try {
+                await openAuthenticatedPdf(
+                  `/api/admin/containers/${result.container.id}/label-pdf`,
+                );
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            }}
+            className="w-full bg-white/10 text-white font-semibold py-3 rounded-xl active:bg-white/20 text-sm"
+          >
+            📄 Label als PDF öffnen
+          </button>
+        )}
 
         <button
           onClick={() => router.push(`/pda-app/containers/${result.container.id}`)}
