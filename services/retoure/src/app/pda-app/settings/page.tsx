@@ -49,6 +49,23 @@ export default function PdaSettingsPage() {
         </p>
       </div>
 
+      <a
+        href="/pda-app/pair"
+        className="block bg-[#ff6600]/15 border border-[#ff6600]/40 rounded-xl p-4 active:bg-[#ff6600]/25"
+      >
+        <p className="text-sm font-semibold text-[#ff6600]">
+          📱 QR-Code scannen zum Pairen
+        </p>
+        <p className="text-xs text-white/70 mt-1">
+          Schneller als Token-Tippen — Admin generiert einen Code, du
+          scannst ihn und die App ist fertig eingerichtet.
+        </p>
+      </a>
+
+      <div className="text-xs text-white/40 uppercase tracking-wider pt-2">
+        Oder manuell
+      </div>
+
       <form onSubmit={onSave} className="space-y-4">
         <div>
           <label className="block text-sm text-white/80 mb-1">API-Token (Bearer)</label>

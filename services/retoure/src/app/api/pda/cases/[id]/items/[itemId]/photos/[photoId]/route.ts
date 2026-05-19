@@ -19,7 +19,7 @@ export async function DELETE(
     params,
   }: { params: Promise<{ id: string; itemId: string; photoId: string }> }
 ) {
-  const auth = checkPdaAuth(req);
+  const auth = await checkPdaAuth(req);
   if (!auth.ok) {
     return NextResponse.json(
       {

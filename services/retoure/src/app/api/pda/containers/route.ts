@@ -38,7 +38,7 @@ const ALLOWED_TYPES: ContainerType[] = ["palette", "carton", "bag"];
  * Filter: ?status=open|closed|shipped|received_supplier, ?type=palette|carton|bag.
  */
 export async function GET(req: Request) {
-  const auth = checkPdaAuth(req);
+  const auth = await checkPdaAuth(req);
   if (!auth.ok) {
     return NextResponse.json(
       { error: auth.status === 503 ? "API_TOKEN nicht konfiguriert" : "Unauthorized" },
@@ -85,7 +85,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const auth = checkPdaAuth(req);
+  const auth = await checkPdaAuth(req);
   if (!auth.ok) {
     return NextResponse.json(
       {

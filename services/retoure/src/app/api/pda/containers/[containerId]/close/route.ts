@@ -19,7 +19,7 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ containerId: string }> },
 ) {
-  const auth = checkPdaAuth(req);
+  const auth = await checkPdaAuth(req);
   if (!auth.ok) {
     return NextResponse.json(
       {

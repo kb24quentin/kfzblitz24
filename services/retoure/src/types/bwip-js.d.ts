@@ -16,6 +16,8 @@ declare module "bwip-js" {
     padding?: number;
     paddingwidth?: number;
     paddingheight?: number;
+    /** QR-spezifisch: Fehlerkorrektur-Level L (7%), M (15%), Q (25%), H (30%) */
+    eclevel?: "L" | "M" | "Q" | "H";
   }
   export function toBuffer(opts: ToBufferOpts): Promise<Uint8Array>;
   const _default: { toBuffer: typeof toBuffer };

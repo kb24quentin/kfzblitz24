@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const auth = checkPdaAuth(req);
+  const auth = await checkPdaAuth(req);
   if (!auth.ok) {
     return NextResponse.json(
       {

@@ -18,7 +18,7 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ bestellnummer: string }> }
 ) {
-  const auth = checkPdaAuth(req);
+  const auth = await checkPdaAuth(req);
   if (!auth.ok) {
     return NextResponse.json(
       {

@@ -399,3 +399,53 @@ model RetoureItemPhoto {
   @@index([caseId])
   @@index([kind])
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// PdaDevice — pro PDA-Gerät ein Eintrag mit eigenem Bearer-Token.
+//
+// Pairing-Flow (siehe pda-auth.ts):
+//   1. Admin legt im Dashboard ein neues PDA an (pdaId = Name z. B.
+//      "Lager-Nord"). Backend würfelt einen langen `token` UND einen
+//      kurzen `pairingCode` (~10 Zeichen, alphanumerisch).
+//   2. Admin sieht einen QR-Code, der die URL
+//        https://pda.rma.<env>.kfzblitz24-group.com/pda-app/pair?code=<pairingCode>
+//      enthält. Pairing-Code läuft nach `pairingExpiresAt` ab (10 Min).
+//   3. PDA-Gerät scannt den QR (Q900 als HID-Keyboard → tippt URL in
+//      Chrome-Adresszeile + Enter), Browser landet auf /pda-app/pair.
+//      Page liest `?code=` aus, POSTet an `/api/pda/pair`, bekommt
+//      `{token, pdaId}` zurück und legt das in localStorage ab.
+//   4. Backend setzt `pairedAt = now()` und nullt `pairingCode` —
+//      Pairing-Link ist damit verbraucht.
+//
+// Auth (`checkPdaAuth`):
+//   - Akzeptiert weiterhin den shared API_TOKEN aus env (für Admin-/
+//     curl-Tests sowie Backward-Compat).
+//   - Akzeptiert zusätzlich Bearer-Tokens von aktiven PdaDevice-Rows
+//     (`active=true` AND `pairedAt != null`). Setzt bei jedem Treffer
+//     `lastSeenAt = now()` (best-effort, non-blocking).
+//
+// Revoke: Admin setzt `active=false` → Token wird ab dem nächsten
+// Request abgelehnt.
+// ─────────────────────────────────────────────────────────────────────
+model PdaDevice {
+  id               String    @id @default(cuid())
+  /// Friendly Name z. B. "Lager-Nord" oder "pda-01" — wird als
+  /// `actor`/`createdByPda` in Events & Items gespeichert.
+  pdaId            String    @unique
+  /// Bearer-Token (32 hex chars). Geht beim Pairing einmalig ans
+  /// Gerät und bleibt dort in localStorage.
+  token            String    @unique
+  active           Boolean   @default(true)
+  /// Kurzcode für die QR-Pairing-URL. Nullable: nach erfolgreichem
+  /// Pairing wird der Code gelöscht. UNIQUE solange gesetzt.
+  pairingCode      String?   @unique
+  pairingExpiresAt DateTime?
+  pairedAt         DateTime?
+  lastSeenAt       DateTime?
+  createdBy        String?   // admin-email aus NextAuth-Session
+  createdAt        DateTime  @default(now())
+
+  @@index([token])
+  @@index([active])
+  @@index([pairingCode])
+}
