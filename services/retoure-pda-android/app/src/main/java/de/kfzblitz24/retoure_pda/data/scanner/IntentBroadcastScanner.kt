@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -73,8 +74,22 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
 
         val br = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                val barcode = extractBarcode(intent ?: return) ?: return
-                if (barcode.isNotBlank()) _scans.tryEmit(barcode.trim())
+                if (intent == null) return
+                // Diagnostik: Action + alle Extras dumpen — hilft enorm
+                // beim Debugging unbekannter OEM-Firmware (z. B. wenn
+                // der Q900 unter `scan.rcv.message` ein anderes Extra-
+                // Feld nutzt als wir erwarten).
+                val extras = intent.extras
+                val extraDump = extras?.keySet()?.joinToString(", ") { key ->
+                    "$key=${extras.get(key)}"
+                } ?: "(no extras)"
+                Log.d(TAG, "BROADCAST action=${intent.action} extras={$extraDump}")
+
+                val barcode = extractBarcode(intent) ?: return
+                if (barcode.isNotBlank()) {
+                    Log.d(TAG, "SCAN emit: '$barcode'")
+                    _scans.tryEmit(barcode.trim())
+                }
             }
         }
 
@@ -86,7 +101,13 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(br, filter, Context.RECEIVER_NOT_EXPORTED)
+            // WICHTIG: RECEIVER_EXPORTED (nicht NOT_EXPORTED!). Die OEM-
+            // Scanner-Services (Netum/Newland/Honeywell) laufen in einem
+            // SEPARATEN System-Prozess und senden ihren Broadcast als
+            // externe App. Mit NOT_EXPORTED würden wir auf Android 13+
+            // diese Broadcasts STILL droppen — das war der Grund warum
+            // Q900-Scans gar nicht erst bei uns ankamen.
+            context.registerReceiver(br, filter, Context.RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             context.registerReceiver(br, filter)
@@ -120,6 +141,8 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
     }
 
     companion object {
+        private const val TAG = "PdaScanner"
+
         // Intent-Actions
         const val ACTION_NEWLAND   = "nlscan.action.SCANNER_RESULT"
         const val ACTION_HONEYWELL = "com.honeywell.aidc.action.ACTION_BARCODE_DATA"
