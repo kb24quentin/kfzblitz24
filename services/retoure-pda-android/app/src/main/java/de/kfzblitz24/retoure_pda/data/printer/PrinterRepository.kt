@@ -29,27 +29,43 @@ class PrinterRepository(
 
     /**
      * Druckt das Container-Label auf den gespeicherten Default-Drucker.
-     * Holt sich die ZPL-Bytes selbst vom Backend.
+     * Holt sich die Label-Bytes (ZPL oder TSPL je nach Druckersprache)
+     * selbst vom Backend.
      */
     suspend fun printContainerLabel(containerId: String): PrintOutcome {
         val saved = printerStore.get() ?: return PrintOutcome.NoPrinterConfigured
 
-        // 1. ZPL holen
-        val zpl: String = try {
-            val body = api.getContainerLabelZpl(containerId)
+        // 1. Label-Bytes holen — Backend liefert je nach `format`-Query
+        //    entweder ZPL oder TSPL.
+        val labelBody: String = try {
+            val body = api.getContainerLabelZpl(containerId, format = saved.language)
             body.string()
         } catch (e: Throwable) {
             return PrintOutcome.Err(e.friendlyMessage("Label-Download"))
         }
 
-        if (zpl.isBlank() || !zpl.contains("^XA")) {
-            return PrintOutcome.Err("Server hat ein ungültiges ZPL-Label zurückgegeben.")
+        if (labelBody.isBlank()) {
+            return PrintOutcome.Err("Server hat ein leeres Label zurückgegeben.")
+        }
+
+        // Sanity-Check: enthält die Antwort die erwarteten Start-Tokens?
+        // - ZPL beginnt mit `^XA`
+        // - TSPL beginnt mit `SIZE ` (uns reicht das)
+        val looksValid = when (saved.language) {
+            PrinterStore.LANGUAGE_ZPL  -> labelBody.contains("^XA")
+            PrinterStore.LANGUAGE_TSPL -> labelBody.contains("SIZE ")
+            else -> true
+        }
+        if (!looksValid) {
+            return PrintOutcome.Err(
+                "Server hat ein ungültiges ${saved.language.uppercase()}-Label zurückgegeben.",
+            )
         }
 
         // 2. An den passenden Transport delegieren
         return when (saved.transport) {
             PrinterStore.TRANSPORT_BLUETOOTH -> {
-                when (val r = bluetoothPrinter.print(macAddress = saved.address, zpl = zpl)) {
+                when (val r = bluetoothPrinter.print(macAddress = saved.address, zpl = labelBody)) {
                     is BluetoothLabelPrinter.Result.Ok ->
                         PrintOutcome.Ok(printerName = saved.name, durationMs = r.durationMs)
                     is BluetoothLabelPrinter.Result.Err ->

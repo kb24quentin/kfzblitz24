@@ -133,24 +133,29 @@ interface RetoureApi {
     // ── Label-Print ───────────────────────────────────────────────────────────
 
     /**
-     * Holt das ZPL-II-Label eines Containers als raw byte-Stream.
+     * Holt die Label-Bytes eines Containers als raw byte-Stream.
      *
      * Pfad liegt unter `api/pda/containers/...` (nicht unter `api/admin/...`):
      * Die Middleware in services/retoure/src/middleware.ts blockt auf dem
      * pda.rma.-Host alle Pfade ausser denen unter api/pda/ und api/cron/
-     * mit HTTP 404. Wir haben deshalb zwei spiegel-gleiche Endpoints für
-     * Label-ZPL — einen für die Admin-UI und einen für uns.
+     * mit HTTP 404. Wir haben deshalb zwei spiegel-gleiche Endpoints —
+     * einen für die Admin-UI und einen für uns.
+     *
+     * `format` entscheidet welche Druckersprache der Server liefert:
+     *   "tspl" — TSC Printer Language (Default für Munbyn-Portables)
+     *   "zpl"  — Zebra Programming Language (echte Zebra-Drucker)
      *
      * Achtung beim Editieren: Asterisk-Slash-Sequenzen in KDoc lassen
      * Kotlin denken es seien nested block-comments — deshalb hier KEINE
      * Wildcards mit Slash-Stern schreiben.
      *
      * Body landet direkt in einem `BluetoothSocket.outputStream` → der
-     * Drucker druckt was zwischen `^XA` und `^XZ` steht.
+     * Drucker rendert was zwischen den Mode-Tokens steht.
      */
     @Streaming
     @GET("api/pda/containers/{containerId}/label-zpl")
     suspend fun getContainerLabelZpl(
         @Path("containerId") containerId: String,
+        @Query("format") format: String = "tspl",
     ): ResponseBody
 }

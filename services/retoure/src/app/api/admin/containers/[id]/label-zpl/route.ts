@@ -20,10 +20,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { checkPdaAuth } from "@/lib/pda-auth";
-import { palletLabelZpl } from "@/lib/label-print";
+import { palletLabelTspl, palletLabelZpl } from "@/lib/label-print";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+type LabelFormat = "zpl" | "tspl";
 
 async function isAuthorized(req: Request): Promise<boolean> {
   if (req.headers.get("authorization")) {
@@ -43,6 +45,12 @@ export async function GET(
   }
 
   const { id } = await ctx.params;
+  // `?format=zpl|tspl` (Default ZPL hier, weil der Admin-Download-Button
+  // traditionell ZPL liefert; PDA-App hängt explizit `?format=tspl` an).
+  const url = new URL(req.url);
+  const rawFormat = (url.searchParams.get("format") ?? "zpl").toLowerCase();
+  const format: LabelFormat = rawFormat === "tspl" ? "tspl" : "zpl";
+
   const container = await prisma.container.findUnique({
     where: { id },
     include: { supplier: { select: { name: true } } },
@@ -55,23 +63,26 @@ export async function GET(
   const partnerName =
     container.supplier?.name ?? container.partnerId ?? "(kein Lieferant)";
 
-  const zpl = palletLabelZpl({
+  const opts = {
     palletCode: container.code,
     partnerName,
     createdAt: container.openedAt,
     maxOpenUntil: container.maxOpenUntil ?? container.openedAt,
-  });
+  };
 
-  // ZPL ist ASCII/UTF-8 — wir liefern als `application/zpl` (de-facto-
-  // MIME, kein offizieller Eintrag) und stellen `inline` als
-  // Disposition, damit Browser den Text anzeigen statt einen Download
-  // zu erzwingen. Die PDA-App fragt sowieso mit Accept: application/zpl.
-  return new Response(zpl, {
+  const body = format === "zpl" ? palletLabelZpl(opts) : palletLabelTspl(opts);
+  const contentType =
+    format === "zpl"
+      ? "application/zpl; charset=utf-8"
+      : "application/tspl; charset=utf-8";
+  const ext = format === "zpl" ? "zpl" : "tspl";
+
+  return new Response(body, {
     status: 200,
     headers: {
-      "content-type": "application/zpl; charset=utf-8",
-      "content-length": String(Buffer.byteLength(zpl, "utf8")),
-      "content-disposition": `inline; filename="${container.code}.zpl"`,
+      "content-type": contentType,
+      "content-length": String(Buffer.byteLength(body, "utf8")),
+      "content-disposition": `inline; filename="${container.code}.${ext}"`,
       "cache-control": "no-store",
     },
   });

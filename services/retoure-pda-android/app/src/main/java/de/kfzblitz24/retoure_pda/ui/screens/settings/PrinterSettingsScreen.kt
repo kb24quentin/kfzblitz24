@@ -146,11 +146,50 @@ fun PrinterSettingsScreen(
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        "${p.transport.uppercase()} · ${p.address}",
+                        "${p.transport.uppercase()} · ${p.address} · Sprache: ${p.language.uppercase()}",
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace,
                     )
+
+                    // ── Sprache umschalten ZPL ↔ TSPL ──────────────────
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Druckersprache",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "Munbyn RW403B u. Ä. sprechen TSPL out-of-the-box. Echte Zebra-Drucker (oder per Tastatur-Kombo auf ZPL umgeschaltete Clones) brauchen ZPL.",
+                        color = Color.White.copy(alpha = 0.65f),
+                        fontSize = 11.sp,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            PrinterStore.LANGUAGE_TSPL to "TSPL",
+                            PrinterStore.LANGUAGE_ZPL to "ZPL",
+                        ).forEach { (langKey, langLabel) ->
+                            val isSelected = p.language.equals(langKey, ignoreCase = true)
+                            Button(
+                                onClick = {
+                                    printerStore.setLanguage(langKey)
+                                    current = printerStore.get()
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isSelected) Orange
+                                                     else Color.White.copy(alpha = 0.1f),
+                                    contentColor = Color.White,
+                                ),
+                            ) {
+                                Text(langLabel, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {

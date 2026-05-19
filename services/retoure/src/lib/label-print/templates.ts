@@ -24,6 +24,14 @@ import {
   mmToDots,
   text,
 } from "./zpl";
+import {
+  TSPL_LABEL_4x6_MM,
+  buildTspl,
+  tsplBar,
+  tsplBarcode128,
+  tsplLine,
+  tsplText,
+} from "./tspl";
 
 /** Doc-ID prefixes per CLAUDE.md §8 (RET-KB24 / SUP-KB24 / etc.). */
 const DOC_ID_PALLET = "PAL-KB24";
@@ -145,6 +153,100 @@ export function palletLabelZpl(opts: PalletLabelOptions): string {
   cmds.push(footerDocId(DOC_ID_PALLET, width, height, opts.createdAt));
 
   return buildZpl(cmds, width, height);
+}
+
+// ---------------------------------------------------------------------------
+// 1b) Pallet label — TSPL-Variante (Munbyn RW403B u. Ä.)
+// ---------------------------------------------------------------------------
+
+/**
+ * Spiegelt das Layout von `palletLabelZpl()` aber in TSPL-Syntax.
+ *
+ * Warum zwei Sprachen: Munbyn-Portable-Drucker (RW402B/RW403B/…) zeigen
+ * im Self-Test "PCL: ZPL or TSPL" — sie können beides, aber out-of-the-
+ * box ist TSPL aktiv. Wer ZPL erzwingen will muss am Drucker selber
+ * umschalten (Tastatur-Kombo oder Munbyn-Editor-Settings). Wir liefern
+ * deshalb beide Varianten und der PrinterStore weiss welche Sprache
+ * der gewählte Drucker spricht.
+ *
+ * Koordinaten in TSPL sind in Dots (gleiche Skala wie ZPL bei 203 DPI).
+ * Schrift-Slots:
+ *   "1" → 8×12 (klein)
+ *   "2" → 12×20
+ *   "3" → 16×24
+ *   "4" → 24×32
+ *   "5" → 32×48
+ * Skalierung darüber via xMultiplier/yMultiplier (1..10).
+ */
+export function palletLabelTspl(opts: PalletLabelOptions): string {
+  // Wir benutzen die gleiche Dots-Geometrie wie das ZPL-Label damit
+  // beide Drucker visuell vergleichbare Ergebnisse liefern.
+  const { width } = LABEL_4x6;
+  const margin = mmToDots(5);
+
+  const cmds: string[] = [];
+
+  // ── Header: kfzblitz24-Wortmark + Akzent-Balken ──────────────────
+  cmds.push(
+    tsplText(margin, margin, "kfzblitz24", {
+      font: "0", xMultiplier: 5, yMultiplier: 5,
+    }),
+    tsplBar(margin, margin + 80, 420, 8),
+  );
+
+  // ── Title ────────────────────────────────────────────────────────
+  cmds.push(
+    tsplText(margin, margin + 110, "PALETTE", {
+      font: "0", xMultiplier: 4, yMultiplier: 4,
+    }),
+  );
+
+  // ── Partner-Name (eine Zeile, die meisten Lieferanten passen rein) ──
+  // TSPL hat kein direktes "field block"-Equivalent; bei zu langem
+  // Namen wird abgeschnitten. Wenn das öfter passiert, splitten wir
+  // den String hier per JS.
+  cmds.push(
+    tsplText(margin, margin + 180, opts.partnerName, {
+      font: "0", xMultiplier: 3, yMultiplier: 3,
+    }),
+  );
+
+  // ── Barcode (Code-128) ───────────────────────────────────────────
+  const barcodeY = margin + 290;
+  cmds.push(tsplBarcode128(margin, barcodeY, opts.palletCode, 140));
+  cmds.push(
+    tsplText(margin, barcodeY + 170, opts.palletCode, {
+      font: "0", xMultiplier: 3, yMultiplier: 3,
+    }),
+  );
+
+  // ── Trennlinie ───────────────────────────────────────────────────
+  const sepY = barcodeY + 220;
+  cmds.push(tsplLine(margin, sepY, width - margin, sepY, 3));
+
+  // ── Datum-Block ─────────────────────────────────────────────────
+  cmds.push(
+    tsplText(margin, sepY + 20, "Geoeffnet:", { font: "3" }),
+    tsplText(margin + 220, sepY + 20, fmtDateTime(opts.createdAt), { font: "3" }),
+    tsplText(margin, sepY + 60, "Max. offen bis:", { font: "3" }),
+    tsplText(margin + 220, sepY + 60, fmtDateTime(opts.maxOpenUntil), {
+      font: "0", xMultiplier: 2, yMultiplier: 2,
+    }),
+  );
+
+  // ── Footer-Doc-ID ────────────────────────────────────────────────
+  // In TSPL nehmen wir keinen rotierten Footer (Komplexität nicht wert
+  // bei einem Subset-fähigen Portable). Stattdessen klein unten links.
+  const stamp = fmtDate(opts.createdAt);
+  cmds.push(
+    tsplText(margin, sepY + 130, `${DOC_ID_PALLET} · ${stamp}`, { font: "1" }),
+  );
+
+  return buildTspl(
+    cmds,
+    TSPL_LABEL_4x6_MM.widthMm,
+    TSPL_LABEL_4x6_MM.heightMm,
+  );
 }
 
 // ---------------------------------------------------------------------------

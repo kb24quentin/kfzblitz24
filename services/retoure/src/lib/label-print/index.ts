@@ -18,5 +18,6 @@
  */
 
 export * from "./zpl";
+export * from "./tspl";
 export * from "./print";
 export * from "./templates";

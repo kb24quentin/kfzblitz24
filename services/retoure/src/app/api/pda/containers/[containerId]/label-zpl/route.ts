@@ -13,10 +13,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkPdaAuth } from "@/lib/pda-auth";
-import { palletLabelZpl } from "@/lib/label-print";
+import { palletLabelTspl, palletLabelZpl } from "@/lib/label-print";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/**
+ * `format`-Query-Param entscheidet welche Sprache:
+ *   zpl  — Zebra Programming Language (echte Zebra-Drucker)
+ *   tspl — TSC Printer Language (Munbyn-Portables im Default-Mode)
+ * Default fällt auf `tspl` weil unsere ersten Drucker (Munbyn RW403B)
+ * out-of-the-box TSPL sprechen.
+ */
+type LabelFormat = "zpl" | "tspl";
 
 export async function GET(
   req: Request,
@@ -34,6 +43,11 @@ export async function GET(
   }
 
   const { containerId } = await ctx.params;
+  const url = new URL(req.url);
+  const rawFormat = (url.searchParams.get("format") ?? "tspl").toLowerCase();
+  const format: LabelFormat =
+    rawFormat === "zpl" ? "zpl" : "tspl"; // alles andere → tspl
+
   const container = await prisma.container.findUnique({
     where: { id: containerId },
     include: { supplier: { select: { name: true } } },
@@ -46,19 +60,26 @@ export async function GET(
   const partnerName =
     container.supplier?.name ?? container.partnerId ?? "(kein Lieferant)";
 
-  const zpl = palletLabelZpl({
+  const opts = {
     palletCode: container.code,
     partnerName,
     createdAt: container.openedAt,
     maxOpenUntil: container.maxOpenUntil ?? container.openedAt,
-  });
+  };
 
-  return new Response(zpl, {
+  const body = format === "zpl" ? palletLabelZpl(opts) : palletLabelTspl(opts);
+  const contentType =
+    format === "zpl"
+      ? "application/zpl; charset=utf-8"
+      : "application/tspl; charset=utf-8";
+  const ext = format === "zpl" ? "zpl" : "tspl";
+
+  return new Response(body, {
     status: 200,
     headers: {
-      "content-type": "application/zpl; charset=utf-8",
-      "content-length": String(Buffer.byteLength(zpl, "utf8")),
-      "content-disposition": `inline; filename="${container.code}.zpl"`,
+      "content-type": contentType,
+      "content-length": String(Buffer.byteLength(body, "utf8")),
+      "content-disposition": `inline; filename="${container.code}.${ext}"`,
       "cache-control": "no-store",
     },
   });

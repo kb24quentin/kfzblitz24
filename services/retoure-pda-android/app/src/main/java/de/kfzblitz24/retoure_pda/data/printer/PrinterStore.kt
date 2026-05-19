@@ -28,9 +28,17 @@ class PrinterStore(context: Context) {
         private const val KEY_TRANSPORT   = "printer_transport"
         private const val KEY_ADDRESS     = "printer_address"
         private const val KEY_NAME        = "printer_name"
+        private const val KEY_LANGUAGE    = "printer_language"
 
         const val TRANSPORT_BLUETOOTH = "bluetooth"
         const val TRANSPORT_WIFI      = "wifi"
+
+        /** TSPL — Default für Munbyn-Portables. */
+        const val LANGUAGE_TSPL = "tspl"
+        /** ZPL — echte Zebra-Drucker oder Subset-Drucker im ZPL-Mode. */
+        const val LANGUAGE_ZPL  = "zpl"
+
+        const val DEFAULT_LANGUAGE = LANGUAGE_TSPL
     }
 
     private val prefs: SharedPreferences = run {
@@ -50,6 +58,11 @@ class PrinterStore(context: Context) {
         val transport: String,
         val address: String,
         val name: String,
+        /**
+         * Druckersprache. "tspl" oder "zpl". TSPL ist Default weil
+         * Munbyn-Portable-Drucker out-of-the-box TSPL sprechen.
+         */
+        val language: String = DEFAULT_LANGUAGE,
     )
 
     /** Gibt den gespeicherten Default-Drucker zurück, oder null wenn keiner gesetzt. */
@@ -57,7 +70,8 @@ class PrinterStore(context: Context) {
         val t = prefs.getString(KEY_TRANSPORT, null) ?: return null
         val a = prefs.getString(KEY_ADDRESS, null) ?: return null
         val n = prefs.getString(KEY_NAME, null) ?: a
-        return SavedPrinter(transport = t, address = a, name = n)
+        val l = prefs.getString(KEY_LANGUAGE, null) ?: DEFAULT_LANGUAGE
+        return SavedPrinter(transport = t, address = a, name = n, language = l)
     }
 
     fun save(printer: SavedPrinter) {
@@ -65,7 +79,13 @@ class PrinterStore(context: Context) {
             .putString(KEY_TRANSPORT, printer.transport)
             .putString(KEY_ADDRESS, printer.address)
             .putString(KEY_NAME, printer.name)
+            .putString(KEY_LANGUAGE, printer.language)
             .apply()
+    }
+
+    /** Druckersprache einzeln updaten, ohne den ganzen Eintrag neu zu speichern. */
+    fun setLanguage(language: String) {
+        prefs.edit().putString(KEY_LANGUAGE, language).apply()
     }
 
     fun clear() {
@@ -73,6 +93,7 @@ class PrinterStore(context: Context) {
             .remove(KEY_TRANSPORT)
             .remove(KEY_ADDRESS)
             .remove(KEY_NAME)
+            .remove(KEY_LANGUAGE)
             .apply()
     }
 
