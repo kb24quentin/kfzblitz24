@@ -623,7 +623,7 @@ function AssessStep({
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         rows={2}
-        placeholder="Begründung (optional, z. B. „OVP beschädigt")"
+        placeholder="Begründung (optional, z. B. „OVP beschädigt“)"
         className="w-full px-3 py-3 bg-white/10 border border-white/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ff6600]/60"
       />
 
