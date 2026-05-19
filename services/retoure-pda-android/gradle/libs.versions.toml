@@ -9,7 +9,12 @@ navigationCompose = "2.8.5"
 retrofit = "2.11.0"
 okhttp = "4.12.0"
 kotlinxSerialization = "1.7.3"
-retrofitKotlinxSerializationConverter = "1.0.0"
+# Offizieller Retrofit-Converter (seit 2.10 in Square selbst enthalten).
+# Frühere Wahl `com.jakewharton.retrofit:retrofit2-kotlinx-serialization-
+# converter:1.0.0` hatte Package-Auflösungs-Probleme bei manchen Gradle-
+# Setups — der offizielle bringt das gleiche `asConverterFactory` im
+# Paket `retrofit2.converter.kotlinx.serialization`.
+retrofitKotlinxSerializationConverter = "2.11.0"
 coil = "2.7.0"
 cameraX = "1.4.1"
 mlkitBarcodeScanning = "18.3.1"
@@ -31,7 +36,7 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 # Networking
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
-retrofit-kotlinx-serialization = { group = "com.jakewharton.retrofit", name = "retrofit2-kotlinx-serialization-converter", version.ref = "retrofitKotlinxSerializationConverter" }
+retrofit-kotlinx-serialization = { group = "com.squareup.retrofit2", name = "converter-kotlinx-serialization", version.ref = "retrofitKotlinxSerializationConverter" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 # Image loading
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
