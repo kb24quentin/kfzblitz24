@@ -1,9 +1,33 @@
 "use client";
 
+/**
+ * PDA Case-Wizard.
+ *
+ * Step-by-Step-Workflow statt Alles-auf-einmal. Welcher Step gerade
+ * dran ist, leitet sich aus den Case-/Item-Statuses ab — Reload landet
+ * immer am richtigen Punkt.
+ *
+ * Phases:
+ *   receive   — Case noch nicht angenommen → "Paket entgegennehmen"
+ *   scan      — registered/extra Items mit status=pending → Scanner-Eingabe
+ *   assess    — Items mit status=received → ein Item nach dem anderen bewerten
+ *   palette   — Items mit status=assessed UND verdict ∈ {green, yellow}
+ *               → Supplier wählen + Container scannen/anlegen
+ *   done      — alles durch → Summary + "Kundenmail senden"
+ *
+ * Items mit verdict=red bleiben "assessed" und gehen NICHT auf eine
+ * Palette (kein Lieferant nimmt sie zurück). Der Mitarbeiter klärt das
+ * mit dem Kunden ab — Finalize-Mail listet sie als nicht-erstattbar.
+ */
+
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { use } from "react";
 import { api, getPdaId } from "../../pda-client";
+
+// ───────────────────────────────────────────────────────────────────────
+// Types
+// ───────────────────────────────────────────────────────────────────────
 
 interface PdaItem {
   id: string;
@@ -17,11 +41,12 @@ interface PdaItem {
   einzelpreis_brutto: number | null;
   gesamtpreis_brutto: number | null;
   einzelgewicht_g: number | null;
-  /** Vom Container vererbt sobald Item auf Palette liegt. */
   supplierId?: string | null;
   supplierName?: string | null;
+  containerId?: string | null;
   containerCode?: string | null;
   verdict?: "green" | "yellow" | "red" | null;
+  photoCount?: number;
 }
 
 interface CaseDetail {
@@ -55,6 +80,47 @@ interface OpenContainer {
   items: { id: string }[];
 }
 
+type Step = "receive" | "scan" | "assess" | "palette" | "done";
+
+// ───────────────────────────────────────────────────────────────────────
+// State-Maschine: aus Case-Daten den aktuellen Schritt ableiten.
+// ───────────────────────────────────────────────────────────────────────
+function deriveStep(c: CaseDetail): Step {
+  if (!c.partnerReceivedAt) return "receive";
+  if (c.items.some((it) => it.status === "pending")) return "scan";
+  if (
+    c.items.some(
+      (it) => it.status === "received" || it.status === "photographed",
+    )
+  ) {
+    return "assess";
+  }
+  if (
+    c.items.some(
+      (it) => it.status === "assessed" && it.verdict !== "red",
+    )
+  ) {
+    return "palette";
+  }
+  return "done";
+}
+
+function stepLabel(s: Step): string {
+  return {
+    receive: "Eingang",
+    scan: "Scannen",
+    assess: "Bewerten",
+    palette: "Palette",
+    done: "Fertig",
+  }[s];
+}
+
+const STEPS: Step[] = ["receive", "scan", "assess", "palette", "done"];
+
+// ───────────────────────────────────────────────────────────────────────
+// Root
+// ───────────────────────────────────────────────────────────────────────
+
 export default function CasePdaDetailPage({
   params,
 }: {
@@ -65,25 +131,7 @@ export default function CasePdaDetailPage({
   const [c, setCase] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionBusy, setActionBusy] = useState<string | null>(null);
-
-  // Inline-Picker-State: welches Item, welcher Supplier, welche Container
-  const [pickerItemId, setPickerItemId] = useState<string | null>(null);
-  const [pickerSupplierId, setPickerSupplierId] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [openContainers, setOpenContainers] = useState<OpenContainer[]>([]);
-  const [pickerError, setPickerError] = useState<string | null>(null);
-  const [pickerLoading, setPickerLoading] = useState(false);
-
-  // Scan-to-Receive: oben auf der Page ein autofocused Input. Mitarbeiter
-  // scannt Artikelnummer mit Q900 → Item wird automatisch als received
-  // markiert. Funktioniert sobald Case `partnerReceivedAt` hat.
-  const [scanInput, setScanInput] = useState("");
-  const [scanFeedback, setScanFeedback] = useState<{
-    kind: "ok" | "miss" | "err";
-    msg: string;
-  } | null>(null);
-  const scanInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -101,212 +149,22 @@ export default function CasePdaDetailPage({
     load();
   }, [load]);
 
-  // Suppliers cachen — werden bei jedem geöffneten Picker gebraucht.
   useEffect(() => {
     if (suppliers.length > 0) return;
     api<{ suppliers: Supplier[] }>("/api/pda/suppliers")
       .then((r) => setSuppliers(r.suppliers))
-      .catch((e) => {
-        console.warn("[case-detail] suppliers load failed:", e);
+      .catch(() => {
+        /* still works without — picker zeigt dann Fehler */
       });
   }, [suppliers.length]);
 
-  const onReceive = async () => {
-    setActionBusy("receive");
-    try {
-      await api(`/api/pda/cases/${id}/receive`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pdaId: getPdaId() }),
-      });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  const onScanItem = async (itemId: string, present: boolean) => {
-    setActionBusy(`scan-${itemId}-${present}`);
-    try {
-      await api(`/api/pda/cases/${id}/items/${itemId}/scan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ present, pdaId: getPdaId() }),
-      });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  /**
-   * Scan-to-Receive: Mitarbeiter scannt eine Artikelnummer (Q900 tippt
-   * sie ins Input + Enter), wir matchen gegen die items[] des Cases und
-   * markieren das passende Item als received.
-   *
-   * Match-Strategie:
-   *   - Exakter Artikelnummer-Match (case-insensitive, trim)
-   *   - Wenn mehrere Items mit gleicher Artikelnummer existieren:
-   *     erstes ungescanntes nehmen (status === "pending")
-   *   - Kein Match → kurze rote Feedback-Toast, Input bleibt focused
-   */
-  const onScanBarcode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const raw = scanInput.trim();
-    if (!raw) return;
-    const norm = raw.toLowerCase();
-    setScanFeedback(null);
-
-    const candidates = (c?.items ?? []).filter(
-      (it) => (it.artikelnummer ?? "").toLowerCase() === norm,
-    );
-    const target =
-      candidates.find((it) => it.status === "pending") ?? candidates[0];
-
-    if (!target) {
-      setScanFeedback({
-        kind: "miss",
-        msg: `Kein Artikel mit Nummer "${raw}" in diesem Case.`,
-      });
-      setScanInput("");
-      scanInputRef.current?.focus();
-      return;
-    }
-    if (target.status === "received") {
-      setScanFeedback({
-        kind: "ok",
-        msg: `✓ Bereits erfasst: ${target.beschreibung ?? raw}`,
-      });
-      setScanInput("");
-      scanInputRef.current?.focus();
-      return;
-    }
-    // ✓Da-Klick programmatisch ausführen
-    setScanInput("");
-    try {
-      await onScanItem(target.id, true);
-      setScanFeedback({
-        kind: "ok",
-        msg: `✓ ${target.beschreibung ?? raw} erfasst`,
-      });
-    } catch (err) {
-      setScanFeedback({
-        kind: "err",
-        msg: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      scanInputRef.current?.focus();
-    }
-  };
-
-  /**
-   * Öffnet die Inline-Auswahl "Auf Palette legen" für ein Item.
-   * Wenn das Item schon eine Supplier-Vorbelegung hat (z. B. weil vorher
-   * auf eine Palette gelegt und dort wieder runtergenommen), nutzen wir
-   * die direkt. Sonst muss der Mitarbeiter erst den Supplier wählen.
-   */
-  const openPicker = (item: PdaItem) => {
-    setPickerError(null);
-    setPickerItemId(item.id);
-    if (item.supplierId) {
-      setPickerSupplierId(item.supplierId);
-      void loadOpenContainers(item.supplierId);
-    } else {
-      setPickerSupplierId(null);
-      setOpenContainers([]);
-    }
-  };
-
-  const closePicker = () => {
-    setPickerItemId(null);
-    setPickerSupplierId(null);
-    setOpenContainers([]);
-    setPickerError(null);
-  };
-
-  const loadOpenContainers = async (supplierId: string) => {
-    setPickerLoading(true);
-    setPickerError(null);
-    try {
-      const r = await api<{ containers: OpenContainer[] }>(
-        `/api/pda/containers?status=open&supplierId=${encodeURIComponent(supplierId)}&limit=20`,
-      );
-      setOpenContainers(r.containers);
-    } catch (err) {
-      setPickerError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setPickerLoading(false);
-    }
-  };
-
-  const chooseSupplier = (supplierId: string) => {
-    setPickerSupplierId(supplierId);
-    void loadOpenContainers(supplierId);
-  };
-
-  /** Item auf existierenden offenen Container legen. */
-  const linkToContainer = async (containerId: string) => {
-    if (!pickerItemId) return;
-    setActionBusy(`link-${pickerItemId}`);
-    setPickerError(null);
-    try {
-      await api(`/api/pda/containers/${containerId}/items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId: pickerItemId, actor: getPdaId() }),
-      });
-      closePicker();
-      await load();
-    } catch (err) {
-      setPickerError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  /** Neue Palette für den gewählten Supplier anlegen + Item direkt drauflegen. */
-  const createPaletteAndLink = async () => {
-    if (!pickerItemId || !pickerSupplierId) return;
-    setActionBusy(`new-${pickerItemId}`);
-    setPickerError(null);
-    try {
-      const r = await api<{ container: { id: string; code: string } }>(
-        "/api/pda/containers",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "palette",
-            supplierId: pickerSupplierId,
-            createdByPda: getPdaId(),
-          }),
-        },
-      );
-      // Direkt drauflegen
-      await api(`/api/pda/containers/${r.container.id}/items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId: pickerItemId, actor: getPdaId() }),
-      });
-      closePicker();
-      await load();
-    } catch (err) {
-      setPickerError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  if (loading) return <p className="text-white/60 mt-8 text-center">Lade…</p>;
-  if (error)
+  if (loading)
+    return <p className="text-white/60 mt-8 text-center">Lade…</p>;
+  if (error || !c)
     return (
       <div className="space-y-3 mt-4">
         <div className="bg-red-500/20 border border-red-400/40 text-red-100 rounded-lg p-3 text-sm">
-          {error}
+          {error ?? "Nicht gefunden"}
         </div>
         <button
           onClick={() => router.push("/pda-app")}
@@ -316,8 +174,8 @@ export default function CasePdaDetailPage({
         </button>
       </div>
     );
-  if (!c) return null;
 
+  const step = deriveStep(c);
   const customer =
     [c.customer.anrede, c.customer.vorname, c.customer.name]
       .filter(Boolean)
@@ -325,327 +183,635 @@ export default function CasePdaDetailPage({
 
   return (
     <div className="space-y-4">
-      <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-        <p className="text-xs text-white/60 uppercase tracking-wider">Retoure</p>
-        <p className="font-mono text-lg font-bold mt-1">{c.bestellnummer}</p>
-        <p className="text-sm text-white/80 mt-2">{customer}</p>
-        <p className="text-xs text-white/50">
+      {/* Header — kompakt, Kunden-Info auf einen Blick */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+        <p className="font-mono text-base font-bold">{c.bestellnummer}</p>
+        <p className="text-xs text-white/60">
+          {customer} ·{" "}
           {[c.customer.plz, c.customer.ort].filter(Boolean).join(" ")}
         </p>
       </div>
 
-      <div className="flex items-center gap-2 text-xs">
-        <StatusChip>{c.status}</StatusChip>
-        {c.carrierDeliveredAt && (
-          <span className="text-white/50">
-            DHL-Eingang: {new Date(c.carrierDeliveredAt).toLocaleDateString("de-DE")}
-          </span>
-        )}
-      </div>
+      {/* Progress-Bar */}
+      <StepProgress current={step} />
 
-      {!c.partnerReceivedAt && (
-        <button
-          onClick={onReceive}
-          disabled={actionBusy === "receive"}
-          className="w-full bg-[#ff6600] text-white font-semibold py-4 rounded-xl text-lg active:bg-[#ff7a26] disabled:opacity-40"
-        >
-          {actionBusy === "receive" ? "…" : "Paket angenommen"}
-        </button>
+      {/* Body — Schritt-spezifisch */}
+      {step === "receive" && <ReceiveStep caseId={id} onDone={load} />}
+      {step === "scan" && (
+        <ScanStep caseId={id} c={c} onChange={load} />
       )}
-      {c.partnerReceivedAt && (
-        <div className="bg-green-500/20 border border-green-400/40 text-green-100 rounded-lg p-3 text-sm">
-          ✓ Eingang erfasst — {new Date(c.partnerReceivedAt).toLocaleString("de-DE")}
-        </div>
+      {step === "assess" && (
+        <AssessStep caseId={id} c={c} onChange={load} />
+      )}
+      {step === "palette" && (
+        <PaletteStep
+          caseId={id}
+          c={c}
+          suppliers={suppliers}
+          onChange={load}
+        />
+      )}
+      {step === "done" && (
+        <DoneStep caseId={id} c={c} onChange={load} />
       )}
 
-      {/* Scan-to-Receive: sobald Case received ist, hier oben scannen. */}
-      {c.partnerReceivedAt && c.items.some((it) => it.status === "pending") && (
-        <form onSubmit={onScanBarcode} className="space-y-2">
-          <label className="block text-xs uppercase tracking-wider text-white/60">
-            Artikel scannen
-          </label>
-          <input
-            ref={scanInputRef}
-            type="text"
-            inputMode="text"
-            autoFocus
-            autoComplete="off"
-            value={scanInput}
-            onChange={(e) => setScanInput(e.target.value)}
-            placeholder="Artikelnummer mit Q900 scannen…"
-            className="w-full px-4 py-3 bg-white/10 border-2 border-[#ff6600]/50 rounded-xl text-base font-mono focus:outline-none focus:ring-2 focus:ring-[#ff6600]"
-          />
-          {scanFeedback && (
+      {/* Footer — Notausgang */}
+      <a
+        href="/pda-app"
+        className="block text-center text-xs text-white/40 underline pt-4"
+      >
+        Abbrechen / zurück zur Startseite
+      </a>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Progress-Indikator
+// ───────────────────────────────────────────────────────────────────────
+
+function StepProgress({ current }: { current: Step }) {
+  const currentIdx = STEPS.indexOf(current);
+  return (
+    <ol className="flex items-center gap-1 text-[10px] uppercase tracking-wider">
+      {STEPS.map((s, i) => {
+        const active = i === currentIdx;
+        const done = i < currentIdx;
+        return (
+          <li key={s} className="flex-1">
             <div
-              className={`text-xs rounded-lg p-2 ${
-                scanFeedback.kind === "ok"
-                  ? "bg-green-500/20 text-green-100 border border-green-400/40"
-                  : scanFeedback.kind === "miss"
-                    ? "bg-yellow-500/20 text-yellow-100 border border-yellow-400/40"
-                    : "bg-red-500/20 text-red-100 border border-red-400/40"
+              className={`text-center py-1.5 rounded-md font-semibold ${
+                active
+                  ? "bg-[#ff6600] text-white"
+                  : done
+                    ? "bg-green-500/30 text-green-100"
+                    : "bg-white/5 text-white/40"
               }`}
             >
-              {scanFeedback.msg}
+              {i + 1}. {stepLabel(s)}
             </div>
-          )}
-        </form>
-      )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-white/80 uppercase tracking-wider">
-          Artikel ({c.items.length})
-        </h2>
-        {c.items.map((it) => (
-          <div key={it.id} className="space-y-2">
-            <ItemRow
-              item={it}
-              busy={
-                (actionBusy?.startsWith(`scan-${it.id}-`) ?? false) ||
-                actionBusy === `link-${it.id}` ||
-                actionBusy === `new-${it.id}`
-              }
-              onScan={(present) => onScanItem(it.id, present)}
-              onPickContainer={() => openPicker(it)}
-              caseId={id}
-            />
-            {pickerItemId === it.id && (
-              <PalettePicker
-                item={it}
-                suppliers={suppliers}
-                supplierId={pickerSupplierId}
-                openContainers={openContainers}
-                loading={pickerLoading}
-                busy={
-                  actionBusy === `link-${it.id}` || actionBusy === `new-${it.id}`
-                }
-                error={pickerError}
-                onChooseSupplier={chooseSupplier}
-                onLinkToContainer={linkToContainer}
-                onCreatePaletteAndLink={createPaletteAndLink}
-                onClose={closePicker}
-              />
-            )}
+// ───────────────────────────────────────────────────────────────────────
+// Step 1: Receive
+// ───────────────────────────────────────────────────────────────────────
+
+function ReceiveStep({
+  caseId,
+  onDone,
+}: {
+  caseId: string;
+  onDone: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const onReceive = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/pda/cases/${caseId}/receive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdaId: getPdaId() }),
+      });
+      await onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="text-center pt-6">
+        <div className="text-5xl">📦</div>
+        <h1 className="text-xl font-bold mt-2">Paket entgegennehmen?</h1>
+        <p className="text-sm text-white/60 mt-1">
+          Bestätige mit dem Button, dass das Paket im Lager angekommen ist.
+        </p>
+      </div>
+
+      <button
+        onClick={onReceive}
+        disabled={busy}
+        className="w-full bg-[#ff6600] text-white font-bold py-5 rounded-xl text-lg active:bg-[#ff7a26] disabled:opacity-40"
+      >
+        {busy ? "…" : "✓ Paket angenommen"}
+      </button>
+
+      {err && (
+        <div className="bg-red-500/20 border border-red-400/40 text-red-100 rounded-lg p-3 text-sm">
+          {err}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Step 2: Scan — alle Items abscannen oder als "fehlt" markieren
+// ───────────────────────────────────────────────────────────────────────
+
+function ScanStep({
+  caseId,
+  c,
+  onChange,
+}: {
+  caseId: string;
+  c: CaseDetail;
+  onChange: () => void | Promise<void>;
+}) {
+  const [input, setInput] = useState("");
+  const [feedback, setFeedback] = useState<{
+    kind: "ok" | "miss" | "err";
+    msg: string;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const pending = c.items.filter((it) => it.status === "pending");
+  const total = c.items.length;
+  const erfasst = c.items.filter(
+    (it) => it.status !== "pending" && it.status !== "missing",
+  ).length;
+
+  const onScan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const raw = input.trim();
+    if (!raw) return;
+    const norm = raw.toLowerCase();
+    setFeedback(null);
+
+    const candidates = c.items.filter(
+      (it) => (it.artikelnummer ?? "").toLowerCase() === norm,
+    );
+    const target =
+      candidates.find((it) => it.status === "pending") ?? candidates[0];
+
+    if (!target) {
+      setFeedback({
+        kind: "miss",
+        msg: `Kein Artikel mit Nummer "${raw}" in diesem Case.`,
+      });
+      setInput("");
+      inputRef.current?.focus();
+      return;
+    }
+    if (target.status === "received") {
+      setFeedback({
+        kind: "ok",
+        msg: `Bereits erfasst: ${target.beschreibung ?? raw}`,
+      });
+      setInput("");
+      inputRef.current?.focus();
+      return;
+    }
+    setInput("");
+    setBusy(true);
+    try {
+      await api(`/api/pda/cases/${caseId}/items/${target.id}/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ present: true, pdaId: getPdaId() }),
+      });
+      await onChange();
+      setFeedback({
+        kind: "ok",
+        msg: `✓ ${target.beschreibung ?? raw} erfasst`,
+      });
+    } catch (e) {
+      setFeedback({
+        kind: "err",
+        msg: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const markMissing = async (itemId: string) => {
+    setBusy(true);
+    try {
+      await api(`/api/pda/cases/${caseId}/items/${itemId}/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ present: false, pdaId: getPdaId() }),
+      });
+      await onChange();
+    } finally {
+      setBusy(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-bold">Artikel scannen</h1>
+        <p className="text-sm text-white/60 mt-1">
+          {erfasst} von {total} erfasst · noch {pending.length} offen
+        </p>
+      </div>
+
+      <form onSubmit={onScan} className="space-y-2">
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="text"
+          autoFocus
+          autoComplete="off"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Artikelnummer scannen…"
+          disabled={busy}
+          className="w-full px-4 py-4 bg-white/10 border-2 border-[#ff6600]/50 rounded-xl text-lg font-mono focus:outline-none focus:ring-2 focus:ring-[#ff6600] disabled:opacity-40"
+        />
+        {feedback && (
+          <div
+            className={`text-sm rounded-lg p-2 ${
+              feedback.kind === "ok"
+                ? "bg-green-500/20 text-green-100 border border-green-400/40"
+                : feedback.kind === "miss"
+                  ? "bg-yellow-500/20 text-yellow-100 border border-yellow-400/40"
+                  : "bg-red-500/20 text-red-100 border border-red-400/40"
+            }`}
+          >
+            {feedback.msg}
+          </div>
+        )}
+      </form>
+
+      {/* Offene Items — können als "fehlt" markiert werden */}
+      <div className="space-y-2 pt-2">
+        <p className="text-xs uppercase tracking-wider text-white/50">
+          Erwartet ({pending.length})
+        </p>
+        {pending.map((it) => (
+          <div
+            key={it.id}
+            className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-start justify-between gap-2"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">
+                {it.menge}× {it.beschreibung ?? "—"}
+              </p>
+              <p className="text-xs text-white/60 mt-0.5 font-mono">
+                {it.artikelnummer}
+              </p>
+            </div>
+            <button
+              onClick={() => markMissing(it.id)}
+              disabled={busy}
+              className="bg-red-600/30 text-red-100 text-xs font-semibold py-1.5 px-3 rounded-lg active:bg-red-600/50 disabled:opacity-40 shrink-0"
+            >
+              fehlt
+            </button>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-2 gap-2 pt-2">
         <a
-          href={`/pda-app/cases/${id}/extra`}
-          className="bg-white/10 text-white text-center text-sm font-medium py-3 rounded-xl active:bg-white/20"
+          href={`/pda-app/cases/${caseId}/extra`}
+          className="bg-white/10 text-white text-center text-xs font-medium py-3 rounded-xl active:bg-white/20"
         >
           + Extra-Artikel
         </a>
-        <a
-          href={`/pda-app/cases/${id}/photos`}
-          className="bg-white/10 text-white text-center text-sm font-medium py-3 rounded-xl active:bg-white/20"
+        <button
+          onClick={onChange}
+          disabled={busy}
+          className="bg-white/5 text-white/70 text-center text-xs font-medium py-3 rounded-xl active:bg-white/10 disabled:opacity-40"
         >
-          📷 Fotos
-        </a>
+          ↻ Aktualisieren
+        </button>
       </div>
-
-      <a
-        href="/pda-app"
-        className="block text-center text-xs text-white/60 underline pt-4"
-      >
-        Neue Annahme
-      </a>
     </div>
   );
 }
 
-function StatusChip({ children }: { children: React.ReactNode }) {
+// ───────────────────────────────────────────────────────────────────────
+// Step 3: Assess — pro Item: Fotos + Bewertung
+// ───────────────────────────────────────────────────────────────────────
+
+function AssessStep({
+  caseId,
+  c,
+  onChange,
+}: {
+  caseId: string;
+  c: CaseDetail;
+  onChange: () => void | Promise<void>;
+}) {
+  const queue = c.items.filter(
+    (it) => it.status === "received" || it.status === "photographed",
+  );
+  const current = queue[0];
+  const completed = c.items.filter(
+    (it) => it.status === "assessed" || it.status === "on_pallet",
+  ).length;
+  const totalToAssess = queue.length + completed;
+
+  const [score, setScore] = useState(85);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Beim Item-Wechsel: Slider zurücksetzen
+  useEffect(() => {
+    setScore(85);
+    setReason("");
+    setErr(null);
+  }, [current?.id]);
+
+  if (!current) {
+    return (
+      <div className="text-white/60 text-sm">
+        Kein Artikel zu bewerten — weiter zum nächsten Schritt.
+      </div>
+    );
+  }
+
+  const verdictLabel =
+    score >= 85
+      ? "GRÜN — Ware OK, Erstattung freigeben"
+      : score >= 50
+        ? "GELB — Hersteller-Prüfung nötig"
+        : "ROT — Ware kann nicht zurückgenommen werden";
+  const verdictColor =
+    score >= 85 ? "bg-green-500" : score >= 50 ? "bg-yellow-500" : "bg-red-500";
+
+  const onSave = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/pda/cases/${caseId}/items/${current.id}/assess`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeScore: score,
+          verdictReason: reason.trim() || undefined,
+          pdaId: getPdaId(),
+        }),
+      });
+      await onChange();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <span className="bg-white/10 text-white text-xs font-semibold rounded-full px-2 py-0.5">
-      {children}
-    </span>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-bold">Artikel bewerten</h1>
+        <p className="text-sm text-white/60 mt-1">
+          {completed + 1} von {totalToAssess}
+        </p>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+        <p className="font-semibold text-white text-sm">
+          {current.menge}× {current.beschreibung ?? "—"}
+        </p>
+        <p className="text-xs text-white/60 mt-0.5 font-mono">
+          {[current.artikelnummer, current.hersteller].filter(Boolean).join(" · ")}
+        </p>
+        {current.grund && (
+          <p className="text-xs text-white/50 mt-1">
+            Retoure-Grund: {current.grund}
+          </p>
+        )}
+        <div className="mt-2 flex items-center gap-2">
+          <a
+            href={`/pda-app/cases/${caseId}/items/${current.id}/photos`}
+            className="inline-flex items-center gap-1 bg-white/10 text-white text-xs font-medium py-1.5 px-3 rounded-lg active:bg-white/20"
+          >
+            📷 Fotos ({current.photoCount ?? 0})
+          </a>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div
+          className={`${verdictColor} text-white text-center font-bold py-3 rounded-xl text-lg`}
+        >
+          {score}/100
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={score}
+          onChange={(e) => setScore(parseInt(e.target.value))}
+          className="w-full h-3 accent-[#ff6600]"
+        />
+        <div className="text-center text-sm text-white/80">
+          {verdictLabel}
+        </div>
+      </div>
+
+      <textarea
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        rows={2}
+        placeholder="Begründung (optional, z. B. „OVP beschädigt")"
+        className="w-full px-3 py-3 bg-white/10 border border-white/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ff6600]/60"
+      />
+
+      <button
+        onClick={onSave}
+        disabled={busy}
+        className="w-full bg-[#ff6600] text-white font-bold py-4 rounded-xl text-lg active:bg-[#ff7a26] disabled:opacity-40"
+      >
+        {busy ? "Speichere…" : "Speichern + weiter"}
+      </button>
+
+      {err && (
+        <div className="bg-red-500/20 border border-red-400/40 text-red-100 rounded-lg p-3 text-sm">
+          {err}
+        </div>
+      )}
+    </div>
   );
 }
 
-function ItemRow({
-  item,
-  busy,
-  onScan,
-  onPickContainer,
+// ───────────────────────────────────────────────────────────────────────
+// Step 4: Palette — pro Item: Supplier + Container picken oder neu anlegen
+// ───────────────────────────────────────────────────────────────────────
+
+function PaletteStep({
   caseId,
+  c,
+  suppliers,
+  onChange,
 }: {
-  item: PdaItem;
-  busy: boolean;
-  onScan: (present: boolean) => void;
-  onPickContainer: () => void;
   caseId: string;
+  c: CaseDetail;
+  suppliers: Supplier[];
+  onChange: () => void | Promise<void>;
 }) {
-  const isReceived = item.status === "received";
-  const isAssessed = item.status === "assessed";
-  const isOnPallet = item.status === "on_pallet";
-  const isMissing = item.status === "missing";
+  const queue = c.items.filter(
+    (it) => it.status === "assessed" && it.verdict !== "red",
+  );
+  const current = queue[0];
+  const completed = c.items.filter((it) => it.status === "on_pallet").length;
+  const totalToPalettize = queue.length + completed;
+
+  const [supplierId, setSupplierId] = useState<string | null>(null);
+  const [openContainers, setOpenContainers] = useState<OpenContainer[]>([]);
+  const [loadingContainers, setLoadingContainers] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Reset bei Item-Wechsel
+  useEffect(() => {
+    setSupplierId(current?.supplierId ?? null);
+    setOpenContainers([]);
+    setErr(null);
+  }, [current?.id, current?.supplierId]);
+
+  // Wenn Supplier (neu) gewählt: offene Container laden
+  useEffect(() => {
+    if (!supplierId) return;
+    let cancelled = false;
+    setLoadingContainers(true);
+    api<{ containers: OpenContainer[] }>(
+      `/api/pda/containers?status=open&supplierId=${encodeURIComponent(supplierId)}&limit=20`,
+    )
+      .then((r) => {
+        if (cancelled) return;
+        setOpenContainers(r.containers);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setErr(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingContainers(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [supplierId]);
+
+  if (!current) {
+    return (
+      <div className="text-white/60 text-sm">
+        Keine Artikel mehr für Paletten — weiter.
+      </div>
+    );
+  }
+
+  const linkToContainer = async (containerId: string) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/pda/containers/${containerId}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: current.id,
+          actor: getPdaId(),
+        }),
+      });
+      await onChange();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createPaletteAndLink = async () => {
+    if (!supplierId) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api<{ container: { id: string; code: string } }>(
+        "/api/pda/containers",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "palette",
+            supplierId,
+            createdByPda: getPdaId(),
+          }),
+        },
+      );
+      await api(`/api/pda/containers/${r.container.id}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: current.id,
+          actor: getPdaId(),
+        }),
+      });
+      await onChange();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chosen = suppliers.find((s) => s.id === supplierId);
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-white text-sm">
-            {item.menge}× {item.beschreibung ?? "—"}
-          </p>
-          <p className="text-xs text-white/60 mt-0.5 font-mono">
-            {[item.artikelnummer, item.hersteller].filter(Boolean).join(" · ")}
-          </p>
-          {item.grund && (
-            <p className="text-xs text-white/50 mt-0.5">{item.grund}</p>
-          )}
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            {item.source !== "registered" && (
-              <span className="text-[10px] bg-[#ff6600]/30 text-[#ff6600] px-1.5 py-0.5 rounded uppercase">
-                {item.source}
-              </span>
-            )}
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
-                isOnPallet
-                  ? "bg-blue-500/30 text-blue-200"
-                  : isAssessed
-                  ? "bg-purple-500/30 text-purple-200"
-                  : isReceived
-                  ? "bg-green-500/30 text-green-200"
-                  : isMissing
-                  ? "bg-red-500/30 text-red-200"
-                  : "bg-white/10 text-white/60"
-              }`}
-            >
-              {item.status}
-            </span>
-            {item.verdict && (
-              <span
-                className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
-                  item.verdict === "green"
-                    ? "bg-green-500/30 text-green-200"
-                    : item.verdict === "yellow"
-                    ? "bg-yellow-500/30 text-yellow-100"
-                    : "bg-red-500/30 text-red-200"
-                }`}
-              >
-                ● {item.verdict}
-              </span>
-            )}
-            {item.containerCode && (
-              <span className="text-[10px] bg-white/10 text-white/70 px-1.5 py-0.5 rounded font-mono">
-                {item.containerCode}
-              </span>
-            )}
-          </div>
-        </div>
-        {item.gesamtpreis_brutto !== null && (
-          <span className="text-sm font-mono text-white/70 shrink-0">
-            {item.gesamtpreis_brutto.toFixed(2).replace(".", ",")} €
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-bold">Auf Palette legen</h1>
+        <p className="text-sm text-white/60 mt-1">
+          {completed + 1} von {totalToPalettize}
+        </p>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+        <p className="font-semibold text-white text-sm">
+          {current.menge}× {current.beschreibung ?? "—"}
+        </p>
+        <p className="text-xs text-white/60 mt-0.5 font-mono">
+          {[current.artikelnummer, current.hersteller].filter(Boolean).join(" · ")}
+        </p>
+        {current.verdict && (
+          <span
+            className={`inline-block text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded mt-2 ${
+              current.verdict === "green"
+                ? "bg-green-500/30 text-green-200"
+                : "bg-yellow-500/30 text-yellow-100"
+            }`}
+          >
+            ● {current.verdict}
           </span>
         )}
       </div>
 
-      {!isReceived && !isMissing && !isAssessed && !isOnPallet && (
-        <div className="flex gap-2">
-          <button
-            onClick={() => onScan(true)}
-            disabled={busy}
-            className="flex-1 bg-green-600/80 text-white font-semibold py-2 rounded-lg active:bg-green-700 disabled:opacity-40 text-sm"
-          >
-            ✓ Da
-          </button>
-          <button
-            onClick={() => onScan(false)}
-            disabled={busy}
-            className="flex-1 bg-red-600/80 text-white font-semibold py-2 rounded-lg active:bg-red-700 disabled:opacity-40 text-sm"
-          >
-            ✗ Fehlt
-          </button>
-        </div>
-      )}
-
-      {isReceived && (
-        <a
-          href={`/pda-app/cases/${caseId}/items/${item.id}/assess`}
-          className="block text-center bg-[#ff6600]/20 text-[#ffb380] text-xs font-medium py-2 rounded-lg active:bg-[#ff6600]/30"
-        >
-          → Bewertung &amp; Fotos
-        </a>
-      )}
-
-      {isAssessed && (
-        <button
-          onClick={onPickContainer}
-          disabled={busy}
-          className="w-full bg-[#ff6600] text-white text-sm font-semibold py-3 rounded-lg active:bg-[#ff7a26] disabled:opacity-40"
-        >
-          → Auf Palette legen
-        </button>
-      )}
-    </div>
-  );
-}
-
-/**
- * Inline-Picker für die Container-Auswahl. Erscheint unter dem Item nach
- * Tap auf "→ Auf Palette legen". Stufen:
- *   1. Falls Item noch keinen Supplier → Lieferanten-Liste zeigen
- *   2. Falls Supplier gewählt (oder vom Item geerbt) → offene Container
- *      dieses Suppliers + Option "Neue Palette anlegen"
- */
-function PalettePicker({
-  item,
-  suppliers,
-  supplierId,
-  openContainers,
-  loading,
-  busy,
-  error,
-  onChooseSupplier,
-  onLinkToContainer,
-  onCreatePaletteAndLink,
-  onClose,
-}: {
-  item: PdaItem;
-  suppliers: Supplier[];
-  supplierId: string | null;
-  openContainers: OpenContainer[];
-  loading: boolean;
-  busy: boolean;
-  error: string | null;
-  onChooseSupplier: (id: string) => void;
-  onLinkToContainer: (containerId: string) => void;
-  onCreatePaletteAndLink: () => void;
-  onClose: () => void;
-}) {
-  const chosenSupplier = suppliers.find((s) => s.id === supplierId);
-
-  return (
-    <div className="bg-white/10 border border-[#ff6600]/40 rounded-xl p-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-[#ff6600] uppercase tracking-wider">
-          Auf Palette legen
-        </p>
-        <button
-          onClick={onClose}
-          className="text-xs text-white/60 underline"
-        >
-          Abbrechen
-        </button>
-      </div>
-
+      {/* Stufe 1: Supplier wählen */}
       {!supplierId && (
         <div className="space-y-2">
-          <p className="text-xs text-white/70">
-            An welchen Lieferanten geht dieser Artikel zurück?
+          <p className="text-sm text-white/70">
+            An welchen Lieferanten geht der Artikel zurück?
           </p>
           {suppliers.length === 0 ? (
-            <p className="text-xs text-yellow-200 bg-yellow-500/15 rounded p-2">
-              Keine Lieferanten gepflegt. Bitte erst im Admin-Dashboard
-              unter <span className="font-mono">/admin/suppliers</span> anlegen.
+            <p className="text-sm text-yellow-200 bg-yellow-500/15 rounded p-2">
+              Keine Lieferanten gepflegt — bitte im Admin-Dashboard
+              anlegen.
             </p>
           ) : (
             suppliers.map((s) => (
               <button
                 key={s.id}
-                onClick={() => onChooseSupplier(s.id)}
-                className="w-full bg-white/10 hover:bg-white/15 active:bg-white/20 text-white text-left py-3 px-4 rounded-lg font-semibold text-sm"
+                onClick={() => setSupplierId(s.id)}
+                className="w-full bg-white/10 hover:bg-white/15 active:bg-white/20 text-white text-left py-4 px-4 rounded-xl font-semibold"
               >
                 {s.name}
               </button>
@@ -654,30 +820,41 @@ function PalettePicker({
         </div>
       )}
 
+      {/* Stufe 2: Container wählen oder neu anlegen */}
       {supplierId && (
         <div className="space-y-2">
-          <p className="text-xs text-white/70">
-            Lieferant:{" "}
-            <span className="text-white font-semibold">
-              {chosenSupplier?.name ?? supplierId}
-            </span>
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-white/70">
+              Lieferant:{" "}
+              <span className="text-white font-semibold">
+                {chosen?.name ?? supplierId}
+              </span>
+            </p>
+            <button
+              onClick={() => setSupplierId(null)}
+              className="text-xs text-white/50 underline"
+            >
+              ändern
+            </button>
+          </div>
 
-          {loading ? (
-            <p className="text-xs text-white/50 italic">Container laden…</p>
+          {loadingContainers ? (
+            <p className="text-sm text-white/50 italic">Container laden…</p>
           ) : openContainers.length === 0 ? (
-            <p className="text-xs text-white/60">
-              Keine offene Palette für {chosenSupplier?.name ?? "diesen Lieferanten"}.
-              Neue Palette anlegen?
+            <p className="text-sm text-white/60">
+              Keine offene Palette für {chosen?.name ?? "diesen Lieferanten"}.
             </p>
           ) : (
             <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wider text-white/50">
+                Offene Paletten
+              </p>
               {openContainers.map((cc) => (
                 <button
                   key={cc.id}
-                  onClick={() => onLinkToContainer(cc.id)}
+                  onClick={() => linkToContainer(cc.id)}
                   disabled={busy}
-                  className="w-full bg-white/5 hover:bg-white/10 active:bg-white/15 text-white text-left py-3 px-4 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-between gap-2"
+                  className="w-full bg-white/5 hover:bg-white/10 active:bg-white/15 text-white text-left py-3 px-4 rounded-xl disabled:opacity-40 flex items-center justify-between gap-2"
                 >
                   <span className="font-mono font-semibold text-sm">
                     {cc.code}
@@ -691,26 +868,194 @@ function PalettePicker({
           )}
 
           <button
-            onClick={onCreatePaletteAndLink}
-            disabled={busy}
-            className="w-full bg-[#ff6600] hover:bg-[#ff7a26] active:bg-[#e85f00] text-white font-semibold py-3 rounded-lg text-sm disabled:opacity-40 mt-2"
+            onClick={createPaletteAndLink}
+            disabled={busy || loadingContainers}
+            className="w-full bg-[#ff6600] hover:bg-[#ff7a26] active:bg-[#e85f00] text-white font-bold py-4 rounded-xl text-base disabled:opacity-40 mt-2"
           >
             {busy
               ? "Lege an…"
-              : `+ Neue Palette für ${chosenSupplier?.name ?? "Lieferant"}`}
+              : `+ Neue Palette für ${chosen?.name ?? "Lieferant"}`}
           </button>
         </div>
       )}
 
-      {error && (
-        <div className="bg-red-500/20 border border-red-400/40 text-red-100 rounded-lg p-2 text-xs">
-          {error}
+      {err && (
+        <div className="bg-red-500/20 border border-red-400/40 text-red-100 rounded-lg p-3 text-sm">
+          {err}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Step 5: Done — Summary + Customer-Mail
+// ───────────────────────────────────────────────────────────────────────
+
+function DoneStep({
+  caseId,
+  c,
+  onChange,
+}: {
+  caseId: string;
+  c: CaseDetail;
+  onChange: () => void | Promise<void>;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [finalized, setFinalized] = useState(false);
+
+  const onPallet = c.items.filter((it) => it.status === "on_pallet");
+  const missing = c.items.filter((it) => it.status === "missing");
+  const red = c.items.filter(
+    (it) => it.status === "assessed" && it.verdict === "red",
+  );
+  const refunded = c.items.filter((it) => it.status === "refunded");
+  const rejected = c.items.filter((it) => it.status === "rejected");
+
+  const alreadyFinalized =
+    c.status === "erstattet" ||
+    c.status === "abgelehnt" ||
+    c.status === "pruefung";
+
+  const onFinalize = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/pda/cases/${caseId}/finalize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdaId: getPdaId() }),
+      });
+      setFinalized(true);
+      await onChange();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="text-center pt-2">
+        <div className="text-5xl">✓</div>
+        <h1 className="text-xl font-bold mt-2">Annahme abgeschlossen</h1>
+        <p className="text-sm text-white/60 mt-1">
+          {c.bestellnummer} ist komplett bearbeitet.
+        </p>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2 text-sm">
+        <SummaryRow
+          label="Auf Palette"
+          count={onPallet.length}
+          color="green"
+        />
+        {missing.length > 0 && (
+          <SummaryRow
+            label="Fehlend"
+            count={missing.length}
+            color="yellow"
+          />
+        )}
+        {red.length > 0 && (
+          <SummaryRow
+            label="Nicht zurücknehmbar"
+            count={red.length}
+            color="red"
+          />
+        )}
+        {refunded.length > 0 && (
+          <SummaryRow
+            label="Bereits erstattet"
+            count={refunded.length}
+            color="green"
+          />
+        )}
+        {rejected.length > 0 && (
+          <SummaryRow
+            label="Abgelehnt"
+            count={rejected.length}
+            color="red"
+          />
+        )}
+      </div>
+
+      {/* Container-Übersicht */}
+      {onPallet.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wider text-white/50">
+            Paletten
+          </p>
+          {Array.from(
+            new Set(onPallet.map((it) => it.containerCode).filter(Boolean)),
+          ).map((code) => (
+            <div
+              key={code}
+              className="bg-white/5 border border-white/10 rounded-lg p-2 font-mono text-sm"
+            >
+              {code}
+            </div>
+          ))}
         </div>
       )}
 
-      <p className="text-[10px] text-white/40">
-        Item: {[item.artikelnummer, item.hersteller].filter(Boolean).join(" · ")}
-      </p>
+      {/* Kundenmail */}
+      {!alreadyFinalized && !finalized && (
+        <button
+          onClick={onFinalize}
+          disabled={busy}
+          className="w-full bg-[#ff6600] text-white font-bold py-4 rounded-xl text-base active:bg-[#ff7a26] disabled:opacity-40"
+        >
+          {busy ? "Sende…" : "📧 Bestätigungs-Mail an Kunden senden"}
+        </button>
+      )}
+      {(alreadyFinalized || finalized) && (
+        <div className="bg-green-500/20 border border-green-400/40 text-green-100 rounded-lg p-3 text-sm">
+          ✓ Kunden-Mail wurde verschickt (Case-Status: {c.status})
+        </div>
+      )}
+
+      {err && (
+        <div className="bg-red-500/20 border border-red-400/40 text-red-100 rounded-lg p-3 text-sm">
+          {err}
+        </div>
+      )}
+
+      <button
+        onClick={() => router.push("/pda-app")}
+        className="w-full bg-white/10 text-white font-semibold py-4 rounded-xl active:bg-white/20"
+      >
+        Nächste Annahme
+      </button>
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  count,
+  color,
+}: {
+  label: string;
+  count: number;
+  color: "green" | "yellow" | "red";
+}) {
+  const dot =
+    color === "green"
+      ? "bg-green-400"
+      : color === "yellow"
+        ? "bg-yellow-400"
+        : "bg-red-400";
+  return (
+    <div className="flex items-center justify-between">
+      <span className="flex items-center gap-2 text-white/80">
+        <span className={`w-2 h-2 rounded-full ${dot}`} />
+        {label}
+      </span>
+      <span className="font-mono font-bold text-white">{count}</span>
     </div>
   );
 }
