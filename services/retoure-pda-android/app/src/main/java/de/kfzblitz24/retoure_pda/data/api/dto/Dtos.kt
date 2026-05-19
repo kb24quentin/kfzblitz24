@@ -69,9 +69,16 @@ data class CaseDetail(
 // Lookup
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Backend gibt nicht eine Liste, sondern den einzigen Treffer als
+ * `{matchedBy, case}` zurück. `matchedBy` ∈ {id, bestellnummer, tracking}
+ * sagt nach welchem Feld der Match war (kann später für UI-Hinweise
+ * genutzt werden, aktuell ungenutzt).
+ */
 @Serializable
 data class LookupResponse(
-    val cases: List<CaseSummary>,
+    val matchedBy: String,
+    val case: CaseSummary,
 )
 
 @Serializable
@@ -80,7 +87,10 @@ data class CaseSummary(
     val bestellnummer: String,
     val belegnummer: String? = null,
     val status: String,
-    val createdAt: String,
+    // Lookup-Endpoint liefert createdAt nicht — deshalb nullable.
+    val createdAt: String? = null,
+    // Optional: Kundennamen aus dem Lookup, falls Backend mitliefert.
+    val customer: CustomerSnapshot? = null,
 )
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -29,11 +29,14 @@ interface RetoureApi {
 
     /**
      * Suche nach Bestellnummer oder RMA-Code.
-     * Query-Param: `q` (Bestellnummer-Fragment oder Belegnummer).
+     * Query-Param: `code` (Bestellnummer-Fragment oder Belegnummer
+     * oder gescannter RMA-Code). Backend matched gegen id und gegen
+     * bestellnummer. ACHTUNG: nicht `q` — der Endpunkt erwartet `code`,
+     * sonst wirft er HTTP 400 "code fehlt".
      */
     @GET("api/pda/cases/lookup")
     suspend fun lookupCases(
-        @Query("q") query: String,
+        @Query("code") code: String,
     ): LookupResponse
 
     @GET("api/pda/cases/{id}")

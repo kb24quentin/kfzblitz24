@@ -33,10 +33,13 @@ class HomeViewModel(private val caseRepository: CaseRepository) : ViewModel() {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
             caseRepository.lookup(q)
                 .onSuccess { resp ->
+                    // Backend liefert immer genau einen Treffer (oder 404).
+                    // Wir wrappen in eine 1-Element-Liste, damit die UI
+                    // wiederverwendbar bleibt.
                     _uiState.value = _uiState.value.copy(
                         loading = false,
-                        results = resp.cases,
-                        error = if (resp.cases.isEmpty()) "Keine Ergebnisse für \"$q\"." else null,
+                        results = listOf(resp.case),
+                        error = null,
                     )
                 }
                 .onFailure { e ->
