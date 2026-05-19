@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { use } from "react";
 import { api, getPdaId } from "../../pda-client";
@@ -75,6 +75,16 @@ export default function CasePdaDetailPage({
   const [pickerError, setPickerError] = useState<string | null>(null);
   const [pickerLoading, setPickerLoading] = useState(false);
 
+  // Scan-to-Receive: oben auf der Page ein autofocused Input. Mitarbeiter
+  // scannt Artikelnummer mit Q900 → Item wird automatisch als received
+  // markiert. Funktioniert sobald Case `partnerReceivedAt` hat.
+  const [scanInput, setScanInput] = useState("");
+  const [scanFeedback, setScanFeedback] = useState<{
+    kind: "ok" | "miss" | "err";
+    msg: string;
+  } | null>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -130,6 +140,66 @@ export default function CasePdaDetailPage({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setActionBusy(null);
+    }
+  };
+
+  /**
+   * Scan-to-Receive: Mitarbeiter scannt eine Artikelnummer (Q900 tippt
+   * sie ins Input + Enter), wir matchen gegen die items[] des Cases und
+   * markieren das passende Item als received.
+   *
+   * Match-Strategie:
+   *   - Exakter Artikelnummer-Match (case-insensitive, trim)
+   *   - Wenn mehrere Items mit gleicher Artikelnummer existieren:
+   *     erstes ungescanntes nehmen (status === "pending")
+   *   - Kein Match → kurze rote Feedback-Toast, Input bleibt focused
+   */
+  const onScanBarcode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const raw = scanInput.trim();
+    if (!raw) return;
+    const norm = raw.toLowerCase();
+    setScanFeedback(null);
+
+    const candidates = (c?.items ?? []).filter(
+      (it) => (it.artikelnummer ?? "").toLowerCase() === norm,
+    );
+    const target =
+      candidates.find((it) => it.status === "pending") ?? candidates[0];
+
+    if (!target) {
+      setScanFeedback({
+        kind: "miss",
+        msg: `Kein Artikel mit Nummer "${raw}" in diesem Case.`,
+      });
+      setScanInput("");
+      scanInputRef.current?.focus();
+      return;
+    }
+    if (target.status === "received") {
+      setScanFeedback({
+        kind: "ok",
+        msg: `✓ Bereits erfasst: ${target.beschreibung ?? raw}`,
+      });
+      setScanInput("");
+      scanInputRef.current?.focus();
+      return;
+    }
+    // ✓Da-Klick programmatisch ausführen
+    setScanInput("");
+    try {
+      await onScanItem(target.id, true);
+      setScanFeedback({
+        kind: "ok",
+        msg: `✓ ${target.beschreibung ?? raw} erfasst`,
+      });
+    } catch (err) {
+      setScanFeedback({
+        kind: "err",
+        msg: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      scanInputRef.current?.focus();
     }
   };
 
@@ -286,6 +356,39 @@ export default function CasePdaDetailPage({
         <div className="bg-green-500/20 border border-green-400/40 text-green-100 rounded-lg p-3 text-sm">
           ✓ Eingang erfasst — {new Date(c.partnerReceivedAt).toLocaleString("de-DE")}
         </div>
+      )}
+
+      {/* Scan-to-Receive: sobald Case received ist, hier oben scannen. */}
+      {c.partnerReceivedAt && c.items.some((it) => it.status === "pending") && (
+        <form onSubmit={onScanBarcode} className="space-y-2">
+          <label className="block text-xs uppercase tracking-wider text-white/60">
+            Artikel scannen
+          </label>
+          <input
+            ref={scanInputRef}
+            type="text"
+            inputMode="text"
+            autoFocus
+            autoComplete="off"
+            value={scanInput}
+            onChange={(e) => setScanInput(e.target.value)}
+            placeholder="Artikelnummer mit Q900 scannen…"
+            className="w-full px-4 py-3 bg-white/10 border-2 border-[#ff6600]/50 rounded-xl text-base font-mono focus:outline-none focus:ring-2 focus:ring-[#ff6600]"
+          />
+          {scanFeedback && (
+            <div
+              className={`text-xs rounded-lg p-2 ${
+                scanFeedback.kind === "ok"
+                  ? "bg-green-500/20 text-green-100 border border-green-400/40"
+                  : scanFeedback.kind === "miss"
+                    ? "bg-yellow-500/20 text-yellow-100 border border-yellow-400/40"
+                    : "bg-red-500/20 text-red-100 border border-red-400/40"
+              }`}
+            >
+              {scanFeedback.msg}
+            </div>
+          )}
+        </form>
       )}
 
       <div className="space-y-2">
