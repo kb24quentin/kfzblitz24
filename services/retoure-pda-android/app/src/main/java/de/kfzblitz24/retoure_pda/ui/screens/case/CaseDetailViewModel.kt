@@ -91,11 +91,23 @@ class CaseDetailViewModel(
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
+    // Alle Action-Funktionen folgen demselben Pattern:
+    //   - actionLoading=true, actionError=null beim Start
+    //   - actionLoading=false + reload() bei Success
+    //   - actionLoading=false + Fehlermeldung bei Failure
+    // Der Bug vorher: bei Success wurde load() gerufen, aber load()
+    // touched `loading`, nicht `actionLoading` — also blieb der Button
+    // ewig im Spinner-State hängen.
+
+    private fun resetActionLoading() {
+        _uiState.value = _uiState.value.copy(actionLoading = false, actionError = null)
+    }
+
     fun receiveCase(onDone: () -> Unit = {}) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
             caseRepository.receiveCase(caseId)
-                .onSuccess { load(); onDone() }
+                .onSuccess { resetActionLoading(); load(); onDone() }
                 .onFailure { e ->
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
@@ -109,7 +121,7 @@ class CaseDetailViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
             caseRepository.scanItem(caseId, itemId, present)
-                .onSuccess { load() }
+                .onSuccess { resetActionLoading(); load() }
                 .onFailure { e ->
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
@@ -123,7 +135,7 @@ class CaseDetailViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
             caseRepository.assessItem(caseId, itemId, score, reason)
-                .onSuccess { load() }
+                .onSuccess { resetActionLoading(); load() }
                 .onFailure { e ->
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
@@ -137,7 +149,7 @@ class CaseDetailViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
             containerRepository.addItemToContainer(containerId, itemId)
-                .onSuccess { load() }
+                .onSuccess { resetActionLoading(); load() }
                 .onFailure { e ->
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
@@ -153,7 +165,7 @@ class CaseDetailViewModel(
             containerRepository.createContainer(supplierId)
                 .onSuccess { created ->
                     containerRepository.addItemToContainer(created.id, itemId)
-                        .onSuccess { load() }
+                        .onSuccess { resetActionLoading(); load() }
                         .onFailure { e ->
                             _uiState.value = _uiState.value.copy(
                                 actionLoading = false,
@@ -174,7 +186,7 @@ class CaseDetailViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
             caseRepository.finalizeCase(caseId)
-                .onSuccess { load() }
+                .onSuccess { resetActionLoading(); load() }
                 .onFailure { e ->
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
