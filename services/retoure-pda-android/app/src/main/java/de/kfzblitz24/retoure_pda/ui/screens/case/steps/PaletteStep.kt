@@ -72,17 +72,56 @@ fun PaletteStep(
     val totalToPalettize = queue.size + completed
     val currentItem = queue.firstOrNull()
 
-    // Lade offene Container für den aktuellen Artikel-Supplier
-    var openContainers by remember(currentItem?.supplierId) {
+    // Default-Supplier-Routing (User-Brief):
+    //   - Falschsendungen (source="unknown") → kfzBlitz24 Retoure (intern)
+    //   - Sonst: Item.supplierId wenn schon gesetzt, sonst Interparts als
+    //     Standard. Vorher kam "wird zugewiesen…" wenn das Item supplierId
+    //     null hatte (was bei Registered/Extra-Items der Default ist).
+    val interpartsId = suppliers
+        .firstOrNull { it.name.equals("Interparts", ignoreCase = true) }
+        ?.id
+    val effectiveSupplierId: String? = when {
+        currentItem == null -> null
+        currentItem.source == "unknown" -> "kfzblitz24-internal"
+        !currentItem.supplierId.isNullOrBlank() -> currentItem.supplierId
+        else -> interpartsId
+    }
+
+    // Lade offene Container für den effektiven Supplier
+    var openContainers by remember(effectiveSupplierId) {
         mutableStateOf<List<ContainerDto>?>(null)
     }
-    LaunchedEffect(currentItem?.supplierId) {
-        val sid = currentItem?.supplierId ?: return@LaunchedEffect
+    var autoCreating by remember(effectiveSupplierId) { mutableStateOf(false) }
+    LaunchedEffect(effectiveSupplierId) {
+        val sid = effectiveSupplierId ?: return@LaunchedEffect
         openContainers = null
         containerRepository.getOpenContainers(sid)
             .onSuccess { openContainers = it }
             .onFailure { openContainers = emptyList() }
     }
+
+    // Auto-Anlegen wenn keine Palette offen ist — sodass der Worker
+    // SOFORT den Code "IP-042" oder "KB-003" sieht statt "wird
+    // zugewiesen…". Triggered nur einmal pro Item.
+    LaunchedEffect(effectiveSupplierId, openContainers) {
+        val sid = effectiveSupplierId ?: return@LaunchedEffect
+        if (openContainers?.isEmpty() == true && !autoCreating) {
+            autoCreating = true
+            containerRepository.createContainer(sid)
+                .onSuccess {
+                    containerRepository.getOpenContainers(sid)
+                        .onSuccess { openContainers = it }
+                        .onFailure { openContainers = emptyList() }
+                }
+                .onFailure {
+                    // Bleibt empty — der manuelle Button "+ Neue Palette
+                    // für …" greift als Fallback (siehe `when`-Branch
+                    // unten).
+                }
+            autoCreating = false
+        }
+    }
+
     val suggestedContainer = openContainers?.firstOrNull()
 
     // State-Machine: itemConfirmed = Worker hat Artikel-EAN gescannt
@@ -154,19 +193,36 @@ fun PaletteStep(
             }
         }
 
-        val chosenSupplier = suppliers.find { it.id == currentItem.supplierId }
+        // Effektiver Supplier (mit Default-Routing) statt rohem Item-Feld
+        val chosenSupplier = suppliers.find { it.id == effectiveSupplierId }
 
         // ── PROAKTIVE ANZEIGE: NIMM + LEGE AUF ───────────────────────
         ProactivePalletInstruction(
             item = currentItem,
             suggestedContainer = suggestedContainer,
             supplierName = chosenSupplier?.name,
-            isInternal = currentItem.supplierId == "kfzblitz24-internal",
+            isInternal = effectiveSupplierId == "kfzblitz24-internal",
             itemConfirmed = itemConfirmed,
+            autoCreating = autoCreating,
         )
 
         when {
-            // ── Keine offene Palette → neue anlegen ─────────────────
+            // ── Auto-Create läuft → einfach warten, kein Manual-Button ─
+            autoCreating -> {
+                Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Orange)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Palette wird angelegt …",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+
+            // ── Keine offene Palette → neue anlegen (Fallback) ──────
             openContainers != null && suggestedContainer == null -> {
                 Column(
                     modifier = Modifier
@@ -192,7 +248,7 @@ fun PaletteStep(
                     text = if (actionLoading) "Lege an…"
                            else "+ Neue Palette für ${chosenSupplier?.name ?: "Lieferant"}",
                     onClick = {
-                        currentItem.supplierId?.let { sid ->
+                        effectiveSupplierId?.let { sid ->
                             onCreateContainerAndLink(sid, currentItem.id)
                         }
                     },
@@ -323,6 +379,7 @@ private fun ProactivePalletInstruction(
     supplierName: String?,
     isInternal: Boolean,
     itemConfirmed: Boolean,
+    autoCreating: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -410,13 +467,16 @@ private fun ProactivePalletInstruction(
                 letterSpacing = 0.8.sp,
             )
             Spacer(Modifier.height(4.dp))
-            // RIESIGER Paletten-Code — bei 3-stelligen Codes (z. B. "042")
-            // wirkt eine größere Schrift natürlich. Wir nehmen 64sp damit
-            // der Worker den Code aus 2-3 m Entfernung lesen kann.
+            // RIESIGER Paletten-Code — bei kurzen Codes (IP-042, KB-003)
+            // wirkt 56sp angenehm. Auto-Anlage zeigt Spinner-Text.
             Text(
-                suggestedContainer?.code ?: "wird zugewiesen …",
+                when {
+                    suggestedContainer != null -> suggestedContainer.code
+                    autoCreating -> "wird angelegt …"
+                    else -> "—"
+                },
                 color = Orange,
-                fontSize = 64.sp,
+                fontSize = 56.sp,
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace,
                 textAlign = TextAlign.Center,
