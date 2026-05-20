@@ -157,34 +157,88 @@ fun HomeScreen(
                     )
                 }
 
-                Text(
-                    "Bitte Paket oder Retourenschein scannen",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
-
-                Text(
-                    "Halte den Scanner über den Barcode und drücke den Trigger.",
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                )
+                // ── Stufe-1- vs Stufe-2-Prompt ─────────────────────
+                val stage2 = state.pendingPackageCode != null
+                if (!stage2) {
+                    Text(
+                        "1. Scanne das Paket-Label",
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        "Carrier-Tracking auf dem Paket — Q900 darüber halten und triggern.",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                } else {
+                    // Großer Hinweis-Block: Paket noch unbekannt
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0x33FFAB00))
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            "Paket noch nicht zugeordnet",
+                            color = Color(0xFFFFE082),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            state.pendingPackageCode ?: "",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    Text(
+                        "2. Scanne den Retourenschein",
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        "KB24-… auf dem Schein — wir verknüpfen das Paket dann automatisch.",
+                        color = Color.White.copy(alpha = 0.65f),
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                    OutlinedButton(
+                        onClick = { vm.resetScanFlow() },
+                        modifier = Modifier.fillMaxWidth(0.7f),
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Text("Abbrechen / Anderes Paket", color = Color.White)
+                    }
+                }
 
                 state.error?.let { err ->
                     Spacer(Modifier.height(8.dp))
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0x33F44336))
-                            .padding(12.dp),
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFB71C1C))
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Text(
+                            "✗ FEHLER",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Black,
+                        )
+                        Text(
                             err,
-                            color = Color(0xFFEF9A9A),
-                            fontSize = 13.sp,
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth(),
                         )

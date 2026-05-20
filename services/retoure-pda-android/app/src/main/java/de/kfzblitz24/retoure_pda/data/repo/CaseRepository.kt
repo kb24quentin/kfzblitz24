@@ -9,9 +9,13 @@ class CaseRepository(
     private val api: RetoureApi,
     private val tokenStore: TokenStore,
 ) {
-    suspend fun lookup(query: String): Result<LookupResponse> =
+    suspend fun lookup(
+        query: String,
+        /** Optional: zuvor gescanntes Paket-Label, wird beim Case angehängt. */
+        attachTracking: String? = null,
+    ): Result<LookupResponse> =
         safeApi("Bestellung \"$query\"") {
-            api.lookupCases(query)
+            api.lookupCases(query, attachTracking?.takeIf { it.isNotBlank() })
         }
 
     suspend fun getCase(id: String): Result<CaseDetail> =

@@ -132,6 +132,12 @@ data class ResolvedArticle(
 @Serializable
 data class LookupResponse(
     val matchedBy: String,
+    /**
+     * true wenn der Lookup das mitgegebene `withTracking` an den Case
+     * angehängt hat (= Paket-Label nachgereicht). UI kann das per Toast
+     * bestätigen ("Paket-Label wurde gespeichert").
+     */
+    val attachedTracking: Boolean = false,
     val case: CaseSummary,
 )
 

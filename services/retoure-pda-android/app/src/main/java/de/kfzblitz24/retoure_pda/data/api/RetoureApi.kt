@@ -37,6 +37,14 @@ interface RetoureApi {
     @GET("api/pda/cases/lookup")
     suspend fun lookupCases(
         @Query("code") code: String,
+        /**
+         * Optionales Paket-Label aus dem 2-stufigen Scan-Flow:
+         * - Stufe 1: Worker scannt Paket-Label → wir lookup'en das
+         * - Stufe 2: Wenn kein Match, Worker scannt Retourenschein →
+         *   wir lookup'en die KB-Nummer und hängen das Paket-Label
+         *   als customerTrackingNumber an den Case (sofern leer).
+         */
+        @Query("withTracking") withTracking: String? = null,
     ): LookupResponse
 
     @GET("api/pda/cases/{id}")

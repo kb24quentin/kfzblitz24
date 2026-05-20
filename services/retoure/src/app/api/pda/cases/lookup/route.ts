@@ -1,16 +1,21 @@
 /**
- * GET /api/pda/cases/lookup?code=<scanned-code>
+ * GET /api/pda/cases/lookup?code=<scanned-code>&withTracking=<paket-label>
  *
- * Sucht eine Retoure-Case anhand des gescannten RMA-Codes ODER der
- * Bestellnummer (Customer kann Retourenschein vergessen, dann sucht der
- * Mitarbeiter über die Order).
- *
- * Reihenfolge der Treffer-Strategien:
+ * Sucht eine Retoure-Case anhand des gescannten Codes. Reihenfolge:
  *   1. Case-ID (cuid)              → 1:1 Match
  *   2. Bestellnummer (KB24-…)      → letzter Case mit dieser Bestellnummer
- *   3. DHL Tracking-Number         → für Pakete die nicht "unsere" Sendung sind
+ *   3. Tracking-Number (dhl ODER customer) — Paket-Label
  *
- * Antwort: { case: {...}, matchedBy: "id" | "bestellnummer" | "tracking" }
+ * Optionaler `withTracking`-Param:
+ *   Wird vom 2-stufigen PDA-Scan-Flow benutzt — wenn der Worker zuerst
+ *   das Paket-Label gescannt hat und KEIN Case dazu gefunden wurde,
+ *   scannt er dann den Retourenschein. Der Backend-Lookup mit
+ *   `?code=<KB-Nummer>&withTracking=<Paket-Label>` findet den Case
+ *   per Bestellnummer und schreibt das Paket-Label als
+ *   customerTrackingNumber zurück (sofern noch leer). Damit ist die
+ *   Daten-Vervollständigung Teil des PDA-Workflows.
+ *
+ * Antwort: { case: {...}, matchedBy, attachedTracking?: boolean }
  * 404 wenn nichts gefunden.
  */
 
@@ -35,6 +40,7 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const code = (url.searchParams.get("code") ?? "").trim();
+  const attachTracking = (url.searchParams.get("withTracking") ?? "").trim();
   if (!code) {
     return NextResponse.json({ error: "code fehlt" }, { status: 400 });
   }
@@ -62,10 +68,15 @@ export async function GET(req: Request) {
     matchedBy = "bestellnummer";
   }
 
-  // 3. Tracking-Number
+  // 3. Tracking-Number — checkt BEIDE Felder (DHL-generiert + Customer-eingegeben)
   if (!c) {
     c = await prisma.retoureCase.findFirst({
-      where: { dhlTrackingNumber: code },
+      where: {
+        OR: [
+          { dhlTrackingNumber: code },
+          { customerTrackingNumber: code },
+        ],
+      },
       orderBy: { createdAt: "desc" },
       include: {
         events: { orderBy: { createdAt: "asc" } },
@@ -82,8 +93,37 @@ export async function GET(req: Request) {
     );
   }
 
+  // Tracking-Save wenn vom 2-stufigen Scan-Flow gerufen: Case wurde via
+  // Bestellnummer gefunden, der Worker hatte aber schon ein Paket-Label
+  // gescannt. Wir schreiben den Paket-Code zurück, sofern das Feld
+  // bisher leer ist (kein Override).
+  let attachedTracking = false;
+  if (
+    attachTracking &&
+    matchedBy === "bestellnummer" &&
+    !c.customerTrackingNumber &&
+    !c.dhlTrackingNumber
+  ) {
+    await prisma.retoureCase.update({
+      where: { id: c.id },
+      data: { customerTrackingNumber: attachTracking },
+    });
+    await prisma.retoureEvent.create({
+      data: {
+        caseId: c.id,
+        type: "tracking_added",
+        message: `Tracking-Nummer beim Paket-Scan ergänzt: ${attachTracking}`,
+        meta: JSON.stringify({ source: "pda-package-scan", tracking: attachTracking }),
+        actor: "pda",
+      },
+    });
+    c.customerTrackingNumber = attachTracking;
+    attachedTracking = true;
+  }
+
   return NextResponse.json({
     matchedBy,
+    attachedTracking,
     case: {
       id: c.id,
       bestellnummer: c.bestellnummer,
