@@ -57,6 +57,8 @@ data class CaseDetailUiState(
     val actionError: String? = null,
     /** Letztes Scan-Ergebnis fürs Big-OK/NOT-OK-Display im ScanStep. */
     val lastScanResult: ScanEanResponse? = null,
+    /** Toast/Banner nach dem Hinzufügen eines weiteren Pakets. */
+    val addPackageBanner: String? = null,
 )
 
 class CaseDetailViewModel(
@@ -185,6 +187,31 @@ class CaseDetailViewModel(
                     )
                 }
         }
+    }
+
+    /** Hängt ein weiteres Paket an die Retoure an (Multi-Paket-Szenario). */
+    fun addPackage(tracking: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
+            caseRepository.addPackage(caseId, tracking)
+                .onSuccess { resp ->
+                    _uiState.value = _uiState.value.copy(
+                        actionLoading = false,
+                        addPackageBanner = resp.message,
+                    )
+                    load()
+                }
+                .onFailure { e ->
+                    _uiState.value = _uiState.value.copy(
+                        actionLoading = false,
+                        actionError = e.message,
+                    )
+                }
+        }
+    }
+
+    fun clearAddPackageBanner() {
+        _uiState.value = _uiState.value.copy(addPackageBanner = null)
     }
 
     fun assessItem(itemId: String, score: Int, reason: String?) {

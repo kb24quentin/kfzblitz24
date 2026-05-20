@@ -68,13 +68,17 @@ export async function GET(req: Request) {
     matchedBy = "bestellnummer";
   }
 
-  // 3. Tracking-Number — checkt BEIDE Felder (DHL-generiert + Customer-eingegeben)
+  // 3. Tracking-Number — checkt DHL, Customer und additionalTrackings (Multi-Paket)
   if (!c) {
     c = await prisma.retoureCase.findFirst({
       where: {
         OR: [
           { dhlTrackingNumber: code },
           { customerTrackingNumber: code },
+          // additionalTrackings ist JSON-String — wir suchen substring-
+          // basiert. Bei Vorbereitung des Searches escape'n wir die
+          // Quotes für sauberen JSON-Vergleich.
+          { additionalTrackings: { contains: `"${code}"` } },
         ],
       },
       orderBy: { createdAt: "desc" },
@@ -93,32 +97,67 @@ export async function GET(req: Request) {
     );
   }
 
-  // Tracking-Save wenn vom 2-stufigen Scan-Flow gerufen: Case wurde via
-  // Bestellnummer gefunden, der Worker hatte aber schon ein Paket-Label
-  // gescannt. Wir schreiben den Paket-Code zurück, sofern das Feld
-  // bisher leer ist (kein Override).
+  // Tracking-Save: zwei Fälle.
+  //
+  // Fall A — Case hat noch GAR kein Tracking → wir schreiben den
+  //   gescannten Paket-Code als customerTrackingNumber (primary).
+  //   Beispiel: Customer hatte Selbstversand-Tracking nicht eingetragen
+  //   und Worker reicht's beim Wareneingang nach.
+  //
+  // Fall B — Case hat schon ein Tracking, aber dieses Paket ist NEU
+  //   (Multi-Paket-Szenario: Kunde hat 5 Items in 2 Boxen verteilt).
+  //   Wir hängen den Code an additionalTrackings an — wenn er noch
+  //   nicht drin steht.
   let attachedTracking = false;
-  if (
-    attachTracking &&
-    matchedBy === "bestellnummer" &&
-    !c.customerTrackingNumber &&
-    !c.dhlTrackingNumber
-  ) {
-    await prisma.retoureCase.update({
-      where: { id: c.id },
-      data: { customerTrackingNumber: attachTracking },
-    });
-    await prisma.retoureEvent.create({
-      data: {
-        caseId: c.id,
-        type: "tracking_added",
-        message: `Tracking-Nummer beim Paket-Scan ergänzt: ${attachTracking}`,
-        meta: JSON.stringify({ source: "pda-package-scan", tracking: attachTracking }),
-        actor: "pda",
-      },
-    });
-    c.customerTrackingNumber = attachTracking;
-    attachedTracking = true;
+  if (attachTracking && matchedBy === "bestellnummer") {
+    const knownPrimary = c.customerTrackingNumber ?? c.dhlTrackingNumber;
+    if (!knownPrimary) {
+      // Fall A
+      await prisma.retoureCase.update({
+        where: { id: c.id },
+        data: { customerTrackingNumber: attachTracking },
+      });
+      await prisma.retoureEvent.create({
+        data: {
+          caseId: c.id,
+          type: "tracking_added",
+          message: `Tracking-Nummer beim Paket-Scan ergänzt: ${attachTracking}`,
+          meta: JSON.stringify({ source: "pda-package-scan", tracking: attachTracking }),
+          actor: "pda",
+        },
+      });
+      c.customerTrackingNumber = attachTracking;
+      attachedTracking = true;
+    } else if (knownPrimary !== attachTracking) {
+      // Fall B — Multi-Paket
+      let existing: string[] = [];
+      try {
+        const parsed = JSON.parse(c.additionalTrackings || "[]");
+        if (Array.isArray(parsed)) existing = parsed.filter((s) => typeof s === "string");
+      } catch { /* schema-default fixt */ }
+      if (!existing.includes(attachTracking)) {
+        existing.push(attachTracking);
+        await prisma.retoureCase.update({
+          where: { id: c.id },
+          data: { additionalTrackings: JSON.stringify(existing) },
+        });
+        await prisma.retoureEvent.create({
+          data: {
+            caseId: c.id,
+            type: "tracking_added",
+            message: `Weiteres Paket-Tracking ergänzt: ${attachTracking}`,
+            meta: JSON.stringify({
+              source: "pda-package-scan-multi",
+              tracking: attachTracking,
+              total: existing.length + 1,
+            }),
+            actor: "pda",
+          },
+        });
+        c.additionalTrackings = JSON.stringify(existing);
+        attachedTracking = true;
+      }
+    }
   }
 
   return NextResponse.json({

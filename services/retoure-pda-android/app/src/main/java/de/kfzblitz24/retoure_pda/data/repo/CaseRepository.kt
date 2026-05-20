@@ -60,6 +60,15 @@ class CaseRepository(
             Unit
         }
 
+    /** Hängt ein weiteres Paket-Tracking an die Retoure (Multi-Paket). */
+    suspend fun addPackage(
+        caseId: String,
+        tracking: String,
+    ): Result<AddPackageResponse> = safeApi("Weiteres Paket hinzufügen") {
+        val pdaId = tokenStore.getPdaId() ?: "unknown"
+        api.addPackage(caseId, AddPackageRequest(tracking = tracking, pdaId = pdaId))
+    }
+
     suspend fun assessItem(
         caseId: String,
         itemId: String,

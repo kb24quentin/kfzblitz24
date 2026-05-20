@@ -35,6 +35,13 @@ model RetoureCase {
   // [{artikelnummer, beschreibung, hersteller, menge, grund, einzelpreis_brutto, gesamtpreis_brutto, einzelgewicht_g}, ...]
   itemsJson String @default("[]")
 
+  /// Zusätzliche Tracking-Nummern für Multi-Paket-Szenarien.
+  /// `customerTrackingNumber` bzw. `dhlTrackingNumber` bleibt das
+  /// primäre Tracking; `additionalTrackings` speichert weitere Pakete
+  /// die zur selben Retoure gehören (z. B. Kunde schickt 5 Items in
+  /// 2 Paketen). JSON-Array von Strings: ["TR2", "TR3"].
+  additionalTrackings String @default("[]")
+
   /// Full snapshot ALLER Positionen des Original-Belegs (was der Kunde
   /// bestellt hatte, nicht nur was er zurückschickt). Lazy populated:
   /// leer="[]" bis zum ersten Bedarf, dann gefüllt aus Webisco-

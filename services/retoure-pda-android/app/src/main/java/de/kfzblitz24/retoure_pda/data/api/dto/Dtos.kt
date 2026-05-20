@@ -76,6 +76,9 @@ data class CaseDetail(
     val partnerReceivedAt: String? = null,
     /** ISO-Timestamp wann Worker "Fertig mit Scannen" gedrückt hat. */
     val scanCompletedAt: String? = null,
+    val customerTrackingNumber: String? = null,
+    /** Zusätzliche Paket-Trackings für Multi-Paket-Szenarien. */
+    val additionalTrackings: List<String> = emptyList(),
     val customer: CustomerSnapshot,
     val items: List<PdaItem>,
 )
@@ -93,6 +96,22 @@ data class ScanEanRequest(
 @Serializable
 data class ScanCompleteRequest(
     val pdaId: String? = null,
+)
+
+@Serializable
+data class AddPackageRequest(
+    val tracking: String,
+    val pdaId: String? = null,
+)
+
+@Serializable
+data class AddPackageResponse(
+    val ok: Boolean,
+    val tracking: String,
+    val position: String,  // "primary" | "additional"
+    val message: String,
+    val total: Int? = null,
+    val alreadyKnown: Boolean = false,
 )
 
 /**

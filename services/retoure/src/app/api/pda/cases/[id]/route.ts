@@ -92,6 +92,14 @@ export async function GET(
       trackingNumber: c.dhlTrackingNumber,
     },
     customerTrackingNumber: c.customerTrackingNumber,
+    additionalTrackings: (() => {
+      try {
+        const parsed = JSON.parse(c.additionalTrackings || "[]");
+        return Array.isArray(parsed) ? parsed.filter((s: unknown) => typeof s === "string") : [];
+      } catch {
+        return [] as string[];
+      }
+    })(),
     carrierDeliveredAt: c.carrierDeliveredAt?.toISOString() ?? null,
     partnerReceivedAt: c.partnerReceivedAt?.toISOString() ?? null,
     scanCompletedAt: c.scanCompletedAt?.toISOString() ?? null,

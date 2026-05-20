@@ -23,6 +23,7 @@ import de.kfzblitz24.retoure_pda.data.scanner.BarcodeScanner
 import de.kfzblitz24.retoure_pda.ui.components.StepProgress
 import de.kfzblitz24.retoure_pda.ui.screens.case.steps.*
 import de.kfzblitz24.retoure_pda.ui.theme.Navy
+import de.kfzblitz24.retoure_pda.ui.theme.Orange
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +46,7 @@ fun CaseDetailScreen(
     // hat den Lookup ja schon bestätigt — die "Paket angenommen"-Hürde
     // entfällt damit.
     var autoReceived by remember { mutableStateOf(false) }
+    var showAddPackageDialog by remember { mutableStateOf(false) }
     LaunchedEffect(state.caseDetail?.id, state.caseDetail?.partnerReceivedAt) {
         val detail = state.caseDetail
         if (!autoReceived &&
@@ -79,6 +81,16 @@ fun CaseDetailScreen(
                     }
                 },
                 actions = {
+                    // "+ Weiteres Paket" — Multi-Paket-Szenario (selbe RMA
+                    // verteilt sich auf mehrere Boxen).
+                    TextButton(onClick = { showAddPackageDialog = true }) {
+                        Text(
+                            "+ Paket",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                     TextButton(onClick = vm::load) {
                         Text("↻", color = Color.White, fontSize = 18.sp)
                     }
@@ -245,4 +257,124 @@ fun CaseDetailScreen(
             }
         }
     }
+
+    // ── Add-Package-Dialog ────────────────────────────────────────────
+    if (showAddPackageDialog) {
+        AddPackageDialog(
+            scanner = scanner,
+            existingPrimary = state.caseDetail?.customerTrackingNumber,
+            existingAdditional = state.caseDetail?.additionalTrackings ?: emptyList(),
+            loading = state.actionLoading,
+            onDismiss = { showAddPackageDialog = false },
+            onSubmit = { tracking ->
+                vm.addPackage(tracking)
+                showAddPackageDialog = false
+            },
+        )
+    }
+
+    // Banner nach erfolgreicher Add-Package-Aktion (auto-hide nach 3s)
+    state.addPackageBanner?.let { msg ->
+        LaunchedEffect(msg) {
+            kotlinx.coroutines.delay(3000)
+            vm.clearAddPackageBanner()
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddPackageDialog(
+    scanner: de.kfzblitz24.retoure_pda.data.scanner.BarcodeScanner,
+    existingPrimary: String?,
+    existingAdditional: List<String>,
+    loading: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var input by remember { mutableStateOf("") }
+
+    // Scanner-Subscription nur während Dialog offen
+    LaunchedEffect(Unit) {
+        scanner.scans.collect { raw ->
+            val code = raw.trim()
+            if (code.isNotEmpty()) {
+                input = code
+                // Auto-Submit nach Hardware-Scan
+                onSubmit(code)
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF142337),
+        title = {
+            Text(
+                "Weiteres Paket zur Retoure",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Scanne das Paket-Label des weiteren Pakets — die Tracking-Nummer wird an diese Retoure angehängt.",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 13.sp,
+                )
+                if (existingPrimary != null) {
+                    Text(
+                        "Aktuell verknüpft:",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 11.sp,
+                    )
+                    Text(
+                        "1. $existingPrimary",
+                        color = Color(0xFFB3E5FC),
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    existingAdditional.forEachIndexed { idx, t ->
+                        Text(
+                            "${idx + 2}. $t",
+                            color = Color(0xFFB3E5FC),
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Paket-Code", color = Color.White.copy(alpha = 0.6f)) },
+                    placeholder = { Text("z. B. 003404343502400…", color = Color.White.copy(alpha = 0.3f)) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Orange,
+                        unfocusedBorderColor = Orange.copy(alpha = 0.4f),
+                        cursorColor = Orange,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (input.isNotBlank()) onSubmit(input.trim()) },
+                enabled = !loading && input.isNotBlank(),
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Text(if (loading) "…" else "Hinzufügen")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Abbrechen", color = Color.White.copy(alpha = 0.6f))
+            }
+        },
+    )
 }

@@ -93,6 +93,17 @@ interface RetoureApi {
         @Body body: ScanCompleteRequest,
     ): GenericSuccess
 
+    /**
+     * Hängt ein weiteres Paket-Tracking an die Retoure (Multi-Paket-
+     * Szenario). Backend speichert es entweder als customerTracking
+     * (wenn noch leer) oder im additionalTrackings-Array.
+     */
+    @POST("api/pda/cases/{caseId}/add-package")
+    suspend fun addPackage(
+        @Path("caseId") caseId: String,
+        @Body body: AddPackageRequest,
+    ): AddPackageResponse
+
     @POST("api/pda/cases/{caseId}/items/{itemId}/assess")
     suspend fun assessItem(
         @Path("caseId") caseId: String,
