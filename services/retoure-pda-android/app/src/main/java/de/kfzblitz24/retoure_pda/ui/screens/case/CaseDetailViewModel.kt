@@ -13,13 +13,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Wizard-Schritte — exakt wie in der PWA (case/[id]/page.tsx).
- * Die `label`-Property entspricht den Strings aus `stepLabel()` in der PWA.
+ * Wizard-Schritte. Seit dem Inline-Rating-Pass sind SCAN + Bewertung
+ * EIN Schritt — pro Artikel scannen + sofort bewerten. Daher kein
+ * separater "Bewerten"-Step mehr im Top-Indicator. Falls items vom
+ * Fallback-Pfad (manuelle Da/Fehlt-Buttons ohne EAN-Scan) noch
+ * bewertet werden müssen, bleiben wir trotzdem im "Erfassen"-Step —
+ * die Fallback-Liste/Anzeige passiert dort inline.
  */
 enum class WizardStep(val label: String) {
     RECEIVE("Eingang"),
-    SCAN("Scannen"),
-    ASSESS("Bewerten"),
+    SCAN("Artikel erfassen"),
+    ASSESS("Artikel erfassen"),  // gleicher Label-Text → optisch ein Step
     PALETTE("Palette"),
     DONE("Fertig"),
 }
@@ -28,11 +32,11 @@ enum class WizardStep(val label: String) {
  * Leitet den aktuellen Wizard-Schritt aus den Case-Daten ab.
  *
  *   - kein partnerReceivedAt          → RECEIVE
- *   - scanCompletedAt nicht gesetzt   → SCAN
- *       (auch wenn alle angemeldeten Items received sind — Worker
- *       muss explizit "Fertig mit Scannen" tappen, damit Extras +
- *       Falschsendungen vorher noch gescannt werden können)
+ *   - scanCompletedAt nicht gesetzt   → SCAN ("Artikel erfassen")
+ *       Inline-Rating passiert innerhalb dieses Steps.
  *   - irgendein Item mit status=received|photographed → ASSESS
+ *       (Fallback: nur wenn ein Item ohne EAN per Da-Button bestätigt
+ *       wurde und deshalb durch den Inline-Pfad nicht gerated wurde)
  *   - irgendein Item assessed mit verdict ≠ red → PALETTE
  *   - sonst → DONE
  */

@@ -19,21 +19,31 @@ import de.kfzblitz24.retoure_pda.ui.theme.StepDone
 import de.kfzblitz24.retoure_pda.ui.theme.StepInactive
 
 /**
- * 5-Step-Indikator analog zur PWA:
+ * Step-Indikator. Seit dem Inline-Rating-Pass sind SCAN + ASSESS
+ * konzeptionell EIN Schritt ("Artikel erfassen") — pro Artikel
+ * scannen + sofort bewerten. Wir filtern ASSESS aus dem Display
+ * und mappen ihn intern auf SCAN für die Aktiv-Markierung.
+ *
  *   Orange  = aktiver Schritt
  *   Grün    = erledigter Schritt
  *   Grau    = noch nicht dran
  */
 @Composable
 fun StepProgress(currentStep: WizardStep, modifier: Modifier = Modifier) {
-    val steps = WizardStep.entries
-    val currentIdx = steps.indexOf(currentStep)
+    // ASSESS aus dem visuellen Display ausblenden — der Worker sieht
+    // SCAN und ASSESS als einen einzigen "Artikel erfassen"-Schritt.
+    val displaySteps = WizardStep.entries.filter { it != WizardStep.ASSESS }
+    // Wenn der echte Step ASSESS ist, behandeln wir ihn fürs Display
+    // wie SCAN — gleiche Pill bleibt orange aktiv.
+    val effectiveStep = if (currentStep == WizardStep.ASSESS) WizardStep.SCAN
+                        else currentStep
+    val currentIdx = displaySteps.indexOf(effectiveStep)
 
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        steps.forEachIndexed { index, step ->
+        displaySteps.forEachIndexed { index, step ->
             val isActive = index == currentIdx
             val isDone   = index < currentIdx
 
