@@ -17,6 +17,7 @@ import {
   reprintContainerLabelAction,
   updateContainerNotesAction,
 } from "./actions";
+import { PrintContainerButton } from "@/components/print-container-button";
 
 /** Status-Meta wie auf der Liste — kompakt dupliziert, sonst Cross-Imports. */
 const STATUS_META: Record<string, { label: string; bg: string; text: string }> = {
@@ -296,35 +297,25 @@ export default async function ContainerDetailPage({
               )}
             </form>
 
-            {/* PDF-Fallback: solange kein ZPL-Drucker da ist, kann das
-                Label als A6-PDF heruntergeladen und über einen
-                beliebigen (z. B. Bluetooth-)Drucker ausgegeben werden. */}
+            {/* Druck via Browser-Print → Munbyn-Chrome-Extension
+                routet das PDF zum gepairten USB-Drucker. Ohne Extension
+                öffnet sich der normale System-Druckdialog. */}
+            <div className="mt-2">
+              <PrintContainerButton
+                containerId={c.id}
+                containerCode={c.code}
+              />
+            </div>
+
+            {/* PDF-Download als Fallback / für externe Tools. */}
             <a
               href={`/api/admin/containers/${c.id}/label-pdf`}
               target="_blank"
               rel="noopener"
               className="mt-2 block w-full text-center px-3 py-2 bg-[#ff6600] text-white text-sm rounded-lg hover:bg-[#e65a00]"
             >
-              Label als PDF (A6)
+              Label als PDF öffnen / herunterladen
             </a>
-            <p className="text-[10px] text-[#8a93a0] mt-2">
-              PDF in neuem Tab — von dort über Browser-Drucken an Bluetooth-/AirPrint-/jeden Drucker schicken.
-            </p>
-
-            {/* ZPL-Direkt-Download: für Drucker die ZPL nativ sprechen
-                (Munbyn RW403B, Zebra ZD/GK/GX). Datei kann an die
-                Hersteller-App übergeben oder via `nc <ip> 9100` auf
-                einen Netzwerk-Drucker geschickt werden. */}
-            <a
-              href={`/api/admin/containers/${c.id}/label-zpl`}
-              download={`${c.code}.zpl`}
-              className="mt-2 block w-full text-center px-3 py-2 bg-white text-[#0b3756] text-sm rounded-lg border border-[#0b3756] hover:bg-[#f6f8fa]"
-            >
-              Label als ZPL (.zpl-Datei)
-            </a>
-            <p className="text-[10px] text-[#8a93a0] mt-2">
-              Für Drucker mit nativem ZPL-Support (Munbyn RW403B, Zebra). Datei an die Hersteller-App übergeben oder `cat label.zpl | nc &lt;ip&gt; 9100`.
-            </p>
           </div>
 
           {/* Close */}
