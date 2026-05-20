@@ -142,27 +142,10 @@ fun CaseDetailScreen(
                 ) {
                     Spacer(Modifier.height(4.dp))
 
-                    // ── Case-Header ───────────────────────────────────
-                    // Lager-Mitarbeiter brauchen NUR die Bestellnummer,
-                    // keine Kundendaten (DSGVO + irrelevant für Wareneingang).
-                    // Adresse + Name werden im Admin-Dashboard angezeigt.
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.06f))
-                            .padding(12.dp),
-                    ) {
-                        Text(
-                            detail.bestellnummer,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = Color.White,
-                        )
-                    }
-
                     // ── Step-Progress ─────────────────────────────────
+                    // Bestellnummer steht schon in der TopAppBar oben —
+                    // nicht doppelt anzeigen. Hier direkt mit dem Wizard-
+                    // Step-Indikator weitermachen.
                     StepProgress(currentStep = step)
 
                     // ── Action-Error ──────────────────────────────────
