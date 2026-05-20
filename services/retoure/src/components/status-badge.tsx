@@ -37,6 +37,18 @@ export const STATUS_META: Record<
     text: "text-cyan-800",
     icon: PackageCheck,
   },
+  partner_verarbeitet: {
+    label: "Im Partnerlager verarbeitet",
+    bg: "bg-indigo-100",
+    text: "text-indigo-800",
+    icon: PackageCheck,
+  },
+  unterwegs_lieferant: {
+    label: "Unterwegs zum Lieferant",
+    bg: "bg-amber-100",
+    text: "text-amber-800",
+    icon: Truck,
+  },
   pruefung: {
     label: "In Prüfung",
     bg: "bg-yellow-100",
@@ -87,6 +99,8 @@ export const STATUSES = [
   "versandt",
   "unterwegs",
   "eingang_partner",
+  "partner_verarbeitet",
+  "unterwegs_lieferant",
   "pruefung",
   "erstattet",
   "abgelehnt",
