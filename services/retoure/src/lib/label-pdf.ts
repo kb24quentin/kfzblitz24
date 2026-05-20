@@ -78,6 +78,12 @@ function fmtDate(d: Date): string {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
+/** Date mit englischem Wochentags-Kürzel davor: "Mon, 03.06.2026". */
+function fmtDateWithWeekday(d: Date): string {
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `${weekdays[d.getDay()]}, ${fmtDate(d)}`;
+}
+
 async function generateBarcodePng(data: string): Promise<Uint8Array> {
   return bwipjs.toBuffer({
     bcid: "qrcode",
@@ -317,38 +323,53 @@ export async function buildPalletLabelPdf(
   // ── 6. LATEST DEPARTURE + CONTAINER WAS OPENED ON + QR ───────────
   // Zwei-Spalten-Layout links, QR rechts.
   const datesTopY = cursorY - 12;
-  page.drawText("LATEST DEPARTURE", {
+  // ── LATEST DEPARTURE — groß, mit Wochentag, EN + PL ──────────────
+  // User-Brief: "Das container was opend muss kleiner und latest
+  // depature größer und mit Wochentag. und die sollen Polnisch und
+  // English in einem sein"
+  page.drawText("DEPARTURE BY", {
     x: TEXT_X,
     y: datesTopY,
-    size: 8,
+    size: 7,
     font: helvBold,
     color: BLACK,
   });
-  page.drawText(fmtDate(opts.maxOpenUntil), {
+  // Polnisch: "Ł" liegt außerhalb von WinAnsi, deshalb hier ohne
+  // diakritisches Zeichen — Polnische Leser verstehen "WYSYLKA"
+  // problemlos auch ohne Strich.
+  page.drawText("WYSYLKA DO", {
     x: TEXT_X,
-    y: datesTopY - 16,
-    size: 14,
+    y: datesTopY - 9,
+    size: 7,
+    font: helvBold,
+    color: BLACK,
+  });
+  page.drawText(fmtDateWithWeekday(opts.maxOpenUntil), {
+    x: TEXT_X,
+    y: datesTopY - 31,
+    size: 20,
     font: helvBold,
     color: BLACK,
   });
 
-  const openedY = datesTopY - 38;
-  page.drawText("CONTAINER WAS OPENED ON", {
+  // ── OPENED — klein, EN + PL inline ───────────────────────────────
+  const openedY = datesTopY - 56;
+  page.drawText("OPENED · OTWARTO", {
     x: TEXT_X,
     y: openedY,
-    size: 8,
+    size: 7,
     font: helvBold,
     color: BLACK,
   });
   page.drawText(fmtDate(opts.createdAt), {
     x: TEXT_X,
-    y: openedY - 16,
-    size: 14,
+    y: openedY - 11,
+    size: 9,
     font: helvBold,
     color: BLACK,
   });
 
-  // QR rechts, vertikal mittig zu den beiden Datums-Blöcken
+  // QR rechts, vertikal mittig zwischen DEPARTURE-Top und OPENED-Bottom
   let qrImg;
   try {
     const qrData =
@@ -360,7 +381,9 @@ export async function buildPalletLabelPdf(
   }
   if (qrImg) {
     const qrX = TEXT_RIGHT_X - QR_SIZE;
-    const qrYCenter = (datesTopY + (openedY - 16)) / 2;
+    const datesBlockTop = datesTopY + 4;
+    const datesBlockBottom = openedY - 13;
+    const qrYCenter = (datesBlockTop + datesBlockBottom) / 2;
     const qrY = qrYCenter - QR_SIZE / 2;
     page.drawImage(qrImg, {
       x: qrX,
@@ -370,7 +393,7 @@ export async function buildPalletLabelPdf(
     });
   }
 
-  cursorY = openedY - 28;
+  cursorY = openedY - 22;
 
   // ── 7. Footer ────────────────────────────────────────────────────
   // User-Brief: Footer-Text "kfzBlitz24 Returns Warehouse · ops@…"
