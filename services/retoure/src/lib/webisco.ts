@@ -435,38 +435,32 @@ export async function fetchArtikelInfos(
   }
   if (env.error) return { ok: false, error: env.error };
 
-  // Response-Struktur (Webisco-Doku S. 9):
-  //   <artikeltreffer>
-  //     <artikeltreffer id="1" anzahl="1">
-  //       <artikel artikelnummer="..." hersteller="..." eancode="..." .../>
-  //     </artikeltreffer>
-  //     ...
-  //   </artikeltreffer>
+  // Echte Webisco-Response (in Production verifiziert):
+  //   <artikelliste>
+  //     <artikel anfrageid="1" artikelnummer="..." hersteller="..."
+  //              eancode="..." beschreibung="..." .../>
+  //     <artikel anfrageid="2" .../>
+  //   </artikelliste>
   //
-  // Achtung: das äussere Tag heisst auch `<artikeltreffer>` (selber Name
-  // wie das innere) — der XML-Parser fasst sie als nested object zusammen.
-  const treffer = toArray(env.content.artikeltreffer as unknown);
+  // — KEIN <artikeltreffer>-Wrapper, anders als das Spec-PDF nahelegt.
+  // Wir greifen direkt auf content.artikelliste.artikel zu.
+  const artikelListe = env.content.artikelliste as Record<string, unknown> | undefined;
+  const artikelEntries = toArray(artikelListe?.artikel as unknown);
   const result: ArtikelInfo[] = [];
-
-  for (const t of treffer) {
-    const trefferRec = t as Record<string, unknown>;
-    const anfrageId = Number(trefferRec.id) || 0;
-    // Artikel kann direkt sein, oder als <artikel>-Array darunter:
-    const artikelEntries = toArray(trefferRec.artikel as unknown);
-    for (const a of artikelEntries) {
-      const ar = a as Record<string, unknown>;
-      const ean = str(ar.eancode);
-      result.push({
-        anfrageId,
-        artikelnummer: str(ar.artikelnummer),
-        hersteller: str(ar.hersteller),
-        herstellernummer: str(ar.herstellernummer),
-        beschreibung: str(ar.beschreibung),
-        // leere Strings + "0" als "kein EAN" werten — kommt in Webisco
-        // bei Sammelartikeln/Sets vor und ist als Barcode unbrauchbar.
-        eancode: ean && ean !== "" && ean !== "0" ? ean : undefined,
-      });
-    }
+  for (const a of artikelEntries) {
+    const ar = a as Record<string, unknown>;
+    const ean = str(ar.eancode);
+    result.push({
+      // Attribut heisst tatsächlich "anfrageid" (klein), nicht "id".
+      anfrageId: Number(ar.anfrageid) || 0,
+      artikelnummer: str(ar.artikelnummer),
+      hersteller: str(ar.hersteller),
+      herstellernummer: str(ar.herstellernummer),
+      beschreibung: str(ar.beschreibung),
+      // leere Strings + "0" als "kein EAN" werten — kommt in Webisco
+      // bei Sammelartikeln/Sets vor und ist als Barcode unbrauchbar.
+      eancode: ean && ean !== "" && ean !== "0" ? ean : undefined,
+    });
   }
 
   return { ok: true, data: result };
@@ -510,24 +504,22 @@ export async function fetchArtikelByEan(
   }
   if (env.error) return { ok: false, error: env.error };
 
-  const treffer = toArray(env.content.artikeltreffer as unknown);
+  // Selbe Struktur wie in fetchArtikelInfos:
+  //   <artikelliste><artikel anfrageid="..." eancode="..." .../></artikelliste>
+  const artikelListe = env.content.artikelliste as Record<string, unknown> | undefined;
+  const artikelEntries = toArray(artikelListe?.artikel as unknown);
   const result: ArtikelInfo[] = [];
-  for (const t of treffer) {
-    const trefferRec = t as Record<string, unknown>;
-    const anfrageId = Number(trefferRec.id) || 0;
-    const artikelEntries = toArray(trefferRec.artikel as unknown);
-    for (const a of artikelEntries) {
-      const ar = a as Record<string, unknown>;
-      const e = str(ar.eancode);
-      result.push({
-        anfrageId,
-        artikelnummer: str(ar.artikelnummer),
-        hersteller: str(ar.hersteller),
-        herstellernummer: str(ar.herstellernummer),
-        beschreibung: str(ar.beschreibung),
-        eancode: e && e !== "" && e !== "0" ? e : undefined,
-      });
-    }
+  for (const a of artikelEntries) {
+    const ar = a as Record<string, unknown>;
+    const e = str(ar.eancode);
+    result.push({
+      anfrageId: Number(ar.anfrageid) || 0,
+      artikelnummer: str(ar.artikelnummer),
+      hersteller: str(ar.hersteller),
+      herstellernummer: str(ar.herstellernummer),
+      beschreibung: str(ar.beschreibung),
+      eancode: e && e !== "" && e !== "0" ? e : undefined,
+    });
   }
   return { ok: true, data: result };
 }

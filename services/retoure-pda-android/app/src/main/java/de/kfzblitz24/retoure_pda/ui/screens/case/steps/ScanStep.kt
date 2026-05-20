@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +65,15 @@ fun ScanStep(
     val extras = caseDetail.items.count { it.source == "extra" }
     val unknowns = caseDetail.items.count { it.source == "unknown" }
     val pending = caseDetail.items.filter { it.source == "registered" && it.status == "pending" }
+
+    // Scanner-Lifecycle: registriert den Broadcast-Receiver für Q900-
+    // Hardware-Scans nur während ScanStep sichtbar ist. OHNE diesen
+    // DisposableEffect kommt KEIN Scan beim Subscribe-Flow unten an —
+    // war der Bug warum scan-ean nie aufgerufen wurde.
+    DisposableEffect(Unit) {
+        scanner.startListening()
+        onDispose { scanner.stopListening() }
+    }
 
     // Hardware-Scanner-Subscription: jeden Scan an scanEan(ean) durchreichen.
     LaunchedEffect(caseDetail.id) {
