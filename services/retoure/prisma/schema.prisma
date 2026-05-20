@@ -161,6 +161,14 @@ model RetoureItem {
   einspeiserid Int?
   supplierId   String?
 
+  /// EAN/GTIN-Code des Artikels — gefetched via Webisco-`artikelanfrage`
+  /// beim ersten PDA-Lookup. Wird verwendet damit der Mitarbeiter den
+  /// Artikel-Barcode mit dem Q900 scannen kann statt manuell "Da/Fehlt"
+  /// zu drücken. Optional, weil Webisco nicht für jeden Artikel einen
+  /// EAN führt (Sammelartikel, Hersteller-Pakete etc.) — Fallback ist
+  /// dann die manuelle Bestätigung im PDA.
+  eanCode String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -176,6 +184,7 @@ model RetoureItem {
   @@index([verdict])
   @@index([einspeiserid])
   @@index([supplierId])
+  @@index([eanCode])
 }
 
 // ─────────────────────────────────────────────────────────────────────

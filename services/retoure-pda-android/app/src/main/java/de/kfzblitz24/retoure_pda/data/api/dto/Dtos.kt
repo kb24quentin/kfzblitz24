@@ -45,6 +45,14 @@ data class PdaItem(
     @SerialName("einzelpreis_brutto") val einzelpreisBrutto: Double? = null,
     @SerialName("gesamtpreis_brutto") val gesamtpreisBrutto: Double? = null,
     @SerialName("einzelgewicht_g") val einzelgewichtG: Int? = null,
+    /**
+     * EAN/GTIN aus Webisco. Wenn vorhanden, kann der PDA-Mitarbeiter
+     * den Artikel-Barcode direkt scannen und der ScanStep matcht das
+     * automatisch gegen das Item → setzt status="received". Wenn null
+     * (Webisco kennt keinen EAN, Sammelartikel, etc.) muss der Worker
+     * manuell "Da/Fehlt" tippen.
+     */
+    val eanCode: String? = null,
     val supplierId: String? = null,
     val supplierName: String? = null,
     val containerId: String? = null,

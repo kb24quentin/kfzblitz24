@@ -8,6 +8,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,13 +27,12 @@ import de.kfzblitz24.retoure_pda.data.scanner.BarcodeScanner
 import de.kfzblitz24.retoure_pda.ui.theme.Orange
 
 /**
- * Wareneingang — manuelle Item-Bestätigung.
+ * Wareneingang — Scan oder manuelle Item-Bestätigung.
  *
- * Bewusst KEIN Scan-Input für die erwarteten Items: der Mitarbeiter
- * hat das Paket vor sich, sieht was angemeldet war, klickt pro Artikel
- * entweder ✓ Da oder ✗ Fehlt. Der `scanner`-Parameter bleibt im
- * Signature für später (z. B. um Extras via Q900 zu scannen), wird in
- * diesem Step aber nicht aktiv genutzt.
+ * Wenn der Worker mit dem Q900 einen EAN-Barcode scannt, matched die
+ * UI den gegen `item.eanCode` der pending items → bestätigt das Item
+ * automatisch als "received". Items ohne eanCode (Webisco kennt keinen,
+ * Sammelartikel) gehen weiterhin via "Da/Fehlt"-Buttons.
  *
  * Unten ggf.:
  *   - "+ Extra-Artikel aus Bestellung" — Webisco-Picker für Artikel
@@ -40,7 +44,7 @@ import de.kfzblitz24.retoure_pda.ui.theme.Orange
 @Composable
 fun ScanStep(
     caseDetail: CaseDetail,
-    @Suppress("UNUSED_PARAMETER") scanner: BarcodeScanner,
+    scanner: BarcodeScanner,
     actionLoading: Boolean,
     onScanItem: (itemId: String, present: Boolean) -> Unit,
     onAddExtraFromOrder: () -> Unit = {},
@@ -49,6 +53,37 @@ fun ScanStep(
     val pending = caseDetail.items.filter { it.status == "pending" }
     val total = caseDetail.items.size
     val erfasst = caseDetail.items.count { it.status != "pending" && it.status != "missing" }
+
+    // Scan-Feedback: kurz anzeigen was zuletzt gescannt wurde + ob's
+    // gemached hat. Wird vom LaunchedEffect unten gesetzt.
+    var lastScan by remember { mutableStateOf<ScanFeedback?>(null) }
+
+    // Scanner-Subscription: jedes scannte Code (Q900-Broadcast oder
+    // Keyboard-Wedge) checken wir gegen die eanCodes der pending items.
+    // Match → onScanItem(item.id, present=true). Kein Match → Feedback
+    // setzen damit der User sieht was passiert ist.
+    LaunchedEffect(caseDetail.items) {
+        scanner.scans.collect { rawCode ->
+            val code = rawCode.trim()
+            if (code.isEmpty()) return@collect
+            // Match gegen ALLE pending-items (auch wenn mehrere derselben
+            // EAN gehört — wir bestätigen den ersten, der nächste Scan
+            // bestätigt den nächsten).
+            val matched = caseDetail.items.firstOrNull {
+                it.status == "pending" && !it.eanCode.isNullOrBlank() && it.eanCode == code
+            }
+            if (matched != null) {
+                onScanItem(matched.id, true)
+                lastScan = ScanFeedback(code = code, ok = true, message = "✓ ${matched.beschreibung ?: matched.artikelnummer ?: code}")
+            } else {
+                lastScan = ScanFeedback(
+                    code = code,
+                    ok = false,
+                    message = "Code $code passt zu keinem offenen Artikel",
+                )
+            }
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -65,6 +100,39 @@ fun ScanStep(
             color = Color.White.copy(alpha = 0.6f),
             fontSize = 13.sp,
         )
+
+        // ── Scan-Hint + letzter Scan-Feedback ─────────────────────────
+        val hasEans = pending.any { !it.eanCode.isNullOrBlank() }
+        if (hasEans) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0x331565C0))
+                    .padding(10.dp),
+            ) {
+                Text(
+                    "📷 Artikel-Barcode scannen → wird automatisch bestätigt",
+                    color = Color(0xFFB3E5FC),
+                    fontSize = 13.sp,
+                )
+            }
+        }
+        lastScan?.let { fb ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (fb.ok) Color(0x3300C853) else Color(0x33F44336))
+                    .padding(10.dp),
+            ) {
+                Text(
+                    fb.message,
+                    color = if (fb.ok) Color(0xFFB9F6CA) else Color(0xFFEF9A9A),
+                    fontSize = 13.sp,
+                )
+            }
+        }
 
         // ── Erwartete Items: Da / Fehlt ────────────────────────────────
         if (pending.isNotEmpty()) {
@@ -170,6 +238,13 @@ fun ScanStep(
     }
 }
 
+/** Internes State-Objekt für den letzten Scan im aktuellen ScanStep. */
+private data class ScanFeedback(
+    val code: String,
+    val ok: Boolean,
+    val message: String,
+)
+
 @Composable
 private fun PendingItemRow(
     item: PdaItem,
@@ -202,6 +277,17 @@ private fun PendingItemRow(
             }
             item.hersteller?.let { h ->
                 Text(h, color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
+            }
+            // EAN-Indikator: zeigt dem Mitarbeiter dass der Artikel
+            // gescannt werden KANN. Items ohne EAN müssen manuell
+            // bestätigt werden.
+            if (!item.eanCode.isNullOrBlank()) {
+                Text(
+                    "EAN: ${item.eanCode} (scannbar)",
+                    color = Color(0xFF81D4FA),
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
             }
         }
 

@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkPdaAuth } from "@/lib/pda-auth";
+import { enrichCaseItemsWithEan } from "@/lib/retoure-ean";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -44,6 +45,23 @@ export async function GET(
     },
   });
   if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Lazy EAN-Enrichment: für alle Items ohne eanCode einmal Webisco
+  // anfragen und die Codes nachladen. Idempotent, läuft pro Case nur
+  // beim ersten Lookup. Bei Webisco-Down: warm fail (Items behalten
+  // eanCode=null, Mitarbeiter bestätigt manuell). Wir blockieren den
+  // Case-Lookup deshalb NICHT — er antwortet auch ohne EANs zügig.
+  await enrichCaseItemsWithEan(c.id);
+  // Re-fetch nur die Items damit die `eanCode`-Spalte aktuell ist.
+  const freshItems = await prisma.retoureItem.findMany({
+    where: { caseId: c.id },
+    orderBy: { createdAt: "asc" },
+    include: {
+      supplier: { select: { id: true, name: true } },
+      container: { select: { id: true, code: true } },
+    },
+  });
+  c.items = freshItems;
 
   return NextResponse.json({
     id: c.id,
@@ -109,6 +127,7 @@ export function serializeItem(it: {
   einzelgewicht_g: number | null;
   einkaufspreis_brutto: number | null;
   einspeiserid?: number | null;
+  eanCode?: string | null;
   receivedAt: Date | null;
   receivedByPda: string | null;
   scanCount: number;
@@ -138,6 +157,7 @@ export function serializeItem(it: {
     einzelgewicht_g: it.einzelgewicht_g,
     einkaufspreis_brutto: it.einkaufspreis_brutto,
     einspeiserid: it.einspeiserid ?? null,
+    eanCode: it.eanCode ?? null,
     receivedAt: it.receivedAt?.toISOString() ?? null,
     receivedByPda: it.receivedByPda,
     scanCount: it.scanCount,

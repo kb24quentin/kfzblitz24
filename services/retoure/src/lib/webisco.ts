@@ -352,6 +352,127 @@ export async function fetchBelegByNumber(
 }
 
 /**
+ * Result einer Artikel-Anfrage — Stammdaten-Auskunft inkl. EAN-Code.
+ *
+ * Wir mappen aktuell nur die für uns relevanten Felder. Webisco liefert
+ * tatsächlich ~30 Felder pro Artikel (Preise, Verfügbarkeit, Hersteller-
+ * IDs, Lager-Informationen etc.), aber für die Retoure-Scan-Erkennung
+ * brauchen wir nur `artikelnummer`, `hersteller`, `beschreibung` und
+ * `eancode`.
+ */
+export interface ArtikelInfo {
+  /** Vom Aufruf übernommene Korrelations-ID (`id` im artikelanfrage-Tag). */
+  anfrageId: number;
+  artikelnummer?: string;
+  hersteller?: string;
+  herstellernummer?: string;
+  beschreibung?: string;
+  /** EAN/GTIN als String (Webisco-Doku: #ZAHL, wir halten als String für lange GTINs). */
+  eancode?: string;
+}
+
+/**
+ * Macht eine artikelanfrage gegen Webisco — fragt nach Artikel-Stammdaten
+ * für eine Liste von Artikelnummern. Wir senden alle Anfragen in einem
+ * einzigen `<artikelanfragen>`-Block, weil Webisco-Doku empfiehlt das
+ * statt einer Anfrage pro Artikel (ein Connect, viele Treffer).
+ *
+ * Suchtyp: `exaktsuche` — wir wollen GENAU diese Artikelnummer, kein
+ * Ähnlichkeitsmatch. Bei mehrdeutiger artikelnummer (kommt bei manchen
+ * Herstellern vor) ergänzen wir den Hersteller-Namen falls vorhanden.
+ *
+ * Use-Case: nach `beleganfrage` haben wir Order-Positionen mit
+ * artikelnummer/hersteller, aber KEINE EAN-Codes. Dieser Helper holt
+ * die EANs nach, damit der PDA-Mitarbeiter den Artikel-Barcode scannen
+ * kann statt manuell zu bestätigen.
+ *
+ * Verhalten bei Fehler:
+ *   - Netzwerk/HTTP-Fehler → komplettes Result.ok=false
+ *   - Einzelne Artikel ohne Match → fehlen einfach im `data`-Array
+ *   - Artikel mit `eancode=""` → wir geben undefined zurück
+ */
+export async function fetchArtikelInfos(
+  cfg: WebiscoConfig,
+  items: Array<{ artikelnummer: string; hersteller?: string }>,
+): Promise<WebiscoResult<ArtikelInfo[]>> {
+  if (items.length === 0) {
+    return { ok: true, data: [] };
+  }
+
+  // Doppel-Anfragen für identische artikelnummern wegfiltern (spart
+  // Webisco-Roundtrip-Bandwidth), und gleichzeitig pro Position eine
+  // unique anfrageId vergeben, damit wir die Antworten zuordnen können.
+  const seen = new Map<string, number>();
+  const queries = items
+    .map((item, idx) => ({ ...item, anfrageId: idx + 1 }))
+    .filter((q) => {
+      const key = `${q.artikelnummer}|${q.hersteller ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.set(key, q.anfrageId);
+      return true;
+    });
+
+  // <artikelanfrage id="N" suchmuster="..." suchtyp="exaktsuche" hersteller="..." menge="1"/>
+  const innerXml = `<artikelanfragen>${queries
+    .map(
+      (q) =>
+        `<artikelanfrage id="${q.anfrageId}" suchmuster="${xmlEscape(q.artikelnummer)}" suchtyp="exaktsuche" hersteller="${xmlEscape(q.hersteller ?? "")}" menge="1" forceonlinecheck="F" ersatzartikelsuche="F"/>`,
+    )
+    .join("")}</artikelanfragen>`;
+
+  let xml: string;
+  try {
+    xml = await callWebisco(cfg, "artikelanfrage", innerXml);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  let env: ReturnType<typeof parseEnvelope>;
+  try {
+    env = parseEnvelope(xml);
+  } catch (e) {
+    return { ok: false, error: `Parse error: ${e instanceof Error ? e.message : e}` };
+  }
+  if (env.error) return { ok: false, error: env.error };
+
+  // Response-Struktur (Webisco-Doku S. 9):
+  //   <artikeltreffer>
+  //     <artikeltreffer id="1" anzahl="1">
+  //       <artikel artikelnummer="..." hersteller="..." eancode="..." .../>
+  //     </artikeltreffer>
+  //     ...
+  //   </artikeltreffer>
+  //
+  // Achtung: das äussere Tag heisst auch `<artikeltreffer>` (selber Name
+  // wie das innere) — der XML-Parser fasst sie als nested object zusammen.
+  const treffer = toArray(env.content.artikeltreffer as unknown);
+  const result: ArtikelInfo[] = [];
+
+  for (const t of treffer) {
+    const trefferRec = t as Record<string, unknown>;
+    const anfrageId = Number(trefferRec.id) || 0;
+    // Artikel kann direkt sein, oder als <artikel>-Array darunter:
+    const artikelEntries = toArray(trefferRec.artikel as unknown);
+    for (const a of artikelEntries) {
+      const ar = a as Record<string, unknown>;
+      const ean = str(ar.eancode);
+      result.push({
+        anfrageId,
+        artikelnummer: str(ar.artikelnummer),
+        hersteller: str(ar.hersteller),
+        herstellernummer: str(ar.herstellernummer),
+        beschreibung: str(ar.beschreibung),
+        // leere Strings + "0" als "kein EAN" werten — kommt in Webisco
+        // bei Sammelartikeln/Sets vor und ist als Barcode unbrauchbar.
+        eancode: ean && ean !== "" && ean !== "0" ? ean : undefined,
+      });
+    }
+  }
+
+  return { ok: true, data: result };
+}
+
+/**
  * Append a free-text Bemerkung to an existing Beleg in Abisco.
  * Appears in Abisco's document with timestamp + author (webisco user).
  */
