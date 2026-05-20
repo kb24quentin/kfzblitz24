@@ -70,7 +70,11 @@ const TEXT_W = TEXT_RIGHT_X - TEXT_X;
 const TOP_BANNER_H = 46;
 
 const BIN_BOX_H = 62;
-const QR_SIZE = 96;
+// QR: 72pt = Designguide-Mindestgröße (§7.7). Vorher 96pt — das war
+// größer als der Dates-Block (73pt) und hat optisch in die Datumszeile
+// reingeragt. 72pt passt sauber in den Block, bleibt mit Handscannern
+// aus ~30 cm zuverlässig lesbar (ECC=M).
+const QR_SIZE = 72;
 
 // ── Helpers ─────────────────────────────────────────────────────────
 function fmtDate(d: Date): string {
