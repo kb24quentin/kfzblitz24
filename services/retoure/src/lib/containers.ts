@@ -43,46 +43,54 @@ export type ContainerStatus =
   | "received_supplier";
 
 /**
- * Mapping Container-Typ → Code-Prefix.
+ * Hard-coded Short-Codes für unsere bekannten Supplier. Diese werden
+ * als Container-Code-Prefix verwendet (z. B. "IP-042") damit Lager-
+ * Mitarbeiter die richtige Palette aus 5 Metern Entfernung erkennen.
  *
- * Bleibt für alle Typen bewusst auf "PAL" um die im PDF-Designguide
- * vorgesehene Doc-ID `PAL-KB24` zu spiegeln. Wenn später eigene
- * Lauf-Nummernkreise pro Typ gewünscht sind, ist `nextSequenceForYear`
- * der Punkt zum Aufdröseln.
+ * Reihenfolge der Lookup-Logik in `supplierShortCode()`:
+ *   1. Hard-coded Eintrag in dieser Map (Stamm-Lieferanten)
+ *   2. Fallback: erste 2 alphanumerischen Zeichen des Supplier-Namens
+ *
+ * Sobald wir > 5 Lieferanten haben, sollte ein eigenes
+ * `Supplier.shortCode`-Field per Migration kommen. YAGNI bis dahin.
  */
-const CODE_PREFIX: Record<ContainerType, string> = {
-  palette: "PAL",
-  carton: "PAL",
-  bag: "PAL",
+const SUPPLIER_SHORT_CODES: Record<string, string> = {
+  Interparts: "IP",
+  Autopartner: "AP",
+  "kfzBlitz24 Retoure (intern)": "KB",
 };
 
 /**
- * Baut aus einem Supplier-Namen einen kurzen, file-safe Slug für den
- * Container-Code. Beispiele:
- *   "BMW Originalteile Großhandel"  → "BMW"
- *   "MANN+HUMMEL Vertriebs GmbH"    → "MANN"
- *   "Osram Automotive Lighting"     → "OSRA"
- * Maximal 6 Zeichen, nur A-Z/0-9, Großbuchstaben, ohne Bindestriche
- * (würde den Code-Parser irritieren).
+ * Liefert den 2-Buchstaben-Code für einen Supplier — bevorzugt aus
+ * der Hard-coded-Map, sonst aus den ersten 2 Buchstaben des Namens.
+ *
+ * Beispiele:
+ *   "Interparts"                     → "IP"  (hard-coded)
+ *   "Autopartner"                    → "AP"  (hard-coded)
+ *   "kfzBlitz24 Retoure (intern)"    → "KB"  (hard-coded)
+ *   "BMW Originalteile Großhandel"   → "BM"  (Fallback)
+ *   "Osram Automotive"               → "OS"  (Fallback)
  */
-function supplierSlug(name: string): string {
+function supplierShortCode(name: string): string {
+  if (SUPPLIER_SHORT_CODES[name]) return SUPPLIER_SHORT_CODES[name];
   const cleaned = name
     .normalize("NFKD")
     .replace(/[^a-zA-Z0-9]/g, "")
     .toUpperCase();
-  return cleaned.slice(0, 6) || "X";
+  return cleaned.slice(0, 2) || "X";
 }
 
 export interface CreateContainerOptions {
   type: ContainerType;
   /**
-   * Lieferant, an den dieser Container retourniert wird. Pflicht über die
-   * PDA-API ("Container = 1 Lieferant"). Bestimmt auch den Code-Slug
-   * (PAL-<slug>-YYYY-NNNNNN). Wird hier als optional getypt, weil die
-   * Lib auch für historische Container ohne Supplier nutzbar sein soll —
-   * der HTTP-Handler erzwingt das Vorhandensein.
+   * Lieferant, an den dieser Container retourniert wird. Pflicht — der
+   * Code-Generator braucht den Supplier-Namen für den 2-Buchstaben-
+   * Prefix (siehe `supplierShortCode()`). Pro Supplier eigenes
+   * Container-Code-Schema wie "IP-042", "AP-117", "KB-003".
+   * Die interne kfzBlitz24-Retoure-Palette läuft hier mit als
+   * regulärer Supplier mit Prefix "KB".
    */
-  supplierId?: string;
+  supplierId: string;
   partnerId?: string;
   createdByPda?: string;
   /** Standard 14 Tage — siehe `DEFAULT_MAX_AGE_DAYS`. */
@@ -90,27 +98,29 @@ export interface CreateContainerOptions {
 }
 
 /**
- * Liefert die nächste laufende Nummer für ein gegebenes Jahr.
+ * Liefert die nächste laufende Nummer für einen Supplier-Prefix.
  *
- * Wir scannen `Container.code` nach Treffern auf `PAL-{year}-…`, ziehen
+ * Wir scannen `Container.code` nach Treffern auf `<PREFIX>-…`, ziehen
  * die höchste Nummer und addieren 1. Bei concurrent inserts kann es
  * theoretisch zu einer Race kommen — der UNIQUE-Constraint auf
  * `Container.code` fängt das ab und wir retryen einmal.
+ *
+ * Wir ignorieren bewusst alte Codes im Format `PAL-XXX-YYYY-NNNNNN`
+ * (die per LIKE-Pattern `PREFIX-%-…` nicht matchen würden weil sie
+ * mit `PAL` anfangen, nicht mit unserem neuen 2-Buchstaben-Prefix).
  */
-async function nextSequenceForYear(year: number): Promise<number> {
-  // Bewusst über ALLE PAL-*-Codes scannen (mit und ohne Supplier-Slug),
-  // damit die Nummer global pro Jahr eindeutig ist — auch nach Wechseln
-  // im Code-Format. Pattern matched:
-  //   PAL-2026-000001
-  //   PAL-BMW-2026-000002
-  const pattern = `${CODE_PREFIX.palette}-%${year}-%`;
+async function nextSequenceForPrefix(prefix: string): Promise<number> {
+  // Pattern: "IP-001", "IP-002", ... — striktes 2-Letter-Prefix.
+  const pattern = `${prefix}-%`;
   const rows = await prisma.$queryRawUnsafe<{ code: string }[]>(
     `SELECT "code" FROM "Container" WHERE "code" LIKE $1`,
     pattern,
   );
   let max = 0;
   for (const r of rows) {
-    const m = /-(\d+)$/.exec(r.code);
+    // Nur Codes im neuen Format "<PREFIX>-<NNN>" zählen. Alte Codes
+    // wie "PAL-INTERP-2026-000002" filtern wir hier explizit aus.
+    const m = new RegExp(`^${prefix}-(\\d+)$`).exec(r.code);
     if (!m) continue;
     const n = parseInt(m[1], 10);
     if (Number.isFinite(n) && n > max) max = n;
@@ -118,9 +128,9 @@ async function nextSequenceForYear(year: number): Promise<number> {
   return max + 1;
 }
 
-/** Formatiert eine laufende Nummer auf 6 Stellen mit führenden Nullen. */
+/** Formatiert eine laufende Nummer auf 3 Stellen mit führenden Nullen. */
 function formatSequence(n: number): string {
-  return String(n).padStart(6, "0");
+  return String(n).padStart(3, "0");
 }
 
 /**
@@ -136,30 +146,30 @@ export async function createContainer(
   const maxOpenUntil = new Date(
     openedAt.getTime() + maxAgeDays * 24 * 60 * 60 * 1000,
   );
-  const year = openedAt.getFullYear();
-  const prefix = CODE_PREFIX[opts.type];
 
-  // Supplier-Slug (falls vorhanden) zwischen prefix und year einschieben.
-  // Wir validieren hier auch dass der Supplier existiert — die HTTP-API
-  // ruft das ohnehin schon, aber doppelt hält besser (z. B. wenn das Lib
-  // direkt aus einem Script aufgerufen wird).
-  let slug = "";
-  if (opts.supplierId) {
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: opts.supplierId },
-      select: { name: true },
-    });
-    if (!supplier) {
-      throw new Error(`Supplier nicht gefunden: ${opts.supplierId}`);
-    }
-    slug = `-${supplierSlug(supplier.name)}`;
+  // Code-Format ab 2026-05: kurze Supplier-Prefix-Codes wie "IP-042",
+  // "AP-117", "KB-003". Aus dem Lager-UX-Brief: "Container Codes müssen
+  // kürzer/ besser lesbar sein damit man als Mitarbeiter die korrekte
+  // Palette sofort erkennt." Vorgängerformat war PAL-INTERP-2026-000002.
+  if (!opts.supplierId) {
+    throw new Error(
+      "Container-Anlage erfordert supplierId (Container = 1 Lieferant).",
+    );
   }
+  const supplier = await prisma.supplier.findUnique({
+    where: { id: opts.supplierId },
+    select: { name: true },
+  });
+  if (!supplier) {
+    throw new Error(`Supplier nicht gefunden: ${opts.supplierId}`);
+  }
+  const prefix = supplierShortCode(supplier.name);
 
   // Einmal retryen wenn UNIQUE-Constraint feuert (race mit parallelem
   // Insert). Beim zweiten Treffer geben wir den Fehler durch.
   for (let attempt = 0; attempt < 2; attempt++) {
-    const seq = await nextSequenceForYear(year);
-    const code = `${prefix}${slug}-${year}-${formatSequence(seq)}`;
+    const seq = await nextSequenceForPrefix(prefix);
+    const code = `${prefix}-${formatSequence(seq)}`;
     try {
       return await prisma.container.create({
         data: {

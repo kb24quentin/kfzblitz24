@@ -40,7 +40,7 @@ export async function GET(
   const { id } = await ctx.params;
   const container = await prisma.container.findUnique({
     where: { id },
-    include: { supplier: { select: { name: true } } },
+    include: { supplier: { select: { id: true, name: true } } },
   });
 
   if (!container) {
@@ -54,11 +54,16 @@ export async function GET(
     container.partnerId ??
     "(kein Lieferant)";
 
+  // Interne kfzBlitz24-Retoure-Palette: Routing-Hinweis im Label ändert
+  // sich auf "→ KB24-LAGER (Sortierfach Retouren)" statt "→ Lieferant".
+  const isInternal = container.supplier?.id === "kfzblitz24-internal";
+
   const pdfBytes = await buildPalletLabelPdf({
     palletCode: container.code,
     partnerName,
     createdAt: container.openedAt,
     maxOpenUntil: container.maxOpenUntil ?? container.openedAt,
+    isInternal,
   });
 
   return new Response(new Uint8Array(pdfBytes), {

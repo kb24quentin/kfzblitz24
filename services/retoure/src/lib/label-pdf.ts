@@ -23,6 +23,11 @@ export interface PalletPdfOptions {
   createdAt: Date;
   /** Max-Offen-bis-Datum. */
   maxOpenUntil: Date;
+  /**
+   * Interne Palette (kfzBlitz24-Retoure-Sammler) → Routing-Hinweis wird
+   * angepasst: "INTERN — KB24-LAGER" statt "→ <Lieferant>". Optional.
+   */
+  isInternal?: boolean;
 }
 
 // Brand-Farben (aus CLAUDE.md §8)
@@ -78,67 +83,85 @@ export async function buildPalletLabelPdf(
   const helv = await pdf.embedFont(StandardFonts.Helvetica);
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const helvMono = await pdf.embedFont(StandardFonts.Courier);
-  const helvMonoBold = await pdf.embedFont(StandardFonts.CourierBold);
 
-  let y = A6_H - MARGIN;
-
-  // ── 1. Wortmark "kfzblitz24" ───────────────────────────────────────
-  // "kfz" Navy, "blitz" Orange, "24" Navy, alles in einer Zeile
-  const wordHeight = 18;
+  // ── 1. Mini-Wortmark + orange Linie oben ─────────────────────────
+  // Klein gehalten — das Label soll dominiert sein vom Paletten-Code,
+  // nicht von unserem Brand. Header dient nur als Eigentums-Marker.
+  const headerY = A6_H - MARGIN;
+  const wordHeight = 12;
+  let wx = MARGIN;
   const kfzWidth = helvBold.widthOfTextAtSize("kfz", wordHeight);
   const blitzWidth = helvBold.widthOfTextAtSize("blitz", wordHeight);
-  // const _twentyfourWidth = helvBold.widthOfTextAtSize("24", wordHeight);
-
-  let wx = MARGIN;
-  y -= wordHeight;
-  page.drawText("kfz", { x: wx, y, size: wordHeight, font: helvBold, color: NAVY });
+  page.drawText("kfz", { x: wx, y: headerY - wordHeight, size: wordHeight, font: helvBold, color: NAVY });
   wx += kfzWidth;
-  page.drawText("blitz", { x: wx, y, size: wordHeight, font: helvBold, color: ORANGE });
+  page.drawText("blitz", { x: wx, y: headerY - wordHeight, size: wordHeight, font: helvBold, color: ORANGE });
   wx += blitzWidth;
-  page.drawText("24", { x: wx, y, size: wordHeight, font: helvBold, color: NAVY });
+  page.drawText("24", { x: wx, y: headerY - wordHeight, size: wordHeight, font: helvBold, color: NAVY });
 
-  // Orange Akzent-Linie unter dem Wortmark
-  y -= 4;
-  page.drawRectangle({
-    x: MARGIN,
-    y: y - 3,
-    width: A6_W - 2 * MARGIN,
-    height: 3,
-    color: ORANGE,
-  });
-  y -= 6;
-
-  // ── 2. PALETTE-Title ──────────────────────────────────────────────
-  y -= 32;
-  page.drawText("PALETTE", {
-    x: MARGIN,
-    y,
-    size: 28,
-    font: helvBold,
-    color: NAVY,
-  });
-
-  // ── 3. Lieferant ──────────────────────────────────────────────────
-  y -= 8;
-  page.drawText("Lieferant", {
-    x: MARGIN,
-    y: y - 10,
-    size: 8,
+  // Rechts oben: Doc-Marker (klein) — zeigt was das für ein Label ist
+  const docTag = opts.isInternal ? "INTERNE PALETTE" : "PALETTE";
+  const docTagSize = 9;
+  const docTagWidth = helv.widthOfTextAtSize(docTag, docTagSize);
+  page.drawText(docTag, {
+    x: A6_W - MARGIN - docTagWidth,
+    y: headerY - wordHeight + 1,
+    size: docTagSize,
     font: helv,
     color: DARK_GREY,
   });
-  y -= 28;
-  page.drawText(opts.partnerName, {
+
+  // Orange Akzent-Linie unter dem Header
+  page.drawRectangle({
     x: MARGIN,
-    y,
-    size: 18,
-    font: helvBold,
-    color: NAVY,
-    maxWidth: A6_W - 2 * MARGIN,
+    y: headerY - wordHeight - 3,
+    width: A6_W - 2 * MARGIN,
+    height: 2,
+    color: ORANGE,
   });
 
-  // ── 4. Barcode ────────────────────────────────────────────────────
-  y -= 24;
+  // ── 2. RIESIGER Paletten-Code in Box ─────────────────────────────
+  // Aus User-Brief: "Rießiger Paletten Name". Wir geben dem Code die
+  // meisten Pixel auf der Seite — von 5m Entfernung erkennbar.
+  // Zentriert horizontal + dicker Navy-Rahmen.
+  const codeBoxY = headerY - wordHeight - 12;
+  const codeBoxH = 60 * MM / 25.4; // ~60mm hoch fühlt sich zu fett an
+  // Eigentlich: ich nehme ~38mm, das passt sauber rein und lässt
+  // genug Raum für Barcode + Routing + Deadline drunter.
+  const codeBoxHeight = 38 * MM;
+  const codeBoxTop = codeBoxY;
+  const codeBoxBottom = codeBoxTop - codeBoxHeight;
+
+  // Rahmen: 2pt Navy-Border
+  page.drawRectangle({
+    x: MARGIN,
+    y: codeBoxBottom,
+    width: A6_W - 2 * MARGIN,
+    height: codeBoxHeight,
+    borderColor: NAVY,
+    borderWidth: 2,
+  });
+
+  // Code horizontal + vertikal mittig. Wir berechnen die Schriftgröße
+  // dynamisch so dass der Code fast die volle Box-Breite ausnutzt.
+  const codeBoxInnerW = A6_W - 2 * MARGIN - 16; // 8pt padding innen
+  let codeSize = 64;
+  let codeWidthAtSize = helvBold.widthOfTextAtSize(opts.palletCode, codeSize);
+  while (codeWidthAtSize > codeBoxInnerW && codeSize > 24) {
+    codeSize -= 2;
+    codeWidthAtSize = helvBold.widthOfTextAtSize(opts.palletCode, codeSize);
+  }
+  // Approximate vertical centering — pdf-lib text baseline is at y.
+  // Capital-letter height ≈ size * 0.7.
+  const codeBaselineY = codeBoxBottom + (codeBoxHeight - codeSize * 0.7) / 2;
+  page.drawText(opts.palletCode, {
+    x: (A6_W - codeWidthAtSize) / 2,
+    y: codeBaselineY,
+    size: codeSize,
+    font: helvBold,
+    color: NAVY,
+  });
+
+  // ── 3. Code-128-Barcode ──────────────────────────────────────────
   let bcImg;
   try {
     const png = await generateBarcodePng(opts.palletCode);
@@ -146,85 +169,93 @@ export async function buildPalletLabelPdf(
   } catch {
     bcImg = null;
   }
-
+  let cursorY = codeBoxBottom - 8;
   if (bcImg) {
     const targetW = A6_W - 2 * MARGIN;
     const aspect = bcImg.height / bcImg.width;
-    const targetH = Math.min(60, targetW * aspect);
-    y -= targetH;
+    const targetH = Math.min(45, targetW * aspect);
+    cursorY -= targetH;
     page.drawImage(bcImg, {
       x: MARGIN,
-      y,
+      y: cursorY,
       width: targetW,
       height: targetH,
     });
+    cursorY -= 6;
   } else {
-    // Fallback: keinen Barcode, nur den Code prominent
-    y -= 24;
+    cursorY -= 8;
   }
 
-  // ── 5. Code als monospace ─────────────────────────────────────────
-  y -= 20;
-  const codeWidth = helvMonoBold.widthOfTextAtSize(opts.palletCode, 14);
-  page.drawText(opts.palletCode, {
-    x: (A6_W - codeWidth) / 2,
-    y,
-    size: 14,
-    font: helvMonoBold,
-    color: NAVY,
-  });
-
-  // ── 6. Datums-Block ───────────────────────────────────────────────
-  y -= 14;
-  page.drawRectangle({
+  // ── 4. Routing-Ziel ──────────────────────────────────────────────
+  // Klein "WOHIN" + bold Routing-Text. Bei intern: anderer Routing-
+  // Hinweis (eigenes Sortier-Fach im Lager statt externer Lieferant).
+  cursorY -= 4;
+  page.drawText("WOHIN", {
     x: MARGIN,
-    y: y - 4,
-    width: A6_W - 2 * MARGIN,
-    height: 1,
-    color: LIGHT_GREY,
-  });
-  y -= 12;
-
-  const labelSize = 8;
-  const valSize = 11;
-  const labelW = 80;
-  page.drawText("Geöffnet:", {
-    x: MARGIN,
-    y,
-    size: labelSize,
+    y: cursorY,
+    size: 7,
     font: helv,
     color: DARK_GREY,
   });
-  page.drawText(fmtDateTime(opts.createdAt), {
-    x: MARGIN + labelW,
-    y: y - 1,
-    size: valSize,
-    font: helv,
-    color: NAVY,
-  });
-  y -= 16;
-  page.drawText("Max. offen bis:", {
+  cursorY -= 13;
+  const routing = opts.isInternal
+    ? "→ KB24-LAGER (Sortierfach Retouren)"
+    : `→ ${opts.partnerName}`;
+  page.drawText(routing, {
     x: MARGIN,
-    y,
-    size: labelSize,
-    font: helv,
-    color: DARK_GREY,
-  });
-  page.drawText(fmtDateTime(opts.maxOpenUntil), {
-    x: MARGIN + labelW,
-    y: y - 1,
-    size: valSize,
+    y: cursorY,
+    size: 11,
     font: helvBold,
     color: NAVY,
+    maxWidth: A6_W - 2 * MARGIN,
   });
 
-  // ── 7. Footer Doc-ID ──────────────────────────────────────────────
+  // ── 5. Schliessen-Bis (prominenter orange Box) ──────────────────
+  // Nach User-Brief: "Palette muss geschlossen werden am: XX.XX.XXXX".
+  // Wir geben das einen orangen Box-Hintergrund damit's sofort ins
+  // Auge fällt — das ist die SLA-Deadline für den Lager-Mitarbeiter.
+  cursorY -= 14;
+  const deadlineBoxH = 22 * MM;
+  const deadlineBoxTop = cursorY;
+  const deadlineBoxBottom = cursorY - deadlineBoxH;
+  page.drawRectangle({
+    x: MARGIN,
+    y: deadlineBoxBottom,
+    width: A6_W - 2 * MARGIN,
+    height: deadlineBoxH,
+    color: ORANGE,
+  });
+  page.drawText("SCHLIESSEN BIS", {
+    x: MARGIN + 8,
+    y: deadlineBoxTop - 10,
+    size: 8,
+    font: helvBold,
+    color: rgb(1, 1, 1),
+  });
+  const deadlineText = fmtDate(opts.maxOpenUntil);
+  page.drawText(deadlineText, {
+    x: MARGIN + 8,
+    y: deadlineBoxTop - 28,
+    size: 22,
+    font: helvBold,
+    color: rgb(1, 1, 1),
+  });
+
+  // ── 6. Footer: Geöffnet-Datum + Doc-ID ───────────────────────────
+  const openedText = `Geöffnet: ${fmtDateTime(opts.createdAt)}`;
+  page.drawText(openedText, {
+    x: MARGIN,
+    y: MARGIN + 6,
+    size: 7,
+    font: helv,
+    color: DARK_GREY,
+  });
   const footer = `PAL-KB24 · ${fmtDate(opts.createdAt)}`;
   const footerSize = 7;
   const footerWidth = helvMono.widthOfTextAtSize(footer, footerSize);
   page.drawText(footer, {
     x: A6_W - MARGIN - footerWidth,
-    y: MARGIN,
+    y: MARGIN + 6,
     size: footerSize,
     font: helvMono,
     color: DARK_GREY,

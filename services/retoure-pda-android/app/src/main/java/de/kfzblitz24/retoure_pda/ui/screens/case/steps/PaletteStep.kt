@@ -15,10 +15,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.kfzblitz24.retoure_pda.data.api.dto.CaseDetail
 import de.kfzblitz24.retoure_pda.data.api.dto.ContainerDto
+import de.kfzblitz24.retoure_pda.data.api.dto.PdaItem
 import de.kfzblitz24.retoure_pda.data.api.dto.SupplierDto
 import de.kfzblitz24.retoure_pda.data.repo.ContainerRepository
 import de.kfzblitz24.retoure_pda.data.scanner.BarcodeScanner
@@ -26,22 +28,26 @@ import de.kfzblitz24.retoure_pda.ui.components.BigButton
 import de.kfzblitz24.retoure_pda.ui.theme.Orange
 
 /**
- * Palette-Step — System sagt "Lege auf Palette X", Mitarbeiter scannt
- * den Paletten-Code zur Bestätigung.
+ * Palette-Step — Zwei-Stufen-Scan-Flow:
  *
- * Flow:
- *   1. Supplier bestimmen — bevorzugt `current.supplierId` (vom vorherigen
- *      Item), sonst erster aktiver Supplier (= Default Interparts).
- *   2. Offene Container des Suppliers laden.
- *   3. Wenn ≥ 1 offen: ersten vorschlagen ("Lege auf PAL-INTERP-2026-…")
- *      + Scan-Input für Bestätigung.
- *   4. Wenn keiner offen: Button "+ Neue Palette anlegen", legt an +
- *      bietet direkt den neuen Code zum Scan an.
- *   5. Mitarbeiter scannt mit Q900 → wenn match: link & next.
- *      Wenn nicht: Fehlerton + Hinweis.
+ *   STUFE 1 (idle):     Worker scannt EAN eines Artikels → System
+ *                       identifiziert Item + zeigt zugehörige Palette
+ *                       (basierend auf item.supplierId).
+ *   STUFE 2 (selected): Worker scannt Paletten-Code zur Bestätigung
+ *                       → Backend verlinkt Item ↔ Container. UI zurück
+ *                       in Stufe 1 für den nächsten Artikel.
  *
- * Optional: "Anderen Lieferanten wählen" als kleiner Link unten —
- * öffnet eine Stufe-2-Auswahl für den (seltenen) Fall.
+ * Manuelle Eingabe (Texteingabe) ist standardmässig versteckt —
+ * öffnet sich nur wenn der Worker explizit auf "Manuell eingeben"
+ * tappt (Fallback wenn ein EAN/Paletten-Code unlesbar ist).
+ *
+ * Items ohne `eanCode` (Webisco kennt keinen / Sammelartikel) können
+ * nicht per Artikel-Scan ausgewählt werden — der Fallback-Button
+ * öffnet eine Liste zur manuellen Auswahl.
+ *
+ * Falschsendungen (source="unknown") haben `supplierId="kfzblitz24-
+ * internal"` und landen automatisch auf der "kfzBlitz24 Retoure (intern)"-
+ * Palette mit Code-Prefix "KB-" (z. B. "KB-003").
  */
 @Composable
 fun PaletteStep(
@@ -53,74 +59,66 @@ fun PaletteStep(
     onLinkToContainer: (containerId: String, itemId: String) -> Unit,
     onCreateContainerAndLink: (supplierId: String, itemId: String) -> Unit,
 ) {
-    val queue = caseDetail.items.filter {
-        it.status == "assessed" && it.verdict != "red"
+    // Queue: Items die noch palettiert werden müssen.
+    //   - registrierte+extra Items: status="assessed" + verdict != "red"
+    //   - unknown Items: source="unknown" + status="assessed" (vom Scan-Endpoint
+    //     auto-assessed) + verdict==null
+    val queue = remember(caseDetail.items) {
+        caseDetail.items.filter {
+            (it.status == "assessed" && it.verdict != "red") ||
+                (it.source == "unknown" && it.status == "assessed")
+        }
     }
-    val current = queue.firstOrNull()
     val completed = caseDetail.items.count { it.status == "on_pallet" }
     val totalToPalettize = queue.size + completed
 
-    // Supplier-Default-Logik (Reihenfolge):
-    //   1. Schon am Item gesetzter Supplier (vom vorherigen Auflegen).
-    //   2. "Interparts" — Stand jetzt unser Standard-Distributor.
-    //      Backend sortiert alphabetisch, deshalb wäre `first()` sonst
-    //      Autopartner — Bug der bei der Demo aufgefallen ist.
-    //   3. Erster aktiver Supplier in der Liste (Fallback).
-    val defaultSupplierId =
-        current?.supplierId
-            ?: suppliers.firstOrNull { it.name.equals("Interparts", ignoreCase = true) }?.id
-            ?: suppliers.firstOrNull()?.id
-    var selectedSupplierId by remember(current?.id, defaultSupplierId) {
-        mutableStateOf(defaultSupplierId)
-    }
-    var openContainers by remember(selectedSupplierId) {
-        mutableStateOf<List<ContainerDto>>(emptyList())
-    }
-    var loadingContainers by remember { mutableStateOf(false) }
+    // Selected item — Stufe 2 ist aktiv wenn != null.
+    var selectedItemId by remember(caseDetail.items) { mutableStateOf<String?>(null) }
+    val selectedItem = queue.find { it.id == selectedItemId }
 
-    // Scan-State
-    var scanInput by remember(current?.id, openContainers) {
-        mutableStateOf("")
-    }
+    // Manuelle Modi
+    var showManualItemPicker by remember { mutableStateOf(false) }
+    var showManualPaletteInput by remember { mutableStateOf(false) }
+    var manualPaletteInput by remember(selectedItemId) { mutableStateOf("") }
+
+    // Fehler-Banner (rot, lokal in der UI)
     var scanError by remember { mutableStateOf<String?>(null) }
-    var showSupplierPicker by remember { mutableStateOf(false) }
 
-    // Offene Container laden wenn Supplier wechselt
-    LaunchedEffect(selectedSupplierId) {
-        val sid = selectedSupplierId ?: return@LaunchedEffect
-        loadingContainers = true
+    // Open containers cache pro Supplier — laden wir lazy wenn ein Item
+    // ausgewählt wurde damit wir nicht alle Supplier vorab abfragen.
+    var openContainersForItem by remember(selectedItemId) {
+        mutableStateOf<List<ContainerDto>?>(null)
+    }
+
+    // Lade offene Container sobald ein Item gewählt wurde
+    LaunchedEffect(selectedItem?.supplierId) {
+        val sid = selectedItem?.supplierId ?: return@LaunchedEffect
         containerRepository.getOpenContainers(sid)
-            .onSuccess { openContainers = it }
-            .onFailure { openContainers = emptyList() }
-        loadingContainers = false
+            .onSuccess { openContainersForItem = it }
+            .onFailure { openContainersForItem = emptyList() }
     }
 
-    if (current == null) {
-        Text(
-            "Keine Artikel mehr für Paletten — weiter.",
-            color = Color.White.copy(alpha = 0.6f),
-            fontSize = 14.sp,
-        )
-        return
-    }
-
-    // Vorgeschlagener Container = erster offener für diesen Supplier
-    val suggestedContainer = openContainers.firstOrNull()
-    val chosenSupplier = suppliers.find { it.id == selectedSupplierId }
-
-    // Scanner-Hardware-Trigger speist scanInput
+    // Scanner-Lifecycle + Subscription
     DisposableEffect(Unit) {
         scanner.startListening()
         onDispose { scanner.stopListening() }
     }
-    LaunchedEffect(scanner, suggestedContainer?.id, current.id) {
-        scanner.scans.collect { code ->
-            val cleaned = code.trim()
-            if (cleaned.isEmpty()) return@collect
-            scanInput = cleaned
-            checkScan(cleaned, suggestedContainer, current.id, onLinkToContainer) { err ->
-                scanError = err
-            }
+    LaunchedEffect(selectedItemId, openContainersForItem) {
+        scanner.scans.collect { raw ->
+            val code = raw.trim()
+            if (code.isEmpty()) return@collect
+            handleScan(
+                scannedCode = code,
+                selectedItem = selectedItem,
+                queue = queue,
+                suggestedContainer = openContainersForItem?.firstOrNull(),
+                onSelectItem = {
+                    selectedItemId = it
+                    scanError = null
+                },
+                onLinkToContainer = onLinkToContainer,
+                onError = { msg -> scanError = msg },
+            )
         }
     }
 
@@ -135,180 +133,271 @@ fun PaletteStep(
             color = Color.White,
         )
         Text(
-            "${completed + 1} von $totalToPalettize",
+            "$completed von $totalToPalettize palettiert · ${queue.size} offen",
             color = Color.White.copy(alpha = 0.6f),
             fontSize = 13.sp,
         )
 
-        // ── Artikel-Card ────────────────────────────────────────────
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.06f))
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
+        if (queue.isEmpty()) {
             Text(
-                "${current.menge}× ${current.beschreibung ?: "—"}",
+                "Alle Artikel sind palettiert — Schritt abgeschlossen.",
+                color = Color(0xFFB9F6CA),
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-                fontSize = 15.sp,
             )
-            val meta = listOfNotNull(current.artikelnummer, current.hersteller).joinToString(" · ")
-            if (meta.isNotEmpty()) {
-                Text(meta, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-            }
-            current.verdict?.let { v ->
-                val badge = if (v == "green") Color(0x4400C853) else Color(0x44FFAB00)
-                val txt = if (v == "green") Color(0xFFB9F6CA) else Color(0xFFFFE082)
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(badge)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text("● $v", color = txt, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                }
+            return@Column
+        }
+
+        // Fehler-Banner
+        scanError?.let { err ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0x33F44336))
+                    .padding(10.dp),
+            ) {
+                Text(err, color = Color(0xFFEF9A9A), fontSize = 13.sp)
             }
         }
 
-        when {
-            // ── Keine Lieferanten in DB ─────────────────────────────
-            suppliers.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x22FFAB00))
-                        .padding(12.dp),
-                ) {
-                    Text(
-                        "Keine Lieferanten gepflegt — bitte im Admin-Dashboard anlegen.",
-                        color = Color(0xFFFFE082),
-                        fontSize = 13.sp,
-                    )
-                }
-            }
-
-            // ── Lieferant noch nicht entschieden ────────────────────
-            // (sollte selten passieren — Default greift fast immer)
-            selectedSupplierId == null || showSupplierPicker -> {
-                Text(
-                    "An welchen Lieferanten geht der Artikel?",
-                    color = Color.White.copy(alpha = 0.75f),
-                    fontSize = 14.sp,
-                )
-                suppliers.forEach { s ->
-                    Button(
-                        onClick = {
-                            selectedSupplierId = s.id
-                            showSupplierPicker = false
-                        },
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White.copy(alpha = 0.1f),
-                            contentColor = Color.White,
-                        ),
-                    ) {
-                        Text(s.name, fontWeight = FontWeight.SemiBold)
+        if (selectedItem == null) {
+            // ── STUFE 1: Artikel scannen ────────────────────────────
+            Stage1ScanArticle(
+                queue = queue,
+                onOpenManualPicker = { showManualItemPicker = true },
+            )
+        } else {
+            // ── STUFE 2: Palette scannen ────────────────────────────
+            Stage2ScanPalette(
+                item = selectedItem,
+                supplier = suppliers.find { it.id == selectedItem.supplierId },
+                suggestedContainer = openContainersForItem?.firstOrNull(),
+                loadingContainers = openContainersForItem == null,
+                actionLoading = actionLoading,
+                showManualInput = showManualPaletteInput,
+                manualInput = manualPaletteInput,
+                onManualInputChange = { manualPaletteInput = it },
+                onToggleManualInput = { showManualPaletteInput = !showManualPaletteInput },
+                onSubmitManualInput = {
+                    val expected = openContainersForItem?.firstOrNull()
+                    val v = manualPaletteInput.trim()
+                    if (v.isNotEmpty() && expected != null && v.equals(expected.code, ignoreCase = true)) {
+                        onLinkToContainer(expected.id, selectedItem.id)
+                        manualPaletteInput = ""
+                        showManualPaletteInput = false
+                        selectedItemId = null
+                    } else if (expected != null) {
+                        scanError = "Code passt nicht. Erwartet: ${expected.code}"
                     }
-                }
+                },
+                onCreateNew = {
+                    selectedItem.supplierId?.let { sid ->
+                        onCreateContainerAndLink(sid, selectedItem.id)
+                        selectedItemId = null
+                    }
+                },
+                onCancel = { selectedItemId = null; scanError = null },
+            )
+        }
+
+        // ── Manueller Item-Picker (Fallback Stufe 1) ────────────────
+        if (showManualItemPicker) {
+            ManualItemPicker(
+                queue = queue,
+                onPick = {
+                    selectedItemId = it
+                    showManualItemPicker = false
+                    scanError = null
+                },
+                onCancel = { showManualItemPicker = false },
+            )
+        }
+    }
+}
+
+@Composable
+private fun Stage1ScanArticle(
+    queue: List<PdaItem>,
+    onOpenManualPicker: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            "Scanne den nächsten Artikel",
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            "EAN-Barcode mit Q900 scannen — System sagt dir auf welche Palette.",
+            color = Color.White.copy(alpha = 0.6f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+        )
+    }
+
+    // Kleiner Queue-Übersicht
+    Text(
+        "WARTET NOCH (${queue.size})",
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Color.White.copy(alpha = 0.5f),
+        letterSpacing = 0.8.sp,
+    )
+    queue.take(8).forEach { item -> QueueItemMini(item = item) }
+    if (queue.size > 8) {
+        Text(
+            "… und ${queue.size - 8} weitere",
+            color = Color.White.copy(alpha = 0.4f),
+            fontSize = 12.sp,
+        )
+    }
+
+    // Fallback nur dezent — selten benötigt
+    Spacer(Modifier.height(4.dp))
+    TextButton(
+        onClick = onOpenManualPicker,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            "Manuell auswählen (für Artikel ohne EAN)",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 12.sp,
+        )
+    }
+}
+
+@Composable
+private fun Stage2ScanPalette(
+    item: PdaItem,
+    supplier: SupplierDto?,
+    suggestedContainer: ContainerDto?,
+    loadingContainers: Boolean,
+    actionLoading: Boolean,
+    showManualInput: Boolean,
+    manualInput: String,
+    onManualInputChange: (String) -> Unit,
+    onToggleManualInput: () -> Unit,
+    onSubmitManualInput: () -> Unit,
+    onCreateNew: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    // Artikel-Bestätigung
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0x3300C853))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            "✓ Artikel erkannt",
+            color = Color(0xFFB9F6CA),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            item.beschreibung ?: item.artikelnummer ?: "—",
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        val meta = listOfNotNull(item.artikelnummer, item.hersteller).joinToString(" · ")
+        if (meta.isNotEmpty()) {
+            Text(
+                meta,
+                color = Color.White.copy(alpha = 0.65f),
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+    }
+
+    when {
+        loadingContainers -> {
+            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Orange)
             }
-
-            loadingContainers -> {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(color = Orange)
-                }
-            }
-
-            // ── Keine offene Palette → neue anlegen ─────────────────
-            suggestedContainer == null -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0x22FFAB00))
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        "Noch keine offene Palette für ${chosenSupplier?.name ?: "diesen Lieferanten"}",
-                        color = Color(0xFFFFE082),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        "Lege eine neue Palette an — der Code wird gedruckt (bzw. PDF) " +
-                            "und der Artikel direkt drauf gelegt.",
-                        color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 12.sp,
-                    )
-                }
-                BigButton(
-                    text = if (actionLoading) "Lege an…"
-                           else "+ Neue Palette für ${chosenSupplier?.name ?: "Lieferant"}",
-                    onClick = { onCreateContainerAndLink(selectedSupplierId!!, current.id) },
-                    loading = actionLoading,
-                )
-            }
-
-            // ── HAUPTPFAD: System sagt + scan bestätigt ─────────────
-            else -> {
-                // Aufforderung
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Orange.copy(alpha = 0.16f))
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        "Lege den Artikel auf",
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 14.sp,
-                    )
-                    Text(
-                        suggestedContainer.code,
-                        color = Orange,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                    )
-                    Text(
-                        "(${chosenSupplier?.name ?: "Lieferant"} · " +
-                            "${suggestedContainer.itemCount} Artikel bisher drauf)",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 12.sp,
-                    )
-                }
-
-                // Scan-Aufforderung
+        }
+        suggestedContainer == null -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0x22FFAB00))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 Text(
-                    "Scanne den Paletten-Code zur Bestätigung",
-                    color = Color.White.copy(alpha = 0.85f),
+                    "Noch keine offene Palette für ${supplier?.name ?: "diesen Lieferanten"}",
+                    color = Color(0xFFFFE082),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
+            }
+            BigButton(
+                text = if (actionLoading) "Lege an…"
+                       else "+ Neue Palette für ${supplier?.name ?: "Lieferant"}",
+                onClick = onCreateNew,
+                loading = actionLoading,
+            )
+        }
+        else -> {
+            // Aufforderung Palette zu scannen — Code GROSS
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Orange.copy(alpha = 0.16f))
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Lege auf Palette",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 14.sp,
+                )
+                Text(
+                    suggestedContainer.code,
+                    color = Orange,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace,
+                )
+                Text(
+                    "→ ${supplier?.name ?: "Lieferant"}",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 13.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Scanne den Paletten-Code zur Bestätigung",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                )
+            }
 
+            // Manuelle Eingabe — default versteckt, nur als Fallback
+            if (showManualInput) {
                 OutlinedTextField(
-                    value = scanInput,
-                    onValueChange = {
-                        scanInput = it
-                        scanError = null
-                    },
+                    value = manualInput,
+                    onValueChange = onManualInputChange,
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = {
-                        Text(
-                            "Q900 auf den Paletten-Aufkleber halten…",
-                            color = Color.White.copy(alpha = 0.35f),
-                            fontSize = 13.sp,
-                        )
+                        Text("Code manuell eintippen…", color = Color.White.copy(alpha = 0.35f))
                     },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
@@ -316,16 +405,7 @@ fun PaletteStep(
                         imeAction = ImeAction.Done,
                         autoCorrect = false,
                     ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            checkScan(
-                                scanInput.trim(),
-                                suggestedContainer,
-                                current.id,
-                                onLinkToContainer,
-                            ) { err -> scanError = err }
-                        },
-                    ),
+                    keyboardActions = KeyboardActions(onDone = { onSubmitManualInput() }),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Orange,
                         unfocusedBorderColor = Orange.copy(alpha = 0.5f),
@@ -335,56 +415,168 @@ fun PaletteStep(
                     ),
                     shape = RoundedCornerShape(10.dp),
                 )
-
-                scanError?.let { err ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0x33F44336))
-                            .padding(10.dp),
-                    ) {
-                        Text(err, color = Color(0xFFEF9A9A), fontSize = 13.sp)
-                    }
+                Button(
+                    onClick = onSubmitManualInput,
+                    enabled = !actionLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text("Bestätigen", fontWeight = FontWeight.SemiBold)
                 }
-
-                // Soft-Action: anderen Lieferant wählen
+            } else {
                 TextButton(
-                    onClick = { showSupplierPicker = true },
+                    onClick = onToggleManualInput,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        "Anderer Lieferant?",
-                        color = Color.White.copy(alpha = 0.45f),
+                        "⌨ Code manuell eingeben",
+                        color = Color.White.copy(alpha = 0.5f),
                         fontSize = 12.sp,
                     )
                 }
             }
         }
     }
+
+    TextButton(
+        onClick = onCancel,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            "← Anderen Artikel scannen",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 12.sp,
+        )
+    }
+}
+
+@Composable
+private fun ManualItemPicker(
+    queue: List<PdaItem>,
+    onPick: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "Artikel manuell wählen",
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        queue.forEach { item ->
+            Button(
+                onClick = { onPick(item.id) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White.copy(alpha = 0.1f),
+                    contentColor = Color.White,
+                ),
+            ) {
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                    Text(
+                        "${item.menge}× ${item.beschreibung ?: item.artikelnummer ?: "—"}",
+                        fontSize = 13.sp,
+                    )
+                    item.eanCode?.let { ean ->
+                        Text(
+                            "EAN $ean",
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.55f),
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                }
+            }
+        }
+        OutlinedButton(
+            onClick = onCancel,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+        ) {
+            Text("Zurück", color = Color.White)
+        }
+    }
+}
+
+@Composable
+private fun QueueItemMini(item: PdaItem) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "${item.menge}× ${item.beschreibung ?: item.artikelnummer ?: "—"}",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 13.sp,
+            )
+            val tag = when (item.source) {
+                "extra" -> "+ Bonus"
+                "unknown" -> "→ KB24-Retoure (Falschsendung)"
+                else -> item.supplierName ?: "—"
+            }
+            Text(tag, color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+        }
+        item.eanCode?.let { ean ->
+            Text(
+                ean,
+                color = Color(0xFF81D4FA),
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+    }
 }
 
 /**
- * Vergleicht den gescannten Code mit dem erwarteten Container-Code.
- * Bei Match: ruft `onLink`. Sonst: setzt Fehler.
+ * Zentrale Scan-Logik: ein Code kommt rein, je nach State machen wir
+ * was anderes draus.
+ *   - Wenn KEIN Item ausgewählt: Code soll EAN sein → Item finden +
+ *     selektieren.
+ *   - Wenn Item ausgewählt: Code soll Paletten-Code sein → mit
+ *     erwarteter Palette vergleichen + linken.
  */
-private fun checkScan(
-    scanned: String,
-    expected: ContainerDto?,
-    itemId: String,
-    onLink: (containerId: String, itemId: String) -> Unit,
+private fun handleScan(
+    scannedCode: String,
+    selectedItem: PdaItem?,
+    queue: List<PdaItem>,
+    suggestedContainer: ContainerDto?,
+    onSelectItem: (String) -> Unit,
+    onLinkToContainer: (containerId: String, itemId: String) -> Unit,
     onError: (String) -> Unit,
 ) {
-    val cleaned = scanned.trim()
-    if (cleaned.isEmpty() || expected == null) return
-    // Case-insensitive Vergleich; PAL-Codes sind groß, aber wer weiß was
-    // die Q900-Firmware case-mäßig macht.
-    if (cleaned.equals(expected.code, ignoreCase = true)) {
-        onLink(expected.id, itemId)
+    if (selectedItem == null) {
+        // Stufe 1: Item finden per EAN
+        val match = queue.firstOrNull { !it.eanCode.isNullOrBlank() && it.eanCode == scannedCode }
+        if (match != null) {
+            onSelectItem(match.id)
+        } else {
+            onError("EAN $scannedCode passt zu keinem offenen Artikel in der Palette-Queue.")
+        }
     } else {
-        onError(
-            "Code passt nicht. Gescannt: \"$cleaned\" · " +
-                "Erwartet: \"${expected.code}\""
-        )
+        // Stufe 2: Palette bestätigen
+        if (suggestedContainer == null) {
+            onError("Noch keine Palette vorgeschlagen — bitte warten oder neu anlegen.")
+            return
+        }
+        if (scannedCode.equals(suggestedContainer.code, ignoreCase = true)) {
+            onLinkToContainer(suggestedContainer.id, selectedItem.id)
+        } else {
+            onError(
+                "Paletten-Code passt nicht. Gescannt: \"$scannedCode\" · Erwartet: \"${suggestedContainer.code}\"",
+            )
+        }
     }
 }
