@@ -526,16 +526,28 @@ private fun handleScan(
             )
         }
     } else {
-        // Stufe 2: Paletten-Code bestätigen
+        // Stufe 2: Paletten-Code bestätigen.
+        //
+        // Robustheit für ältere Labels: QR-Inhalt konnte früher Pipe-
+        // separierte Metadaten enthalten ("PAL-IP-001|2026-05-20").
+        // Wir splitten den gescannten Code an "|" und "·" und probieren
+        // jeden Bestandteil — irgendeiner matcht.
         if (suggestedContainer == null) {
             onError("Noch keine Palette vorgeschlagen — bitte warten oder neu anlegen.")
             return
         }
-        if (scannedCode.equals(suggestedContainer.code, ignoreCase = true)) {
+        val expected = suggestedContainer.code
+        val candidates = scannedCode.split('|', '·', ' ', '\t')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            // Auch "PAL-IP-001" → "IP-001" zulassen (Legacy-Format).
+            .flatMap { listOf(it, it.removePrefix("PAL-")) }
+        val match = candidates.any { it.equals(expected, ignoreCase = true) }
+        if (match) {
             onLinkToContainer(suggestedContainer.id, currentItem.id)
         } else {
             onError(
-                "Falsche Palette. Gescannt: \"$scannedCode\" · Erwartet: \"${suggestedContainer.code}\"",
+                "Falsche Palette. Gescannt: \"$scannedCode\" · Erwartet: \"$expected\"",
             )
         }
     }

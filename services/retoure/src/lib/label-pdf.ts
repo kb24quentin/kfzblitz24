@@ -374,12 +374,16 @@ export async function buildPalletLabelPdf(
     color: BLACK,
   });
 
-  // QR rechts, vertikal mittig zwischen DEPARTURE-Top und OPENED-Bottom
+  // QR rechts, vertikal mittig zwischen DEPARTURE-Top und OPENED-Bottom.
+  //
+  // QR-Inhalt: NUR der Paletten-Code (z. B. "IP-001"). Vorher hatten
+  // wir Pipe-separierte Metadaten ("PAL-IP-001|2026-05-20") — User-
+  // Befund: "PDA sagt falsche Palette gescannt 'PAL-IP-001 2026-05-20'
+  // Erwartet 'IP-001'". Worker scannt den QR → PaletteStep matcht
+  // direkt gegen Container-Code → kein Parser nötig.
   let qrImg;
   try {
-    const qrData =
-      opts.retoureReference ?? `${opts.palletCode}·${route}`;
-    const qrPng = await generateBarcodePng(qrData);
+    const qrPng = await generateBarcodePng(opts.palletCode);
     qrImg = await pdf.embedPng(qrPng);
   } catch {
     qrImg = null;
