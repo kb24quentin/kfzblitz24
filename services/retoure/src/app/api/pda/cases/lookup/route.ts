@@ -156,6 +156,47 @@ export async function GET(req: Request) {
         });
         c.additionalTrackings = JSON.stringify(existing);
         attachedTracking = true;
+
+        // ── Auto-Reopen (Use Case 3) ─────────────────────────────────
+        // Wenn der Case bereits "fertig" markiert wurde (partner_verarbeitet
+        // oder unterwegs_lieferant) UND es noch pending registered items
+        // gibt (also der Worker mit dem 1. Paket noch nicht alles erfasst
+        // hat), eröffnen wir den Case automatisch wieder: scanCompletedAt
+        // wird geleert, Status zurück auf eingang_partner.
+        const stillPending = await prisma.retoureItem.count({
+          where: {
+            caseId: c.id,
+            source: "registered",
+            status: "pending",
+          },
+        });
+        const wasDone =
+          c.status === "partner_verarbeitet" || c.status === "unterwegs_lieferant";
+        if (wasDone && stillPending > 0) {
+          await prisma.retoureCase.update({
+            where: { id: c.id },
+            data: {
+              status: "eingang_partner",
+              scanCompletedAt: null,
+            },
+          });
+          await prisma.retoureEvent.create({
+            data: {
+              caseId: c.id,
+              type: "status_change",
+              message: `Case wieder-geöffnet — neues Paket angekommen, ${stillPending} Artikel noch offen`,
+              meta: JSON.stringify({
+                from: c.status,
+                to: "eingang_partner",
+                reason: "additional-package-arrived",
+                stillPending,
+              }),
+              actor: "pda",
+            },
+          });
+          c.status = "eingang_partner";
+          c.scanCompletedAt = null;
+        }
       }
     }
   }
