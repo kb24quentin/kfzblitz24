@@ -57,6 +57,7 @@ fun ScanStep(
     onScanEan: (ean: String) -> Unit,
     onClearLastScan: () -> Unit,
     onScanItem: (itemId: String, present: Boolean) -> Unit,
+    onCompleteScanStep: () -> Unit,
 ) {
     val total = caseDetail.items.size
     val confirmedRegistered = caseDetail.items.count {
@@ -178,6 +179,55 @@ fun ScanStep(
                 fontSize = 11.sp,
             )
             wrongItems.forEach { item -> WrongItemRow(item = item) }
+        }
+
+        // ── "Fertig mit Scannen"-Button — explizit, ohne Auto-Advance ─
+        // Worker tappt hier wenn er ALLE Artikel gescannt hat (inkl.
+        // optionaler Extras + Falschsendungen). Bei pending Items wird
+        // gewarnt, der Button schaltet diese gleichzeitig auf
+        // "missing" — alternative: User tippt Fehlt-Buttons manuell.
+        Spacer(Modifier.height(16.dp))
+        val hasPending = pending.isNotEmpty()
+        if (hasPending) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0x33FFAB00))
+                    .padding(10.dp),
+            ) {
+                Text(
+                    "⚠ Noch ${pending.size} angemeldete Artikel nicht gescannt. " +
+                            "Wenn du jetzt 'Fertig' tippst, gelten sie als FEHLEND.",
+                    color = Color(0xFFFFE082),
+                    fontSize = 13.sp,
+                )
+            }
+        }
+        Button(
+            onClick = {
+                // Falls noch pending, alle auf missing setzen damit der
+                // ASSESS-Step nicht hängenbleibt (received-Items
+                // gebraucht). Backend-Endpoint scan-complete merkt sich
+                // den Zeitstempel, deriveStep advanced danach.
+                pending.forEach { p -> onScanItem(p.id, false) }
+                onCompleteScanStep()
+            },
+            enabled = !actionLoading,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF2E7D32),
+                contentColor = Color.White,
+            ),
+        ) {
+            Text(
+                "✓ FERTIG MIT SCANNEN",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
 
         // ── MANUELL-FALLBACK ─────────────────────────────────────────

@@ -48,6 +48,14 @@ class CaseRepository(
         api.scanEan(caseId, ScanEanRequest(ean = ean, pdaId = pdaId))
     }
 
+    /** Worker tappt "Fertig mit Scannen" → Wizard advanced. */
+    suspend fun scanComplete(caseId: String): Result<Unit> =
+        safeApi("Scan abschließen") {
+            val pdaId = tokenStore.getPdaId() ?: "unknown"
+            api.scanComplete(caseId, ScanCompleteRequest(pdaId = pdaId))
+            Unit
+        }
+
     suspend fun assessItem(
         caseId: String,
         itemId: String,

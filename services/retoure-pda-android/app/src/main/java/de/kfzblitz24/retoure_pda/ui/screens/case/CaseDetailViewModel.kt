@@ -27,16 +27,18 @@ enum class WizardStep(val label: String) {
 /**
  * Leitet den aktuellen Wizard-Schritt aus den Case-Daten ab.
  *
- * Logik exakt aus case/[id]/page.tsx `deriveStep()` übernommen:
- *   - kein partnerReceivedAt → RECEIVE
- *   - irgendein Item mit status=pending → SCAN
+ *   - kein partnerReceivedAt          → RECEIVE
+ *   - scanCompletedAt nicht gesetzt   → SCAN
+ *       (auch wenn alle angemeldeten Items received sind — Worker
+ *       muss explizit "Fertig mit Scannen" tappen, damit Extras +
+ *       Falschsendungen vorher noch gescannt werden können)
  *   - irgendein Item mit status=received|photographed → ASSESS
  *   - irgendein Item assessed mit verdict ≠ red → PALETTE
  *   - sonst → DONE
  */
 fun deriveStep(case: CaseDetail): WizardStep {
     if (case.partnerReceivedAt == null) return WizardStep.RECEIVE
-    if (case.items.any { it.status == "pending" }) return WizardStep.SCAN
+    if (case.scanCompletedAt == null) return WizardStep.SCAN
     if (case.items.any { it.status == "received" || it.status == "photographed" }) return WizardStep.ASSESS
     if (case.items.any { it.status == "assessed" && it.verdict != "red" }) return WizardStep.PALETTE
     return WizardStep.DONE
@@ -164,6 +166,21 @@ class CaseDetailViewModel(
     /** Räumt das letzte Scan-Ergebnis ab — z. B. wenn der User weiterklickt. */
     fun clearLastScanResult() {
         _uiState.value = _uiState.value.copy(lastScanResult = null)
+    }
+
+    /** Worker tappt "Fertig mit Scannen" → Wizard advanced zu ASSESS. */
+    fun completeScanStep() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
+            caseRepository.scanComplete(caseId)
+                .onSuccess { resetActionLoading(); load() }
+                .onFailure { e ->
+                    _uiState.value = _uiState.value.copy(
+                        actionLoading = false,
+                        actionError = e.message,
+                    )
+                }
+        }
     }
 
     fun assessItem(itemId: String, score: Int, reason: String?) {

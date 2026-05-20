@@ -69,6 +69,8 @@ data class CaseDetail(
     val status: String,
     val carrierDeliveredAt: String? = null,
     val partnerReceivedAt: String? = null,
+    /** ISO-Timestamp wann Worker "Fertig mit Scannen" gedrückt hat. */
+    val scanCompletedAt: String? = null,
     val customer: CustomerSnapshot,
     val items: List<PdaItem>,
 )
@@ -80,6 +82,11 @@ data class CaseDetail(
 @Serializable
 data class ScanEanRequest(
     val ean: String,
+    val pdaId: String? = null,
+)
+
+@Serializable
+data class ScanCompleteRequest(
     val pdaId: String? = null,
 )
 

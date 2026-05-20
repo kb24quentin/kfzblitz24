@@ -89,6 +89,13 @@ model RetoureCase {
   carrierDeliveredAt  DateTime?
   /// Zeitpunkt an dem ein Partner-PDA das Paket physisch gescannt hat.
   partnerReceivedAt   DateTime?
+  /// Zeitpunkt an dem der Lager-Mitarbeiter "Fertig mit Scannen" tappt.
+  /// Ohne diesen Wert bleibt der PDA-Wizard im SCAN-Step — auch wenn
+  /// alle angemeldeten Items schon received sind — damit der Mitarbeiter
+  /// noch nicht-angemeldete Extras (ok_extra) oder Falschsendungen
+  /// (not_ok_unknown) scannen kann. Erst mit explizitem Tap geht's
+  /// in den ASSESS-Step.
+  scanCompletedAt     DateTime?
   /// Wenn DHL geliefert ist aber Partner noch nicht gescannt hat → SLA-Stunden.
   /// Sobald > slaThresholdHours, kommt der Case in die 9-Uhr-Mail.
 

@@ -94,6 +94,7 @@ export async function GET(
     customerTrackingNumber: c.customerTrackingNumber,
     carrierDeliveredAt: c.carrierDeliveredAt?.toISOString() ?? null,
     partnerReceivedAt: c.partnerReceivedAt?.toISOString() ?? null,
+    scanCompletedAt: c.scanCompletedAt?.toISOString() ?? null,
     money: {
       warenwertBrutto: c.warenwertBrutto,
       labelFeeBrutto: c.labelFeeBrutto,

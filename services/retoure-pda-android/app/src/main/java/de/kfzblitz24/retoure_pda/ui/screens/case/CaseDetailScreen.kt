@@ -178,6 +178,7 @@ fun CaseDetailScreen(
                             onScanItem = { itemId, present ->
                                 vm.scanItem(itemId, present)
                             },
+                            onCompleteScanStep = { vm.completeScanStep() },
                         )
 
                         WizardStep.ASSESS -> AssessStep(

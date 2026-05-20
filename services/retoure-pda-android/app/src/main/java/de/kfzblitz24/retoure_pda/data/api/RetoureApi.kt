@@ -75,6 +75,16 @@ interface RetoureApi {
         @Body body: ScanEanRequest,
     ): ScanEanResponse
 
+    /**
+     * Worker tappt "Fertig mit Scannen" — setzt `scanCompletedAt`, der
+     * Wizard advanced damit in den ASSESS-Step.
+     */
+    @POST("api/pda/cases/{caseId}/scan-complete")
+    suspend fun scanComplete(
+        @Path("caseId") caseId: String,
+        @Body body: ScanCompleteRequest,
+    ): GenericSuccess
+
     @POST("api/pda/cases/{caseId}/items/{itemId}/assess")
     suspend fun assessItem(
         @Path("caseId") caseId: String,
