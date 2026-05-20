@@ -89,7 +89,12 @@ class HomeViewModel(private val caseRepository: CaseRepository) : ViewModel() {
                 }
                 .onFailure { e ->
                     val msg = e.message ?: "Suche fehlgeschlagen."
-                    val isNotFound = msg.contains("nicht gefunden", ignoreCase = true) ||
+                    // 404-Heuristik: Backend antwortet mit "Keine Retoure
+                    // gefunden" oder mit dem Context-Fallback
+                    // "Bestellung \"XYZ\" nicht gefunden". Beides matchen
+                    // wir auf das Wort "gefunden" — dann ist's eindeutig
+                    // ein not-found Fall.
+                    val isNotFound = msg.contains("gefunden", ignoreCase = true) ||
                         msg.contains("404")
                     if (isNotFound && pending == null) {
                         // Stufe 1 → Stufe 2: Paket-Code merken, neuen Prompt
