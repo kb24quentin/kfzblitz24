@@ -259,12 +259,15 @@ export async function buildPalletLabelPdf(
     maxWidth: TEXT_W,
   });
 
-  // hr
+  // hr — kürzer (60% der TEXT_W) damit die Linien optisch nicht über
+  // andere Elemente wie den QR-Code hinwegfahren. User-Brief:
+  // "Die striche überlagern den code, die müssen kürzer".
+  const HR_W = Math.round(TEXT_W * 0.6);
   cursorY -= 10;
   page.drawRectangle({
     x: TEXT_X,
     y: cursorY,
-    width: TEXT_W,
+    width: HR_W,
     height: 1,
     color: BLACK,
   });
@@ -301,12 +304,12 @@ export async function buildPalletLabelPdf(
     });
   }
 
-  // hr
+  // hr — gleiche kurze Länge wie oben.
   cursorY -= 10;
   page.drawRectangle({
     x: TEXT_X,
     y: cursorY,
-    width: TEXT_W,
+    width: HR_W,
     height: 1,
     color: BLACK,
   });
@@ -370,23 +373,28 @@ export async function buildPalletLabelPdf(
   cursorY = openedY - 28;
 
   // ── 7. Footer ────────────────────────────────────────────────────
-  // hr
+  // hr (kurz, links bündig — überfährt nicht den QR-Code rechts)
   page.drawRectangle({
     x: TEXT_X,
     y: cursorY,
-    width: TEXT_W,
+    width: HR_W,
     height: 1,
     color: BLACK,
   });
-  cursorY -= 12;
-  page.drawText("kfzBlitz24 Returns Warehouse · ops@kfzblitz24.de", {
-    x: TEXT_X,
-    y: cursorY,
-    size: 7.5,
-    font: helvBold,
-    color: BLACK,
-    maxWidth: TEXT_W,
-  });
+
+  // Footer-Text nur für EXTERNE Labels — interne Paletten bleiben im
+  // eigenen Haus, da ist die Kontakt-Mail unnötiger Lärm.
+  if (!opts.isInternal) {
+    cursorY -= 12;
+    page.drawText("kfzBlitz24 Returns Warehouse · ops@kfzblitz24.de", {
+      x: TEXT_X,
+      y: cursorY,
+      size: 7.5,
+      font: helvBold,
+      color: BLACK,
+      maxWidth: TEXT_W,
+    });
+  }
 
   const bytes = await pdf.save();
   return bytes;

@@ -42,14 +42,35 @@ export type ContainerStatus =
   | "shipped"
   | "received_supplier";
 
+/**
+ * Hard-coded 2-Buchstaben-Codes pro Supplier — Container-Codes
+ * starten immer mit diesem Prefix damit der Lager-Mitarbeiter den
+ * Empfänger schon aus dem Code erkennt:
+ *
+ *   Interparts                  → "IP-042"
+ *   Autopartner                 → "AP-117"
+ *   kfzBlitz24 Retoure (intern) → "KB-003"
+ *
+ * Fallback bei unbekanntem Supplier: erste 2 Großbuchstaben des Namens.
+ */
+const SUPPLIER_SHORT_CODES: Record<string, string> = {
+  Interparts: "IP",
+  Autopartner: "AP",
+  "kfzBlitz24 Retoure (intern)": "KB",
+};
+
+function supplierShortCode(name: string): string {
+  if (SUPPLIER_SHORT_CODES[name]) return SUPPLIER_SHORT_CODES[name];
+  const cleaned = name
+    .normalize("NFKD")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  return cleaned.slice(0, 2) || "XX";
+}
+
 export interface CreateContainerOptions {
   type: ContainerType;
-  /**
-   * Lieferant, an den dieser Container retourniert wird. Pflicht weil
-   * jedes Item auf einer Palette einem Lieferanten zugeordnet sein
-   * muss (oder unserem internen "kfzBlitz24 Retoure (intern)"-Konto).
-   * Der Supplier-Name kommt aufs Routing-Label, NICHT in den Code.
-   */
+  /** Lieferant — Pflicht. Bestimmt das 2-Buchstaben-Prefix im Code. */
   supplierId: string;
   partnerId?: string;
   createdByPda?: string;
@@ -58,27 +79,20 @@ export interface CreateContainerOptions {
 }
 
 /**
- * Liefert die nächste laufende Nummer GLOBAL (nicht pro Supplier).
- *
- * User-Brief: "Im Container Code muss nicht der Supplier drinnen
- * sein, den schreiben wir zusätzlich als Empfänger auf die Palette".
- * Codes sind reine 3-stellige Sequenz-Nummern: "001", "002", … "999",
- * "1000", … Der Empfänger (Supplier) steht groß auf dem Label.
- *
- * Wir scannen ALLE Container-Codes nach numerisch-rein-3+-stelligen
- * Codes und nehmen das Maximum + 1. Alt-Codes ("PAL-INTERP-2026-…"
- * oder "IP-042" aus früheren Iterationen) werden ignoriert — die
- * existieren weiter, aber neue Codes laufen im neuen Format weiter.
+ * Liefert die nächste laufende Nummer für einen Supplier-Prefix.
+ * Format pro Supplier eigene Sequenz — IP-042 + KB-042 sind beide
+ * gültige Codes nebeneinander (Code-UNIQUE-Constraint stört nicht,
+ * weil der Prefix die Trennung macht).
  */
-async function nextGlobalSequence(): Promise<number> {
+async function nextSequenceForPrefix(prefix: string): Promise<number> {
+  const pattern = `${prefix}-%`;
   const rows = await prisma.$queryRawUnsafe<{ code: string }[]>(
-    `SELECT "code" FROM "Container"`,
+    `SELECT "code" FROM "Container" WHERE "code" LIKE $1`,
+    pattern,
   );
   let max = 0;
   for (const r of rows) {
-    // Nur Codes die KOMPLETT numerisch sind (mit optionalen führenden Nullen)
-    // werden mitgezählt. Alle Legacy-Formate (PAL-*, IP-*, etc.) ignorieren wir.
-    const m = /^(\d+)$/.exec(r.code);
+    const m = new RegExp(`^${prefix}-(\\d+)$`).exec(r.code);
     if (!m) continue;
     const n = parseInt(m[1], 10);
     if (Number.isFinite(n) && n > max) max = n;
@@ -105,11 +119,9 @@ export async function createContainer(
     openedAt.getTime() + maxAgeDays * 24 * 60 * 60 * 1000,
   );
 
-  // Code-Format ab 2026-05-20: reine 3-stellige Sequenz-Nummer ("001",
-  // "042", "117"). Der Supplier wird NICHT in den Code kodiert, sondern
-  // steht als EMPFÄNGER groß auf dem Label. Das macht Codes maximal
-  // klar — der Worker liest "042" und scannt; das WOHIN steht klein
-  // darunter im Routing-Bereich.
+  // Code-Format: "<PREFIX>-<NNN>" pro Supplier eigene Sequenz.
+  // User-Brief: "Paletten Code soll immer mit einem Buchstaben beginnen":
+  //   IP- Interparts, AP- Autopartner, KB- kfzBlitz24
   if (!opts.supplierId) {
     throw new Error(
       "Container-Anlage erfordert supplierId (Container = 1 Lieferant).",
@@ -122,12 +134,13 @@ export async function createContainer(
   if (!supplier) {
     throw new Error(`Supplier nicht gefunden: ${opts.supplierId}`);
   }
+  const prefix = supplierShortCode(supplier.name);
 
   // Einmal retryen wenn UNIQUE-Constraint feuert (race mit parallelem
   // Insert). Beim zweiten Treffer geben wir den Fehler durch.
   for (let attempt = 0; attempt < 2; attempt++) {
-    const seq = await nextGlobalSequence();
-    const code = formatSequence(seq);
+    const seq = await nextSequenceForPrefix(prefix);
+    const code = `${prefix}-${formatSequence(seq)}`;
     try {
       return await prisma.container.create({
         data: {
