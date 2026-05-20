@@ -138,37 +138,52 @@ export async function POST(
   });
   if (!c) return NextResponse.json({ error: "Case not found" }, { status: 404 });
 
-  // ── Phase 1: Match gegen registrierte pending-Items ────────────────
-  const pendingMatch = c.items.find(
-    (it) => it.status === "pending" && it.eanCode === ean,
+  // ── Phase 1: Match gegen registrierte Items (mengen-bewusst) ──────
+  //
+  // Wir matchen jetzt ALLE source=registered items mit passendem EAN —
+  // nicht nur "pending". Bei menge>1 zählt jeder Scan einen scanCount
+  // hoch; erst wenn scanCount >= menge wird der Status auf "received"
+  // gesetzt. Beispiel: Item menge=6, scanCount=0 → erster Scan macht
+  // scanCount=1, status bleibt "pending". Sechster Scan: scanCount=6,
+  // status="received". Siebter Scan: keine Pending-Quota mehr → fällt
+  // auf Phase 2 (extra/unknown).
+  const registeredMatch = c.items.find(
+    (it) =>
+      it.source === "registered" &&
+      it.eanCode === ean &&
+      it.scanCount < it.menge,
   );
 
-  if (pendingMatch) {
+  if (registeredMatch) {
+    const newScanCount = registeredMatch.scanCount + 1;
+    const fullyScanned = newScanCount >= registeredMatch.menge;
+
     await prisma.retoureItem.update({
-      where: { id: pendingMatch.id },
+      where: { id: registeredMatch.id },
       data: {
-        status: "received",
-        receivedAt: new Date(),
+        status: fullyScanned ? "received" : registeredMatch.status,
+        receivedAt: fullyScanned ? new Date() : registeredMatch.receivedAt,
         receivedByPda: actor,
-        scanCount: pendingMatch.scanCount + 1,
+        scanCount: newScanCount,
       },
     });
 
     await addEvent(
       id,
       "item_scanned_registered",
-      `EAN ${ean} matched registriertes Item: ${pendingMatch.beschreibung ?? pendingMatch.artikelnummer ?? "—"}`,
-      { itemId: pendingMatch.id, ean, source: "registered" },
+      `EAN ${ean} matched registriertes Item ${newScanCount}/${registeredMatch.menge}: ${registeredMatch.beschreibung ?? registeredMatch.artikelnummer ?? "—"}`,
+      {
+        itemId: registeredMatch.id,
+        ean,
+        source: "registered",
+        scanCount: newScanCount,
+        menge: registeredMatch.menge,
+      },
       actor,
     );
 
-    // Auto-transition Case wenn alle Items gescannt sind passiert in
-    // bestehender Scan-Logik (cases/[id]/items/[itemId]/scan); wir
-    // duplizieren das hier NICHT, der nächste Case-Lookup berechnet
-    // den step automatisch.
-
     const updated = await prisma.retoureItem.findUnique({
-      where: { id: pendingMatch.id },
+      where: { id: registeredMatch.id },
       include: {
         supplier: { select: { id: true, name: true } },
         container: { select: { id: true, code: true } },
@@ -177,7 +192,10 @@ export async function POST(
 
     return NextResponse.json({
       kind: "ok_registered",
-      message: "Artikel bestätigt",
+      message:
+        registeredMatch.menge > 1
+          ? `Artikel bestätigt (${newScanCount}/${registeredMatch.menge})`
+          : "Artikel bestätigt",
       scannedEan: ean,
       item: updated ? serializeItem(updated) : null,
     });
@@ -255,13 +273,22 @@ export async function POST(
 
   // Phase 2b: Artikel nicht in der Order ODER Webisco kennt's gar nicht
   //  → "unknown" anlegen, default-Supplier = kfzBlitz24-internal-Palette.
+  //
+  // Wichtig: status="assessed" + scoredAt direkt setzen damit der Wizard
+  // den ASSESS-Step für Falschsendungen überspringt — die brauchen keine
+  // Zustands-Bewertung (sind eh falsch geliefert, gehen zurück an uns).
+  // Bonus-Items (source="extra") werden dagegen NORMAL bewertet —
+  // siehe Phase 2a oben.
   const INTERNAL_SUPPLIER_ID = "kfzblitz24-internal";
+  const verdictReason = resolvedArticle
+    ? "Falschsendung — keine Bewertung erforderlich"
+    : "Falschsendung — EAN unbekannt, keine Bewertung erforderlich";
 
   const unknown = await prisma.retoureItem.create({
     data: {
       caseId: id,
       source: "unknown",
-      status: "received",
+      status: "assessed",
       artikelnummer: resolvedArticle?.artikelnummer ?? null,
       hersteller: resolvedArticle?.hersteller ?? null,
       beschreibung:
@@ -275,6 +302,11 @@ export async function POST(
       receivedByPda: actor,
       scanCount: 1,
       supplierId: INTERNAL_SUPPLIER_ID,
+      // Skip-Assess-Markierung: scoredAt gesetzt, verdict bleibt null,
+      // verdictReason erklärt warum. deriveStep() sieht status="assessed"
+      // + verdict != "red" → führt direkt zu PALETTE.
+      scoredAt: new Date(),
+      verdictReason,
     },
     include: {
       supplier: { select: { id: true, name: true } },

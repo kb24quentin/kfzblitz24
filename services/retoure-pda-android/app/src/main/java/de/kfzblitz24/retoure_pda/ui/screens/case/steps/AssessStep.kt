@@ -93,11 +93,19 @@ fun AssessStep(
     onAssess: (itemId: String, score: Int, reason: String?) -> Unit,
     onOpenPhotos: (caseId: String, itemId: String) -> Unit,
 ) {
+    // Falschsendungen (source="unknown") werden vom Backend direkt mit
+    // status="assessed" angelegt — sie brauchen keine Zustands-Bewertung
+    // weil sie eh als Fehlsendung an die kfzBlitz24-Retoure-Palette
+    // gehen. Bonus-Items (source="extra") gehen dagegen normal durch.
     val queue = caseDetail.items.filter {
-        it.status == "received" || it.status == "photographed"
+        (it.status == "received" || it.status == "photographed") &&
+            it.source != "unknown"
     }
     val current = queue.firstOrNull()
-    val completed = caseDetail.items.count { it.status == "assessed" || it.status == "on_pallet" }
+    val completed = caseDetail.items.count {
+        (it.status == "assessed" || it.status == "on_pallet") &&
+            it.source != "unknown"
+    }
     val totalToAssess = queue.size + completed
 
     // Antworten pro Item gesondert verwalten — Reset beim Item-Wechsel.
