@@ -131,11 +131,6 @@ fun CaseDetailScreen(
             else -> {
                 val detail = state.caseDetail ?: return@Scaffold
                 val step = deriveStep(detail)
-                val customer = listOfNotNull(
-                    detail.customer.anrede,
-                    detail.customer.vorname,
-                    detail.customer.name,
-                ).joinToString(" ").ifEmpty { "—" }
 
                 Column(
                     modifier = Modifier
@@ -148,6 +143,9 @@ fun CaseDetailScreen(
                     Spacer(Modifier.height(4.dp))
 
                     // ── Case-Header ───────────────────────────────────
+                    // Lager-Mitarbeiter brauchen NUR die Bestellnummer,
+                    // keine Kundendaten (DSGVO + irrelevant für Wareneingang).
+                    // Adresse + Name werden im Admin-Dashboard angezeigt.
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -161,15 +159,6 @@ fun CaseDetailScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = Color.White,
-                        )
-                        Text(
-                            buildString {
-                                append(customer)
-                                val plzOrt = listOfNotNull(detail.customer.plz, detail.customer.ort).joinToString(" ")
-                                if (plzOrt.isNotEmpty()) append(" · $plzOrt")
-                            },
-                            color = Color.White.copy(alpha = 0.55f),
-                            fontSize = 12.sp,
                         )
                     }
 
