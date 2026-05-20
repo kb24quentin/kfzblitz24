@@ -28,6 +28,9 @@ export default async function AdminListPage({
       { customerVorname: { contains: q, mode: "insensitive" } },
       { customerEmail: { contains: q, mode: "insensitive" } },
       { dhlTrackingNumber: { contains: q } },
+      // Auch customer-eingegebene Tracking-Nummern matchen — wichtig
+      // wenn das Paket-Label im PDA gescannt wurde und dort gespeichert ist.
+      { customerTrackingNumber: { contains: q } },
     ];
   }
 
@@ -173,19 +176,30 @@ export default async function AdminListPage({
                       )}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs">
-                      {c.dhlTrackingNumber ? (
-                        <a
-                          href={`https://www.dhl.de/de/privatkunden/dhl-sendungsverfolgung.html?piececode=${c.dhlTrackingNumber}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#ff6600] hover:underline inline-flex items-center gap-1"
-                        >
-                          {c.dhlTrackingNumber}
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      ) : (
-                        <span className="text-[#8a93a0]">—</span>
-                      )}
+                      {/*
+                        Tracking-Spalte zeigt dhlTrackingNumber ODER
+                        customerTrackingNumber. Letzteres wird vom PDA
+                        beim Paket-Scan gesetzt — Worker scannt Carrier-
+                        Label, Backend hängt's automatisch an den Case.
+                      */}
+                      {(() => {
+                        const trk = c.dhlTrackingNumber ?? c.customerTrackingNumber;
+                        if (!trk) {
+                          return <span className="text-[#8a93a0]">—</span>;
+                        }
+                        return (
+                          <a
+                            href={`https://www.dhl.de/de/privatkunden/dhl-sendungsverfolgung.html?piececode=${trk}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[#ff6600] hover:underline inline-flex items-center gap-1"
+                            title={c.dhlTrackingNumber ? "DHL-Tracking" : "Vom PDA gescanntes Paket-Label"}
+                          >
+                            {trk}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="font-semibold text-[#0b3756]">
