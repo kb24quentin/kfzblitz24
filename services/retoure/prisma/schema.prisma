@@ -35,6 +35,15 @@ model RetoureCase {
   // [{artikelnummer, beschreibung, hersteller, menge, grund, einzelpreis_brutto, gesamtpreis_brutto, einzelgewicht_g}, ...]
   itemsJson String @default("[]")
 
+  /// Full snapshot ALLER Positionen des Original-Belegs (was der Kunde
+  /// bestellt hatte, nicht nur was er zurückschickt). Lazy populated:
+  /// leer="[]" bis zum ersten Bedarf, dann gefüllt aus Webisco-
+  /// `beleganfrage`. Genutzt vom PDA-Scan-Endpoint um zu unterscheiden
+  /// ob ein gescannter EAN zu einem Artikel der Order gehört (= ok als
+  /// Extra) oder ein Fremd-Artikel ist (= NOT OK, Fehlsendung).
+  /// Schema: [{artikelnummer, hersteller, beschreibung}, ...]
+  orderPositionsJson String @default("[]")
+
   // Geld
   warenwertBrutto             Float @default(0)
   labelFeeBrutto              Float @default(0)

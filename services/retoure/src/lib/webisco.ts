@@ -473,6 +473,66 @@ export async function fetchArtikelInfos(
 }
 
 /**
+ * Sucht einen Artikel **per EAN-Code** in Webisco. Wird genutzt wenn
+ * der PDA-Mitarbeiter einen Code scannt der nicht zu den registrierten
+ * Items passt — dann fragen wir Webisco ob's überhaupt einen Artikel
+ * mit dem EAN gibt, um dem User mindestens "was ist das?" anzeigen zu
+ * können (Hersteller, Beschreibung).
+ *
+ * Returns:
+ *   - Array mit allen Treffern (kann bei gleichem EAN über mehrere
+ *     Hersteller doppelt sein — wir geben alle zurück, Caller wählt).
+ *   - Leeres Array wenn nichts gefunden.
+ */
+export async function fetchArtikelByEan(
+  cfg: WebiscoConfig,
+  ean: string,
+): Promise<WebiscoResult<ArtikelInfo[]>> {
+  const cleaned = ean.trim();
+  if (cleaned.length === 0) return { ok: true, data: [] };
+
+  // artikelanfrage mit eancode-Filter — suchmuster bleibt leer.
+  // suchtyp=exaktsuche damit nur EXAKT dieser EAN matched.
+  const innerXml = `<artikelanfragen><artikelanfrage id="1" suchmuster="" suchtyp="exaktsuche" eancode="${xmlEscape(cleaned)}" hersteller="" menge="1" forceonlinecheck="F" ersatzartikelsuche="F"/></artikelanfragen>`;
+
+  let xml: string;
+  try {
+    xml = await callWebisco(cfg, "artikelanfrage", innerXml);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  let env: ReturnType<typeof parseEnvelope>;
+  try {
+    env = parseEnvelope(xml);
+  } catch (e) {
+    return { ok: false, error: `Parse error: ${e instanceof Error ? e.message : e}` };
+  }
+  if (env.error) return { ok: false, error: env.error };
+
+  const treffer = toArray(env.content.artikeltreffer as unknown);
+  const result: ArtikelInfo[] = [];
+  for (const t of treffer) {
+    const trefferRec = t as Record<string, unknown>;
+    const anfrageId = Number(trefferRec.id) || 0;
+    const artikelEntries = toArray(trefferRec.artikel as unknown);
+    for (const a of artikelEntries) {
+      const ar = a as Record<string, unknown>;
+      const e = str(ar.eancode);
+      result.push({
+        anfrageId,
+        artikelnummer: str(ar.artikelnummer),
+        hersteller: str(ar.hersteller),
+        herstellernummer: str(ar.herstellernummer),
+        beschreibung: str(ar.beschreibung),
+        eancode: e && e !== "" && e !== "0" ? e : undefined,
+      });
+    }
+  }
+  return { ok: true, data: result };
+}
+
+/**
  * Append a free-text Bemerkung to an existing Beleg in Abisco.
  * Appears in Abisco's document with timestamp + author (webisco user).
  */

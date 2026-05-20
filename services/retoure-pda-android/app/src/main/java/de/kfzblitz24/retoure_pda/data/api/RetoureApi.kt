@@ -65,6 +65,16 @@ interface RetoureApi {
         @Body body: ScanRequest,
     ): GenericSuccess
 
+    /**
+     * Scan-EAN-Endpoint — Worker scannt einen Artikel-Barcode mit Q900,
+     * Server klassifiziert und reagiert (siehe ScanEanResponse.kind).
+     */
+    @POST("api/pda/cases/{caseId}/scan-ean")
+    suspend fun scanEan(
+        @Path("caseId") caseId: String,
+        @Body body: ScanEanRequest,
+    ): ScanEanResponse
+
     @POST("api/pda/cases/{caseId}/items/{itemId}/assess")
     suspend fun assessItem(
         @Path("caseId") caseId: String,

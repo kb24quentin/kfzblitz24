@@ -36,6 +36,18 @@ class CaseRepository(
         Unit
     }
 
+    /**
+     * EAN-Scan-Endpoint — Worker scannt einen Code, Server klassifiziert
+     * automatisch (registered/extra/unknown).
+     */
+    suspend fun scanEan(
+        caseId: String,
+        ean: String,
+    ): Result<ScanEanResponse> = safeApi("EAN scannen") {
+        val pdaId = tokenStore.getPdaId() ?: "unknown"
+        api.scanEan(caseId, ScanEanRequest(ean = ean, pdaId = pdaId))
+    }
+
     suspend fun assessItem(
         caseId: String,
         itemId: String,

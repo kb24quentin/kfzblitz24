@@ -189,6 +189,9 @@ fun CaseDetailScreen(
                             caseDetail = detail,
                             scanner = scanner,
                             actionLoading = state.actionLoading,
+                            lastScanResult = state.lastScanResult,
+                            onScanEan = { ean -> vm.scanEan(ean) },
+                            onClearLastScan = { vm.clearLastScanResult() },
                             onScanItem = { itemId, present ->
                                 vm.scanItem(itemId, present)
                             },

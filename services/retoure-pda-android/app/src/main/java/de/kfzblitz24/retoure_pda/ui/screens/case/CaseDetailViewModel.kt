@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import de.kfzblitz24.retoure_pda.data.api.dto.CaseDetail
+import de.kfzblitz24.retoure_pda.data.api.dto.ScanEanResponse
 import de.kfzblitz24.retoure_pda.data.api.dto.SupplierDto
 import de.kfzblitz24.retoure_pda.data.repo.CaseRepository
 import de.kfzblitz24.retoure_pda.data.repo.ContainerRepository
@@ -48,6 +49,8 @@ data class CaseDetailUiState(
     val suppliers: List<SupplierDto> = emptyList(),
     val actionLoading: Boolean = false,
     val actionError: String? = null,
+    /** Letztes Scan-Ergebnis fürs Big-OK/NOT-OK-Display im ScanStep. */
+    val lastScanResult: ScanEanResponse? = null,
 )
 
 class CaseDetailViewModel(
@@ -129,6 +132,38 @@ class CaseDetailViewModel(
                     )
                 }
         }
+    }
+
+    /**
+     * EAN-Scan: ein Aufruf, Server klassifiziert automatisch (registered/
+     * extra/unknown). Result landet in `lastScanResult` für die GROßE
+     * GRÜN/ROT-Anzeige im ScanStep. Anschliessend neuladen damit die
+     * Item-Liste den neuen Status reflektiert.
+     */
+    fun scanEan(ean: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
+            caseRepository.scanEan(caseId, ean)
+                .onSuccess { result ->
+                    _uiState.value = _uiState.value.copy(
+                        actionLoading = false,
+                        actionError = null,
+                        lastScanResult = result,
+                    )
+                    load()
+                }
+                .onFailure { e ->
+                    _uiState.value = _uiState.value.copy(
+                        actionLoading = false,
+                        actionError = e.message,
+                    )
+                }
+        }
+    }
+
+    /** Räumt das letzte Scan-Ergebnis ab — z. B. wenn der User weiterklickt. */
+    fun clearLastScanResult() {
+        _uiState.value = _uiState.value.copy(lastScanResult = null)
     }
 
     fun assessItem(itemId: String, score: Int, reason: String?) {

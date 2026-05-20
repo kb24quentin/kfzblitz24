@@ -74,6 +74,40 @@ data class CaseDetail(
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Scan-EAN — Eingangs-Scan + Klassifikation
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Serializable
+data class ScanEanRequest(
+    val ean: String,
+    val pdaId: String? = null,
+)
+
+/**
+ * Klassifikation eines gescannten EAN:
+ *   - "ok_registered" — angemeldetes Item bestätigt (GRÜN)
+ *   - "ok_extra"      — aus der Order aber nicht angemeldet (GRÜN)
+ *   - "not_ok_unknown"— nicht in der Order / EAN unbekannt (ROT,
+ *                       landet auf kfzBlitz24-Retoure-Palette)
+ */
+@Serializable
+data class ScanEanResponse(
+    val kind: String,
+    val message: String,
+    val scannedEan: String,
+    val item: PdaItem? = null,
+    val resolvedArticle: ResolvedArticle? = null,
+)
+
+@Serializable
+data class ResolvedArticle(
+    val artikelnummer: String? = null,
+    val hersteller: String? = null,
+    val beschreibung: String? = null,
+    val eancode: String? = null,
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Lookup
 // ─────────────────────────────────────────────────────────────────────────────
 
