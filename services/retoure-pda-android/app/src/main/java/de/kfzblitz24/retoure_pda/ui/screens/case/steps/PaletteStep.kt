@@ -410,11 +410,13 @@ private fun ProactivePalletInstruction(
                 letterSpacing = 0.8.sp,
             )
             Spacer(Modifier.height(4.dp))
-            // RIESIGER Paletten-Code
+            // RIESIGER Paletten-Code — bei 3-stelligen Codes (z. B. "042")
+            // wirkt eine größere Schrift natürlich. Wir nehmen 64sp damit
+            // der Worker den Code aus 2-3 m Entfernung lesen kann.
             Text(
                 suggestedContainer?.code ?: "wird zugewiesen …",
                 color = Orange,
-                fontSize = 42.sp,
+                fontSize = 64.sp,
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace,
                 textAlign = TextAlign.Center,

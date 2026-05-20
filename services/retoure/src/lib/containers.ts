@@ -42,53 +42,13 @@ export type ContainerStatus =
   | "shipped"
   | "received_supplier";
 
-/**
- * Hard-coded Short-Codes für unsere bekannten Supplier. Diese werden
- * als Container-Code-Prefix verwendet (z. B. "IP-042") damit Lager-
- * Mitarbeiter die richtige Palette aus 5 Metern Entfernung erkennen.
- *
- * Reihenfolge der Lookup-Logik in `supplierShortCode()`:
- *   1. Hard-coded Eintrag in dieser Map (Stamm-Lieferanten)
- *   2. Fallback: erste 2 alphanumerischen Zeichen des Supplier-Namens
- *
- * Sobald wir > 5 Lieferanten haben, sollte ein eigenes
- * `Supplier.shortCode`-Field per Migration kommen. YAGNI bis dahin.
- */
-const SUPPLIER_SHORT_CODES: Record<string, string> = {
-  Interparts: "IP",
-  Autopartner: "AP",
-  "kfzBlitz24 Retoure (intern)": "KB",
-};
-
-/**
- * Liefert den 2-Buchstaben-Code für einen Supplier — bevorzugt aus
- * der Hard-coded-Map, sonst aus den ersten 2 Buchstaben des Namens.
- *
- * Beispiele:
- *   "Interparts"                     → "IP"  (hard-coded)
- *   "Autopartner"                    → "AP"  (hard-coded)
- *   "kfzBlitz24 Retoure (intern)"    → "KB"  (hard-coded)
- *   "BMW Originalteile Großhandel"   → "BM"  (Fallback)
- *   "Osram Automotive"               → "OS"  (Fallback)
- */
-function supplierShortCode(name: string): string {
-  if (SUPPLIER_SHORT_CODES[name]) return SUPPLIER_SHORT_CODES[name];
-  const cleaned = name
-    .normalize("NFKD")
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .toUpperCase();
-  return cleaned.slice(0, 2) || "X";
-}
-
 export interface CreateContainerOptions {
   type: ContainerType;
   /**
-   * Lieferant, an den dieser Container retourniert wird. Pflicht — der
-   * Code-Generator braucht den Supplier-Namen für den 2-Buchstaben-
-   * Prefix (siehe `supplierShortCode()`). Pro Supplier eigenes
-   * Container-Code-Schema wie "IP-042", "AP-117", "KB-003".
-   * Die interne kfzBlitz24-Retoure-Palette läuft hier mit als
-   * regulärer Supplier mit Prefix "KB".
+   * Lieferant, an den dieser Container retourniert wird. Pflicht weil
+   * jedes Item auf einer Palette einem Lieferanten zugeordnet sein
+   * muss (oder unserem internen "kfzBlitz24 Retoure (intern)"-Konto).
+   * Der Supplier-Name kommt aufs Routing-Label, NICHT in den Code.
    */
   supplierId: string;
   partnerId?: string;
@@ -98,29 +58,27 @@ export interface CreateContainerOptions {
 }
 
 /**
- * Liefert die nächste laufende Nummer für einen Supplier-Prefix.
+ * Liefert die nächste laufende Nummer GLOBAL (nicht pro Supplier).
  *
- * Wir scannen `Container.code` nach Treffern auf `<PREFIX>-…`, ziehen
- * die höchste Nummer und addieren 1. Bei concurrent inserts kann es
- * theoretisch zu einer Race kommen — der UNIQUE-Constraint auf
- * `Container.code` fängt das ab und wir retryen einmal.
+ * User-Brief: "Im Container Code muss nicht der Supplier drinnen
+ * sein, den schreiben wir zusätzlich als Empfänger auf die Palette".
+ * Codes sind reine 3-stellige Sequenz-Nummern: "001", "002", … "999",
+ * "1000", … Der Empfänger (Supplier) steht groß auf dem Label.
  *
- * Wir ignorieren bewusst alte Codes im Format `PAL-XXX-YYYY-NNNNNN`
- * (die per LIKE-Pattern `PREFIX-%-…` nicht matchen würden weil sie
- * mit `PAL` anfangen, nicht mit unserem neuen 2-Buchstaben-Prefix).
+ * Wir scannen ALLE Container-Codes nach numerisch-rein-3+-stelligen
+ * Codes und nehmen das Maximum + 1. Alt-Codes ("PAL-INTERP-2026-…"
+ * oder "IP-042" aus früheren Iterationen) werden ignoriert — die
+ * existieren weiter, aber neue Codes laufen im neuen Format weiter.
  */
-async function nextSequenceForPrefix(prefix: string): Promise<number> {
-  // Pattern: "IP-001", "IP-002", ... — striktes 2-Letter-Prefix.
-  const pattern = `${prefix}-%`;
+async function nextGlobalSequence(): Promise<number> {
   const rows = await prisma.$queryRawUnsafe<{ code: string }[]>(
-    `SELECT "code" FROM "Container" WHERE "code" LIKE $1`,
-    pattern,
+    `SELECT "code" FROM "Container"`,
   );
   let max = 0;
   for (const r of rows) {
-    // Nur Codes im neuen Format "<PREFIX>-<NNN>" zählen. Alte Codes
-    // wie "PAL-INTERP-2026-000002" filtern wir hier explizit aus.
-    const m = new RegExp(`^${prefix}-(\\d+)$`).exec(r.code);
+    // Nur Codes die KOMPLETT numerisch sind (mit optionalen führenden Nullen)
+    // werden mitgezählt. Alle Legacy-Formate (PAL-*, IP-*, etc.) ignorieren wir.
+    const m = /^(\d+)$/.exec(r.code);
     if (!m) continue;
     const n = parseInt(m[1], 10);
     if (Number.isFinite(n) && n > max) max = n;
@@ -147,10 +105,11 @@ export async function createContainer(
     openedAt.getTime() + maxAgeDays * 24 * 60 * 60 * 1000,
   );
 
-  // Code-Format ab 2026-05: kurze Supplier-Prefix-Codes wie "IP-042",
-  // "AP-117", "KB-003". Aus dem Lager-UX-Brief: "Container Codes müssen
-  // kürzer/ besser lesbar sein damit man als Mitarbeiter die korrekte
-  // Palette sofort erkennt." Vorgängerformat war PAL-INTERP-2026-000002.
+  // Code-Format ab 2026-05-20: reine 3-stellige Sequenz-Nummer ("001",
+  // "042", "117"). Der Supplier wird NICHT in den Code kodiert, sondern
+  // steht als EMPFÄNGER groß auf dem Label. Das macht Codes maximal
+  // klar — der Worker liest "042" und scannt; das WOHIN steht klein
+  // darunter im Routing-Bereich.
   if (!opts.supplierId) {
     throw new Error(
       "Container-Anlage erfordert supplierId (Container = 1 Lieferant).",
@@ -163,13 +122,12 @@ export async function createContainer(
   if (!supplier) {
     throw new Error(`Supplier nicht gefunden: ${opts.supplierId}`);
   }
-  const prefix = supplierShortCode(supplier.name);
 
   // Einmal retryen wenn UNIQUE-Constraint feuert (race mit parallelem
   // Insert). Beim zweiten Treffer geben wir den Fehler durch.
   for (let attempt = 0; attempt < 2; attempt++) {
-    const seq = await nextSequenceForPrefix(prefix);
-    const code = `${prefix}-${formatSequence(seq)}`;
+    const seq = await nextGlobalSequence();
+    const code = formatSequence(seq);
     try {
       return await prisma.container.create({
         data: {

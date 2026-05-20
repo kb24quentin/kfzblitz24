@@ -84,11 +84,27 @@ export async function buildPalletLabelPdf(
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const helvMono = await pdf.embedFont(StandardFonts.Courier);
 
-  // ── 1. Mini-Wortmark + orange Linie oben ─────────────────────────
-  // Klein gehalten — das Label soll dominiert sein vom Paletten-Code,
-  // nicht von unserem Brand. Header dient nur als Eigentums-Marker.
+  // Das Layout folgt der Logik eines echten Versand-Routing-Labels:
+  //   ┌─────────────────────────────────────┐
+  //   │ kfzblitz24 [klein]   ROUTING-LABEL │
+  //   ╞═════════════════════════════════════╡
+  //   │ PALETTE NR.                         │
+  //   │                                     │
+  //   │            042                      │ ← RIESIG
+  //   │       [Code-128 Barcode]            │
+  //   ╞═════════════════════════════════════╡
+  //   │ ABSENDER        │ EMPFÄNGER         │
+  //   │ kfzBlitz24 GmbH │ Interparts GmbH   │ ← Address-Block
+  //   │ (Lager Retoure) │ → an Lieferant    │
+  //   ╞═════════════════════════════════════╡
+  //   │ SCHLIESSEN BIS    [03.06.2026]      │ ← orange
+  //   ╞═════════════════════════════════════╡
+  //   │ Geöffnet ...    · PAL-KB24 · 2026   │
+  //   └─────────────────────────────────────┘
+
+  // ── 1. Mini-Header (Brand + Doc-Tag) ─────────────────────────────
   const headerY = A6_H - MARGIN;
-  const wordHeight = 12;
+  const wordHeight = 11;
   let wx = MARGIN;
   const kfzWidth = helvBold.widthOfTextAtSize("kfz", wordHeight);
   const blitzWidth = helvBold.widthOfTextAtSize("blitz", wordHeight);
@@ -98,8 +114,7 @@ export async function buildPalletLabelPdf(
   wx += blitzWidth;
   page.drawText("24", { x: wx, y: headerY - wordHeight, size: wordHeight, font: helvBold, color: NAVY });
 
-  // Rechts oben: Doc-Marker (klein) — zeigt was das für ein Label ist
-  const docTag = opts.isInternal ? "INTERNE PALETTE" : "PALETTE";
+  const docTag = "ROUTING-LABEL";
   const docTagSize = 9;
   const docTagWidth = helv.widthOfTextAtSize(docTag, docTagSize);
   page.drawText(docTag, {
@@ -110,7 +125,6 @@ export async function buildPalletLabelPdf(
     color: DARK_GREY,
   });
 
-  // Orange Akzent-Linie unter dem Header
   page.drawRectangle({
     x: MARGIN,
     y: headerY - wordHeight - 3,
@@ -119,19 +133,25 @@ export async function buildPalletLabelPdf(
     color: ORANGE,
   });
 
-  // ── 2. RIESIGER Paletten-Code in Box ─────────────────────────────
-  // Aus User-Brief: "Rießiger Paletten Name". Wir geben dem Code die
-  // meisten Pixel auf der Seite — von 5m Entfernung erkennbar.
-  // Zentriert horizontal + dicker Navy-Rahmen.
-  const codeBoxY = headerY - wordHeight - 12;
-  const codeBoxH = 60 * MM / 25.4; // ~60mm hoch fühlt sich zu fett an
-  // Eigentlich: ich nehme ~38mm, das passt sauber rein und lässt
-  // genug Raum für Barcode + Routing + Deadline drunter.
-  const codeBoxHeight = 38 * MM;
-  const codeBoxTop = codeBoxY;
-  const codeBoxBottom = codeBoxTop - codeBoxHeight;
+  // ── 2. PALETTE NR. + RIESIGER Code ─────────────────────────────
+  // User-Brief: "Im Container Code muss nicht der Supplier drinnen
+  // sein, den schreiben wir zusätzlich als Empfänger auf die Palette".
+  // Code = nackte Sequenz-Nummer ("042"). Wir geben ihm trotzdem die
+  // gesamte Breite weil's der ID-Anker ist.
+  let cursorY = headerY - wordHeight - 12;
+  page.drawText("PALETTE NR.", {
+    x: MARGIN,
+    y: cursorY,
+    size: 8,
+    font: helvBold,
+    color: DARK_GREY,
+  });
 
-  // Rahmen: 2pt Navy-Border
+  cursorY -= 8;
+  const codeBoxHeight = 30 * MM;
+  const codeBoxTop = cursorY;
+  const codeBoxBottom = cursorY - codeBoxHeight;
+
   page.drawRectangle({
     x: MARGIN,
     y: codeBoxBottom,
@@ -141,17 +161,14 @@ export async function buildPalletLabelPdf(
     borderWidth: 2,
   });
 
-  // Code horizontal + vertikal mittig. Wir berechnen die Schriftgröße
-  // dynamisch so dass der Code fast die volle Box-Breite ausnutzt.
-  const codeBoxInnerW = A6_W - 2 * MARGIN - 16; // 8pt padding innen
-  let codeSize = 64;
+  // Bei nur 3-stelligen Codes können wir extra groß werden — bis 120pt.
+  const codeBoxInnerW = A6_W - 2 * MARGIN - 16;
+  let codeSize = 100;
   let codeWidthAtSize = helvBold.widthOfTextAtSize(opts.palletCode, codeSize);
   while (codeWidthAtSize > codeBoxInnerW && codeSize > 24) {
     codeSize -= 2;
     codeWidthAtSize = helvBold.widthOfTextAtSize(opts.palletCode, codeSize);
   }
-  // Approximate vertical centering — pdf-lib text baseline is at y.
-  // Capital-letter height ≈ size * 0.7.
   const codeBaselineY = codeBoxBottom + (codeBoxHeight - codeSize * 0.7) / 2;
   page.drawText(opts.palletCode, {
     x: (A6_W - codeWidthAtSize) / 2,
@@ -169,11 +186,11 @@ export async function buildPalletLabelPdf(
   } catch {
     bcImg = null;
   }
-  let cursorY = codeBoxBottom - 8;
+  cursorY = codeBoxBottom - 6;
   if (bcImg) {
     const targetW = A6_W - 2 * MARGIN;
     const aspect = bcImg.height / bcImg.width;
-    const targetH = Math.min(45, targetW * aspect);
+    const targetH = Math.min(40, targetW * aspect);
     cursorY -= targetH;
     page.drawImage(bcImg, {
       x: MARGIN,
@@ -181,41 +198,112 @@ export async function buildPalletLabelPdf(
       width: targetW,
       height: targetH,
     });
-    cursorY -= 6;
+    cursorY -= 8;
   } else {
     cursorY -= 8;
   }
 
-  // ── 4. Routing-Ziel ──────────────────────────────────────────────
-  // Klein "WOHIN" + bold Routing-Text. Bei intern: anderer Routing-
-  // Hinweis (eigenes Sortier-Fach im Lager statt externer Lieferant).
-  cursorY -= 4;
-  page.drawText("WOHIN", {
+  // ── 4. Absender + Empfänger nebeneinander ────────────────────────
+  // Wie bei einem echten Routing-Label: zwei Spalten, links wer schickt,
+  // rechts wo's hingeht. Empfänger ist die wichtigere Info → fettere
+  // Schrift + Navy.
+  page.drawRectangle({
     x: MARGIN,
-    y: cursorY,
+    y: cursorY - 0.5,
+    width: A6_W - 2 * MARGIN,
+    height: 0.5,
+    color: LIGHT_GREY,
+  });
+  cursorY -= 4;
+
+  const colW = (A6_W - 2 * MARGIN) / 2;
+  const absenderX = MARGIN;
+  const empfaengerX = MARGIN + colW + 6;
+
+  page.drawText("ABSENDER", {
+    x: absenderX,
+    y: cursorY - 8,
     size: 7,
-    font: helv,
+    font: helvBold,
     color: DARK_GREY,
   });
-  cursorY -= 13;
-  const routing = opts.isInternal
-    ? "→ KB24-LAGER (Sortierfach Retouren)"
-    : `→ ${opts.partnerName}`;
-  page.drawText(routing, {
-    x: MARGIN,
-    y: cursorY,
+  page.drawText("kfzBlitz24 GmbH", {
+    x: absenderX,
+    y: cursorY - 22,
     size: 11,
     font: helvBold,
     color: NAVY,
-    maxWidth: A6_W - 2 * MARGIN,
+  });
+  page.drawText("Lager Retoure", {
+    x: absenderX,
+    y: cursorY - 34,
+    size: 9,
+    font: helv,
+    color: DARK_GREY,
   });
 
-  // ── 5. Schliessen-Bis (prominenter orange Box) ──────────────────
-  // Nach User-Brief: "Palette muss geschlossen werden am: XX.XX.XXXX".
-  // Wir geben das einen orangen Box-Hintergrund damit's sofort ins
-  // Auge fällt — das ist die SLA-Deadline für den Lager-Mitarbeiter.
-  cursorY -= 14;
-  const deadlineBoxH = 22 * MM;
+  page.drawText("EMPFÄNGER", {
+    x: empfaengerX,
+    y: cursorY - 8,
+    size: 7,
+    font: helvBold,
+    color: DARK_GREY,
+  });
+  if (opts.isInternal) {
+    page.drawText("kfzBlitz24 LAGER", {
+      x: empfaengerX,
+      y: cursorY - 22,
+      size: 11,
+      font: helvBold,
+      color: NAVY,
+    });
+    page.drawText("Sortierfach Retouren", {
+      x: empfaengerX,
+      y: cursorY - 34,
+      size: 9,
+      font: helv,
+      color: DARK_GREY,
+    });
+    page.drawText("(intern, bleibt im Haus)", {
+      x: empfaengerX,
+      y: cursorY - 45,
+      size: 8,
+      font: helv,
+      color: DARK_GREY,
+    });
+  } else {
+    page.drawText(opts.partnerName, {
+      x: empfaengerX,
+      y: cursorY - 22,
+      size: 11,
+      font: helvBold,
+      color: NAVY,
+      maxWidth: colW - 4,
+    });
+    page.drawText("Lieferanten-Retoure", {
+      x: empfaengerX,
+      y: cursorY - 34,
+      size: 9,
+      font: helv,
+      color: DARK_GREY,
+    });
+  }
+
+  cursorY -= 55;
+
+  // Separator
+  page.drawRectangle({
+    x: MARGIN,
+    y: cursorY,
+    width: A6_W - 2 * MARGIN,
+    height: 0.5,
+    color: LIGHT_GREY,
+  });
+
+  // ── 5. SCHLIESSEN BIS ─────────────────────────────────────────────
+  // SLA-Deadline für den Lager-Mitarbeiter — orange Box damit's auffällt.
+  cursorY -= 8;
+  const deadlineBoxH = 20 * MM;
   const deadlineBoxTop = cursorY;
   const deadlineBoxBottom = cursorY - deadlineBoxH;
   page.drawRectangle({
@@ -226,17 +314,19 @@ export async function buildPalletLabelPdf(
     color: ORANGE,
   });
   page.drawText("SCHLIESSEN BIS", {
-    x: MARGIN + 8,
-    y: deadlineBoxTop - 10,
-    size: 8,
+    x: MARGIN + 10,
+    y: deadlineBoxTop - 12,
+    size: 9,
     font: helvBold,
     color: rgb(1, 1, 1),
   });
   const deadlineText = fmtDate(opts.maxOpenUntil);
+  const deadlineSize = 22;
+  const deadlineWidth = helvBold.widthOfTextAtSize(deadlineText, deadlineSize);
   page.drawText(deadlineText, {
-    x: MARGIN + 8,
-    y: deadlineBoxTop - 28,
-    size: 22,
+    x: A6_W - MARGIN - 10 - deadlineWidth,
+    y: deadlineBoxTop - 30,
+    size: deadlineSize,
     font: helvBold,
     color: rgb(1, 1, 1),
   });
