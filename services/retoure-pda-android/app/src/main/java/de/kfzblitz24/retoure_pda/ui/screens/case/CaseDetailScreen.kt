@@ -211,7 +211,6 @@ fun CaseDetailScreen(
                         WizardStep.DONE -> DoneStep(
                             caseDetail = detail,
                             actionLoading = state.actionLoading,
-                            onFinalize = { vm.finalizeCase() },
                             onGoHome = onBack,
                         )
                     }

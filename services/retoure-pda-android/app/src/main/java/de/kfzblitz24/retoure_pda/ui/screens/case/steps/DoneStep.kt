@@ -22,7 +22,6 @@ import de.kfzblitz24.retoure_pda.ui.theme.Orange
 fun DoneStep(
     caseDetail: CaseDetail,
     actionLoading: Boolean,
-    onFinalize: () -> Unit,
     onGoHome: () -> Unit,
 ) {
     val onPallet = caseDetail.items.filter { it.status == "on_pallet" }
@@ -30,8 +29,6 @@ fun DoneStep(
     val red      = caseDetail.items.filter { it.status == "assessed" && it.verdict == "red" }
     val refunded = caseDetail.items.filter { it.status == "refunded" }
     val rejected = caseDetail.items.filter { it.status == "rejected" }
-
-    val alreadyFinalized = caseDetail.status in listOf("erstattet", "abgelehnt", "pruefung")
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -94,28 +91,10 @@ fun DoneStep(
             }
         }
 
-        // ── Kundenmail ────────────────────────────────────────────────
-        if (!alreadyFinalized) {
-            BigButton(
-                text = "Bestätigungs-Mail an Kunden senden",
-                onClick = onFinalize,
-                loading = actionLoading,
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0x2200C853))
-                    .padding(12.dp),
-            ) {
-                Text(
-                    "✓ Kunden-Mail wurde verschickt (Status: ${caseDetail.status})",
-                    color = Color(0xFFB9F6CA),
-                    fontSize = 13.sp,
-                )
-            }
-        }
+        // Kein "Bestätigungs-Mail an Kunden senden"-Button mehr — der
+        // Lager-Mitarbeiter entscheidet das nicht. Die Mail wird vom
+        // Admin-Dashboard freigegeben (oder vollautomatisch sobald die
+        // Palette an den Lieferanten verschickt wurde).
 
         BigButton(
             text = "Nächste Annahme",
