@@ -81,8 +81,23 @@ fun ScanStep(
         onDispose { scanner.stopListening() }
     }
 
-    // Scanner-Subscription → an Backend weiterreichen.
-    LaunchedEffect(caseDetail.id) {
+    // Scanner-Subscription → an Backend weiterreichen, ABER nur wenn
+    // wir nicht gerade auf eine Bewertung warten. Sobald ein Item
+    // gescannt ist und der Worker noch nicht "Speichern + nächster
+    // Artikel" geklickt hat (= lastScanResult != null UND das Item
+    // ist rateable), schlucken wir weitere Scans still. Sonst würde
+    // ein zweiter Scan die Rating-Eingaben überschreiben.
+    //
+    // Partial-Scans (menge>1, status=pending) und Falschsendungen
+    // (source=unknown) brauchen kein Rating → Scans bleiben aktiv,
+    // Worker kann sofort den nächsten EAN halten.
+    val ratingBlocksScanner = lastScanResult?.let { r ->
+        r.item != null &&
+            r.item.source != "unknown" &&
+            r.item.status == "received"
+    } ?: false
+    LaunchedEffect(caseDetail.id, ratingBlocksScanner) {
+        if (ratingBlocksScanner) return@LaunchedEffect
         scanner.scans.collect { raw ->
             val code = raw.trim()
             if (code.isEmpty()) return@collect
@@ -195,6 +210,12 @@ fun ScanStep(
                         color = Color.White,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "Scanner pausiert — bitte erst Bewertung speichern, dann " +
+                            "kommt der nächste Artikel.",
+                        color = Color(0xFFFFE082),
+                        fontSize = 12.sp,
                     )
                     AssessForm(
                         answers = ratingAnswers,
