@@ -283,8 +283,9 @@ export async function buildPalletLabelPdf(
   });
 
   // ── 5. RECEIVER ──────────────────────────────────────────────────
+  // User-Brief: bilingual EN/PL.
   cursorY -= 14;
-  page.drawText("RECEIVER", {
+  page.drawText("RECEIVER · ODBIORCA", {
     x: TEXT_X,
     y: cursorY,
     size: 8,
