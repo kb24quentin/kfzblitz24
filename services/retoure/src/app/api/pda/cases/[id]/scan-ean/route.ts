@@ -138,46 +138,99 @@ export async function POST(
   });
   if (!c) return NextResponse.json({ error: "Case not found" }, { status: 404 });
 
-  // ── Phase 1: Match gegen registrierte Items (mengen-bewusst) ──────
+  // ── Phase 1: Match gegen registrierte Items (per-Stück-Rating) ────
   //
-  // Wir matchen jetzt ALLE source=registered items mit passendem EAN —
-  // nicht nur "pending". Bei menge>1 zählt jeder Scan einen scanCount
-  // hoch; erst wenn scanCount >= menge wird der Status auf "received"
-  // gesetzt. Beispiel: Item menge=6, scanCount=0 → erster Scan macht
-  // scanCount=1, status bleibt "pending". Sechster Scan: scanCount=6,
-  // status="received". Siebter Scan: keine Pending-Quota mehr → fällt
-  // auf Phase 2 (extra/unknown).
+  // User-Brief: "wenn man einen Artikel scannt, der mehrfach vorkommt
+  // will er dennoch dass man den gleichen Artikel am Stück scannt,
+  // aber für jede Stückzahl muss eine eigene Bewertung erfolgen".
+  //
+  // Lösung: BEIM ERSTEN SCAN eines Items mit menge>1 splitten wir das
+  // RetoureItem in N Items (jedes mit menge=1). Jeder folgende Scan
+  // matcht ein eigenes Item → kriegt sein eigenes Rating. Damit kann
+  // der Worker 3 Stück als "rot" und 2 als "grün" bewerten.
+  //
+  // Match-Logik: pending-Items mit menge>=1 + eanCode. Wir filtern
+  // auch status="pending" damit gerade bewertete Items nicht nochmal
+  // matchen (würden sonst beim Re-Scan eine 2. Rating-Runde triggern).
   const registeredMatch = c.items.find(
     (it) =>
       it.source === "registered" &&
       it.eanCode === ean &&
-      it.scanCount < it.menge,
+      it.status === "pending",
   );
 
   if (registeredMatch) {
-    const newScanCount = registeredMatch.scanCount + 1;
-    const fullyScanned = newScanCount >= registeredMatch.menge;
-
-    await prisma.retoureItem.update({
-      where: { id: registeredMatch.id },
-      data: {
-        status: fullyScanned ? "received" : registeredMatch.status,
-        receivedAt: fullyScanned ? new Date() : registeredMatch.receivedAt,
-        receivedByPda: actor,
-        scanCount: newScanCount,
-      },
-    });
+    // Auto-Split wenn menge>1: erstes Item bleibt das aktuelle, die
+    // restlichen menge-1 Stück werden als zusätzliche Pending-Items
+    // angelegt (jeweils menge=1, frische Stamm-Daten geklont).
+    if (registeredMatch.menge > 1) {
+      await prisma.$transaction(async (tx) => {
+        // Das current item: menge=1, status=received, scanCount=1
+        await tx.retoureItem.update({
+          where: { id: registeredMatch.id },
+          data: {
+            menge: 1,
+            status: "received",
+            receivedAt: new Date(),
+            receivedByPda: actor,
+            scanCount: 1,
+            // Preis-Felder auf "pro Stück" umstellen
+            gesamtpreis_brutto: registeredMatch.einzelpreis_brutto,
+          },
+        });
+        // N-1 neue Items als pending, jeweils menge=1
+        const remaining = registeredMatch.menge - 1;
+        for (let i = 0; i < remaining; i++) {
+          await tx.retoureItem.create({
+            data: {
+              caseId: id,
+              source: "registered",
+              status: "pending",
+              artikelnummer: registeredMatch.artikelnummer,
+              hersteller: registeredMatch.hersteller,
+              beschreibung: registeredMatch.beschreibung,
+              menge: 1,
+              grund: registeredMatch.grund,
+              einzelpreis_brutto: registeredMatch.einzelpreis_brutto,
+              gesamtpreis_brutto: registeredMatch.einzelpreis_brutto,
+              einzelgewicht_g: registeredMatch.einzelgewicht_g,
+              eanCode: registeredMatch.eanCode,
+              einspeiserid: registeredMatch.einspeiserid,
+            },
+          });
+        }
+      });
+      await addEvent(
+        id,
+        "item_split_for_per_unit_rating",
+        `Item gesplittet: ${registeredMatch.menge}× ${registeredMatch.beschreibung ?? registeredMatch.artikelnummer} → ${registeredMatch.menge} Einzel-Items für individuelle Bewertung`,
+        {
+          itemId: registeredMatch.id,
+          originalMenge: registeredMatch.menge,
+        },
+        actor,
+      );
+    } else {
+      // menge=1: ganz normal als received markieren
+      await prisma.retoureItem.update({
+        where: { id: registeredMatch.id },
+        data: {
+          status: "received",
+          receivedAt: new Date(),
+          receivedByPda: actor,
+          scanCount: 1,
+        },
+      });
+    }
 
     await addEvent(
       id,
       "item_scanned_registered",
-      `EAN ${ean} matched registriertes Item ${newScanCount}/${registeredMatch.menge}: ${registeredMatch.beschreibung ?? registeredMatch.artikelnummer ?? "—"}`,
+      `EAN ${ean} matched registriertes Item: ${registeredMatch.beschreibung ?? registeredMatch.artikelnummer ?? "—"}`,
       {
         itemId: registeredMatch.id,
         ean,
         source: "registered",
-        scanCount: newScanCount,
-        menge: registeredMatch.menge,
       },
       actor,
     );
@@ -190,11 +243,31 @@ export async function POST(
       },
     });
 
+    // Anzahl noch offene Items mit derselben artikelnummer (Anzeige
+    // "1 von 5"). Wir zählen über alle pending-Items mit gleichem
+    // artikelnummer für den Case.
+    const sameArticlePending = await prisma.retoureItem.count({
+      where: {
+        caseId: id,
+        artikelnummer: registeredMatch.artikelnummer,
+        source: "registered",
+        status: "pending",
+      },
+    });
+    const sameArticleTotal = await prisma.retoureItem.count({
+      where: {
+        caseId: id,
+        artikelnummer: registeredMatch.artikelnummer,
+        source: "registered",
+      },
+    });
+    const sameArticleDone = sameArticleTotal - sameArticlePending;
+
     return NextResponse.json({
       kind: "ok_registered",
       message:
-        registeredMatch.menge > 1
-          ? `Artikel bestätigt (${newScanCount}/${registeredMatch.menge})`
+        sameArticleTotal > 1
+          ? `Artikel bestätigt (${sameArticleDone}/${sameArticleTotal})`
           : "Artikel bestätigt",
       scannedEan: ean,
       item: updated ? serializeItem(updated) : null,

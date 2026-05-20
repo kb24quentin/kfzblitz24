@@ -148,16 +148,29 @@ fun CaseDetailScreen(
                     // Step-Indikator weitermachen.
                     StepProgress(currentStep = step)
 
-                    // ── Action-Error ──────────────────────────────────
+                    // ── Action-Error (groß für Lager-Sichtbarkeit) ──
                     state.actionError?.let { err ->
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0x33F44336))
-                                .padding(10.dp),
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFB71C1C))
+                                .padding(horizontal = 18.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Text(err, color = Color(0xFFEF9A9A), fontSize = 13.sp)
+                            Text(
+                                "✗ FEHLER",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.sp,
+                            )
+                            Text(
+                                err,
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                     }
 

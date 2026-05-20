@@ -126,7 +126,9 @@ fun PaletteStep(
 
     // State-Machine: itemConfirmed = Worker hat Artikel-EAN gescannt
     var itemConfirmed by remember(currentItem?.id) { mutableStateOf(false) }
-    var scanError by remember { mutableStateOf<String?>(null) }
+    // scanError ist pro Item gekeyt — wird automatisch geleert sobald
+    // der Worker zum nächsten Item weitergeht.
+    var scanError by remember(currentItem?.id) { mutableStateOf<String?>(null) }
     var showManualInput by remember { mutableStateOf(false) }
     var manualInput by remember(currentItem?.id, itemConfirmed) { mutableStateOf("") }
 
@@ -136,18 +138,26 @@ fun PaletteStep(
         onDispose { scanner.stopListening() }
     }
 
-    // Scanner-Subscription: leitet je nach Stufe an die richtige Logik
+    // Scanner-Subscription: leitet je nach Stufe an die richtige Logik.
+    // Wir clearen den scanError VOR jedem neuen Scan-Versuch — wenn der
+    // neue Scan auch falsch ist, wird der Error sofort neu gesetzt. So
+    // bleibt keine alte Fehlermeldung stehen wenn der Worker den
+    // richtigen Code/Artikel scannt.
     LaunchedEffect(currentItem?.id, itemConfirmed, suggestedContainer?.id) {
         scanner.scans.collect { raw ->
             val code = raw.trim()
             if (code.isEmpty()) return@collect
+            scanError = null
             handleScan(
                 scannedCode = code,
                 currentItem = currentItem,
                 itemConfirmed = itemConfirmed,
                 suggestedContainer = suggestedContainer,
                 onConfirmItem = { itemConfirmed = true; scanError = null },
-                onLinkToContainer = onLinkToContainer,
+                onLinkToContainer = { cid, iid ->
+                    scanError = null
+                    onLinkToContainer(cid, iid)
+                },
                 onError = { msg -> scanError = msg },
             )
         }
@@ -180,16 +190,29 @@ fun PaletteStep(
         }
         if (currentItem == null) return@Column
 
-        // ── Fehler-Banner ───────────────────────────────────────────
+        // ── Fehler-Banner — groß damit's im Lager-Alltag auffällt ──
         scanError?.let { err ->
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0x33F44336))
-                    .padding(10.dp),
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFB71C1C))
+                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(err, color = Color(0xFFEF9A9A), fontSize = 13.sp)
+                Text(
+                    "✗ FEHLER",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp,
+                )
+                Text(
+                    err,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
 

@@ -151,17 +151,17 @@ export async function createSupplierReturn(
 
 /**
  * Markiert eine SupplierReturn als versandt: speichert Tracking-Nummer
- * + Zeitstempel und setzt den Status. `actor` wird zwar entgegengenommen,
- * findet aber nur dann Verwendung, wenn der Container an Cases hängt
- * (siehe Modul-Doc) — in diesem Lib-Modul protokollieren wir die Aktion
- * absichtlich nicht ins RetoureEvent-Log.
+ * + Zeitstempel und setzt den Status. Wenn der Return an einen Container
+ * gebunden ist, transitionieren wir auch alle daran hängenden Cases
+ * von "partner_verarbeitet" nach "unterwegs_lieferant" — damit der
+ * Admin sieht dass die Palette unterwegs ist.
  */
 export async function markShipped(
   returnId: string,
   trackingNumber: string,
-  _actor: string
+  actor: string
 ): Promise<SupplierReturn> {
-  return prisma.supplierReturn.update({
+  const supplierReturn = await prisma.supplierReturn.update({
     where: { id: returnId },
     data: {
       trackingNumber: trackingNumber.trim() || null,
@@ -169,6 +169,50 @@ export async function markShipped(
       status: "versandt",
     },
   });
+
+  // Cases auf "unterwegs_lieferant" updaten wenn an einen Container
+  // gebunden. Container hat keine FK auf SupplierReturn (lose Kopplung
+  // per containerId-String), deshalb manuell looken up.
+  if (supplierReturn.containerId) {
+    const items = await prisma.retoureItem.findMany({
+      where: { containerId: supplierReturn.containerId },
+      select: { caseId: true },
+    });
+    const uniqueCaseIds = Array.from(new Set(items.map((i) => i.caseId)));
+    for (const caseId of uniqueCaseIds) {
+      const c = await prisma.retoureCase.findUnique({
+        where: { id: caseId },
+        select: { status: true },
+      });
+      if (
+        c &&
+        (c.status === "partner_verarbeitet" || c.status === "eingang_partner")
+      ) {
+        await prisma.retoureCase.update({
+          where: { id: caseId },
+          data: { status: "unterwegs_lieferant" },
+        });
+        await prisma.retoureEvent.create({
+          data: {
+            caseId,
+            type: "status_change",
+            message: `Palette versandt — unterwegs zum Lieferanten${
+              trackingNumber ? ` (Tracking: ${trackingNumber})` : ""
+            }`,
+            meta: JSON.stringify({
+              from: c.status,
+              to: "unterwegs_lieferant",
+              supplierReturnId: returnId,
+              trackingNumber: trackingNumber || null,
+            }),
+            actor,
+          },
+        });
+      }
+    }
+  }
+
+  return supplierReturn;
 }
 
 /** Markiert: Sendung beim Lieferanten eingegangen. */

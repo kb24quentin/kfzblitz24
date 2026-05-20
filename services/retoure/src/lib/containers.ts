@@ -241,6 +241,43 @@ export async function linkItemToContainer(
       },
     });
 
+    // Auto-Transition: Wenn ALLE rateable items des Cases jetzt auf
+    // einer Palette liegen, geht der Case von "eingang_partner" in
+    // "partner_verarbeitet" über. Falsche Items (verdict=red oder
+    // status=missing) zählen nicht zur Pflicht.
+    const caseItems = await tx.retoureItem.findMany({
+      where: { caseId: item.caseId },
+      select: { id: true, status: true, verdict: true },
+    });
+    const stillPending = caseItems.filter(
+      (i) =>
+        i.status !== "on_pallet" &&
+        i.status !== "missing" &&
+        i.status !== "refunded" &&
+        i.status !== "rejected",
+    );
+    if (stillPending.length === 0) {
+      const caseRow = await tx.retoureCase.findUnique({
+        where: { id: item.caseId },
+        select: { status: true },
+      });
+      if (caseRow && caseRow.status === "eingang_partner") {
+        await tx.retoureCase.update({
+          where: { id: item.caseId },
+          data: { status: "partner_verarbeitet" },
+        });
+        await tx.retoureEvent.create({
+          data: {
+            caseId: item.caseId,
+            type: "status_change",
+            message: "Im Partnerlager fertig verarbeitet — alle Artikel auf Palette",
+            meta: JSON.stringify({ from: "eingang_partner", to: "partner_verarbeitet" }),
+            actor,
+          },
+        });
+      }
+    }
+
     return updated;
   });
 }
