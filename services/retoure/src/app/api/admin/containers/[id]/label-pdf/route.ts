@@ -40,23 +40,44 @@ export async function GET(
   const { id } = await ctx.params;
   const container = await prisma.container.findUnique({
     where: { id },
-    include: { supplier: { select: { id: true, name: true } } },
+    include: {
+      supplier: {
+        select: {
+          id: true,
+          name: true,
+          street: true,
+          postalCode: true,
+          city: true,
+          country: true,
+        },
+      },
+    },
   });
 
   if (!container) {
     return NextResponse.json({ error: "Container not found" }, { status: 404 });
   }
 
-  // Partner-Name für die Anzeige: bevorzugt der Supplier-Name, dann
-  // partnerId-Freitext, dann ein generischer Platzhalter.
   const partnerName =
     container.supplier?.name ??
     container.partnerId ??
     "(kein Lieferant)";
 
-  // Interne kfzBlitz24-Retoure-Palette: Routing-Hinweis im Label ändert
-  // sich auf "→ KB24-LAGER (Sortierfach Retouren)" statt "→ Lieferant".
   const isInternal = container.supplier?.id === "kfzblitz24-internal";
+
+  // Receiver-Adresszeilen für das Routing-Label (Designguide §7.4):
+  // Letzte Zeile = Land in CAPS. Wenn die Stammdaten leer sind, bekommt
+  // der Designguide-Fallback aus label-pdf.ts den Job.
+  const supplier = container.supplier;
+  const receiverLines = !isInternal && supplier && (supplier.street || supplier.city)
+    ? [
+        supplier.street ?? "",
+        `${supplier.postalCode ?? ""} ${supplier.city ?? ""}`.trim(),
+        (supplier.country ?? "DE").toUpperCase() === "DE" ? "GERMANY"
+          : (supplier.country ?? "").toUpperCase() === "PL" ? "POLAND"
+          : (supplier.country ?? "").toUpperCase(),
+      ].filter((l) => l.length > 0)
+    : undefined;
 
   const pdfBytes = await buildPalletLabelPdf({
     palletCode: container.code,
@@ -64,6 +85,10 @@ export async function GET(
     createdAt: container.openedAt,
     maxOpenUntil: container.maxOpenUntil ?? container.openedAt,
     isInternal,
+    receiverLines,
+    retoureReference: `PAL-${container.code}|${container.openedAt
+      .toISOString()
+      .slice(0, 10)}`,
   });
 
   return new Response(new Uint8Array(pdfBytes), {
