@@ -373,28 +373,9 @@ export async function buildPalletLabelPdf(
   cursorY = openedY - 28;
 
   // ── 7. Footer ────────────────────────────────────────────────────
-  // hr (kurz, links bündig — überfährt nicht den QR-Code rechts)
-  page.drawRectangle({
-    x: TEXT_X,
-    y: cursorY,
-    width: HR_W,
-    height: 1,
-    color: BLACK,
-  });
-
-  // Footer-Text nur für EXTERNE Labels — interne Paletten bleiben im
-  // eigenen Haus, da ist die Kontakt-Mail unnötiger Lärm.
-  if (!opts.isInternal) {
-    cursorY -= 12;
-    page.drawText("kfzBlitz24 Returns Warehouse · ops@kfzblitz24.de", {
-      x: TEXT_X,
-      y: cursorY,
-      size: 7.5,
-      font: helvBold,
-      color: BLACK,
-      maxWidth: TEXT_W,
-    });
-  }
+  // User-Brief: Footer-Text "kfzBlitz24 Returns Warehouse · ops@…"
+  // komplett raus von allen Lager-Labels. Die Labels sind ohnehin
+  // intern — Kontakt-Footer braucht's nicht. HR-Linie auch weg.
 
   const bytes = await pdf.save();
   return bytes;
