@@ -53,6 +53,11 @@ data class PdaItem(
      * manuell "Da/Fehlt" tippen.
      */
     val eanCode: String? = null,
+    /**
+     * Wie oft das Item gescannt wurde. Relevant bei menge>1: Item
+     * bleibt status="pending" bis scanCount >= menge erreicht ist.
+     */
+    val scanCount: Int? = null,
     val supplierId: String? = null,
     val supplierName: String? = null,
     val containerId: String? = null,

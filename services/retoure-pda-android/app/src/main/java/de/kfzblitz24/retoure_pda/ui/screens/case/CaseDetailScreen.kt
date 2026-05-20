@@ -178,6 +178,9 @@ fun CaseDetailScreen(
                             onScanItem = { itemId, present ->
                                 vm.scanItem(itemId, present)
                             },
+                            onAssessItem = { itemId, score, reason ->
+                                vm.assessItem(itemId, score, reason)
+                            },
                             onCompleteScanStep = { vm.completeScanStep() },
                         )
 
