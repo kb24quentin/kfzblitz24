@@ -7,16 +7,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import de.kfzblitz24.retoure_pda.data.api.dto.CaseDetail
 import de.kfzblitz24.retoure_pda.data.repo.CaseRepository
 import de.kfzblitz24.retoure_pda.data.repo.ContainerRepository
 import de.kfzblitz24.retoure_pda.data.scanner.BarcodeScanner
@@ -24,6 +29,17 @@ import de.kfzblitz24.retoure_pda.ui.components.StepProgress
 import de.kfzblitz24.retoure_pda.ui.screens.case.steps.*
 import de.kfzblitz24.retoure_pda.ui.theme.Navy
 import de.kfzblitz24.retoure_pda.ui.theme.Orange
+
+/**
+ * Produziert eine virtuelle "Merged-Case"-Sicht für die Wizard-Steps:
+ * primärer Case mit Items aus ALLEN Cases der Session zusammengefügt.
+ * Andere Felder (Status, partnerReceivedAt, etc.) bleiben aus der
+ * primären Case — die Step-Composables nutzen die nicht für Routing,
+ * nur für Anzeige.
+ */
+private fun mergedForUi(primary: CaseDetail, secondaries: List<CaseDetail>): CaseDetail =
+    if (secondaries.isEmpty()) primary
+    else primary.copy(items = primary.items + secondaries.flatMap { it.items })
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,10 +57,15 @@ fun CaseDetailScreen(
     )
     val state by vm.uiState.collectAsState()
 
-    // Auto-Receive: sobald der Case geladen ist UND noch keine
-    // partnerReceivedAt gesetzt hat, sofort POST /receive. Mitarbeiter
-    // hat den Lookup ja schon bestätigt — die "Paket angenommen"-Hürde
-    // entfällt damit.
+    // Sheet-State: wenn true, ersetzt der Add-Case-Screen den Wizard
+    // komplett damit der Scanner nicht von zwei Listenern gleichzeitig
+    // konsumiert wird.
+    var addCaseSheetOpen by remember { mutableStateOf(false) }
+
+    // Auto-Receive: sobald der primäre Case geladen ist UND noch keine
+    // partnerReceivedAt gesetzt hat, sofort POST /receive. Wenn weitere
+    // Cases hinzukommen, fängt die nächste receiveCase()-Iteration die
+    // ein.
     var autoReceived by remember { mutableStateOf(false) }
     LaunchedEffect(state.caseDetail?.id, state.caseDetail?.partnerReceivedAt) {
         val detail = state.caseDetail
@@ -58,17 +79,59 @@ fun CaseDetailScreen(
         }
     }
 
+    // ── Add-Case-Sheet (fullscreen Replacement) ──────────────────────
+    if (addCaseSheetOpen) {
+        AddCaseSheet(
+            scanner = scanner,
+            currentSessionCount = state.allCases.size,
+            primaryBestellnummer = state.caseDetail?.bestellnummer ?: "—",
+            actionLoading = state.actionLoading,
+            errorBanner = state.actionError,
+            successBanner = state.addCaseBanner,
+            onScan = { code ->
+                vm.addCaseToSession(code)
+                // Sheet bleibt offen damit Worker auch dritten Schein
+                // scannen kann. Schließen passiert via "Fertig"-Button.
+            },
+            onDismiss = {
+                vm.clearAddCaseBanner()
+                vm.clearActionError()
+                addCaseSheetOpen = false
+            },
+        )
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        state.caseDetail?.bestellnummer ?: "Lade…",
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color.White,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            state.caseDetail?.bestellnummer ?: "Lade…",
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = Color.White,
+                        )
+                        // Badge wenn weitere Cases in der Session sind
+                        if (state.secondaryCases.isNotEmpty()) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Orange)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    "+${state.secondaryCases.size}",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                )
+                            }
+                        }
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -80,11 +143,18 @@ fun CaseDetailScreen(
                     }
                 },
                 actions = {
-                    // KEIN expliziter "+ Paket"-Button mehr — Worker
-                    // scannt einfach das neue Paket-Label im HomeScreen
-                    // + Retourenschein, das Backend hängt das neue
-                    // Tracking automatisch an die RMA an (siehe
-                    // withTracking-Logik in /api/pda/cases/lookup).
+                    // "+ Weiterer Retourenschein" — für Multi-Retoure-
+                    // Unified (Use Case 1: ein Paket, mehrere RMAs).
+                    // Worker findet 2. Schein beim Auspacken → tippt hier
+                    // drauf → Scanner-Vollbild → scant Schein → Items
+                    // mergen in den Wizard.
+                    IconButton(onClick = { addCaseSheetOpen = true }) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Weiterer Retourenschein",
+                            tint = Orange,
+                        )
+                    }
                     TextButton(onClick = vm::load) {
                         Text("↻", color = Color.White, fontSize = 18.sp)
                     }
@@ -101,9 +171,9 @@ fun CaseDetailScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
-                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                    contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator(color = de.kfzblitz24.retoure_pda.ui.theme.Orange)
+                    CircularProgressIndicator(color = Orange)
                 }
             }
 
@@ -135,8 +205,13 @@ fun CaseDetailScreen(
             }
 
             else -> {
-                val detail = state.caseDetail ?: return@Scaffold
-                val step = deriveStep(detail)
+                val primary = state.caseDetail ?: return@Scaffold
+                // Wizard-Step über ALLE Cases derived (langsamster Case
+                // gewinnt → Wizard hängt da fest bis alles aufgeholt).
+                val step = deriveStep(state.allCases)
+                // Für die Step-Composables eine virtuelle Merged-Case-
+                // Sicht: Items aller Cases unioned, sonst aus primary.
+                val merged = mergedForUi(primary, state.secondaryCases)
 
                 Column(
                     modifier = Modifier
@@ -148,13 +223,26 @@ fun CaseDetailScreen(
                 ) {
                     Spacer(Modifier.height(4.dp))
 
-                    // ── Step-Progress ─────────────────────────────────
-                    // Bestellnummer steht schon in der TopAppBar oben —
-                    // nicht doppelt anzeigen. Hier direkt mit dem Wizard-
-                    // Step-Indikator weitermachen.
                     StepProgress(currentStep = step)
 
-                    // ── Action-Error (groß für Lager-Sichtbarkeit) ──
+                    // Add-Case-Banner (kurz nach Hinzufügen einer Case)
+                    state.addCaseBanner?.let { msg ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Orange.copy(alpha = 0.2f))
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                        ) {
+                            Text(
+                                msg,
+                                color = Color(0xFFFFCC80),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+
                     state.actionError?.let { err ->
                         Column(
                             modifier = Modifier
@@ -180,7 +268,6 @@ fun CaseDetailScreen(
                         }
                     }
 
-                    // ── Wizard-Schritte ───────────────────────────────
                     when (step) {
                         WizardStep.RECEIVE -> ReceiveStep(
                             loading = state.actionLoading,
@@ -188,7 +275,7 @@ fun CaseDetailScreen(
                         )
 
                         WizardStep.SCAN -> ScanStep(
-                            caseDetail = detail,
+                            caseDetail = merged,
                             scanner = scanner,
                             actionLoading = state.actionLoading,
                             lastScanResult = state.lastScanResult,
@@ -205,7 +292,7 @@ fun CaseDetailScreen(
 
                         WizardStep.ASSESS -> AssessStep(
                             caseId = caseId,
-                            caseDetail = detail,
+                            caseDetail = merged,
                             actionLoading = state.actionLoading,
                             onAssess = { itemId, score, reason ->
                                 vm.assessItem(itemId, score, reason)
@@ -214,7 +301,7 @@ fun CaseDetailScreen(
                         )
 
                         WizardStep.PALETTE -> PaletteStep(
-                            caseDetail = detail,
+                            caseDetail = merged,
                             suppliers = state.suppliers,
                             containerRepository = containerRepository,
                             scanner = scanner,
@@ -228,16 +315,15 @@ fun CaseDetailScreen(
                         )
 
                         WizardStep.DONE -> DoneStep(
-                            caseDetail = detail,
+                            caseDetail = merged,
                             actionLoading = state.actionLoading,
                             onGoHome = onBack,
                         )
                     }
 
-                    // ── Footer ────────────────────────────────────────
                     TextButton(
                         onClick = onBack,
-                        modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally),
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) {
                         Text(
                             "Abbrechen / zurück zur Startseite",
@@ -251,10 +337,168 @@ fun CaseDetailScreen(
             }
         }
     }
-
 }
 
-// AddPackageDialog wurde entfernt — das Multi-Paket-Szenario läuft
-// jetzt über den natürlichen HomeScreen-Scan-Flow (Worker scannt das
-// neue Paket-Label → 404 → scannt Retourenschein → Backend hängt das
-// neue Tracking automatisch an die existierende Retoure an).
+/**
+ * Fullscreen-Sheet zum Hinzufügen eines weiteren Retourenscheins zur
+ * aktuellen Session. Hijackt den Scanner alleinig — wird nur gerendert
+ * statt des Wizards, sodass kein doppelter Collector den Scan abgreift.
+ *
+ * Worker kann mehrere Scheine hintereinander scannen, jedes Mal kommt
+ * ein Banner. "Fertig" tappt → zurück zum Wizard.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddCaseSheet(
+    scanner: BarcodeScanner,
+    currentSessionCount: Int,
+    primaryBestellnummer: String,
+    actionLoading: Boolean,
+    errorBanner: String?,
+    successBanner: String?,
+    onScan: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    DisposableEffect(Unit) {
+        scanner.startListening()
+        onDispose { scanner.stopListening() }
+    }
+
+    LaunchedEffect(scanner) {
+        scanner.scans.collect { code ->
+            val cleaned = code.trim()
+            if (cleaned.isNotEmpty()) onScan(cleaned)
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Weiterer Retourenschein",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Schließen",
+                            tint = Color.White,
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Navy),
+            )
+        },
+        containerColor = Color(0xFF0D1B2A),
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(RoundedCornerShape(60.dp))
+                        .background(Orange.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("▢", color = Orange, fontSize = 64.sp, fontWeight = FontWeight.Bold)
+                }
+
+                if (actionLoading) {
+                    LinearProgressIndicator(
+                        color = Orange,
+                        trackColor = Orange.copy(alpha = 0.2f),
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(3.dp),
+                    )
+                }
+
+                Text(
+                    "Scanne weiteren Retourenschein",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+
+                Text(
+                    "Aktuelle Session: $primaryBestellnummer" +
+                        if (currentSessionCount > 1) " + ${currentSessionCount - 1} weitere" else "",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                )
+
+                successBanner?.let { msg ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0x4400C853))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        Text(
+                            msg,
+                            color = Color(0xFFA5D6A7),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+
+                errorBanner?.let { err ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFB71C1C))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        Text(
+                            err,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(0.7f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Orange),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text(
+                        "Fertig — weiter im Wizard",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
+        }
+    }
+}

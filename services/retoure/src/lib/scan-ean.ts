@@ -242,8 +242,41 @@ async function ensureOrderPositionsSnapshot(
 }
 
 /**
- * Klassifiziert einen EAN gegen Webisco: was ist das überhaupt für ein
- * Artikel, und ist er in der Order dieser Case enthalten?
+ * Webisco-EAN-Auflösung — was ist das für ein Artikel? Käuferunabhängig,
+ * also Cache-fähig auf Aufruferebene (Multi-Case-Sessions rufen das nur
+ * einmal pro EAN auf, nicht pro Case).
+ */
+export async function lookupArticleByEan(
+  ean: string,
+): Promise<ResolvedArticle | null> {
+  const cfg = getWebiscoConfig();
+  if (!cfg) return null;
+  const lookup = await fetchArtikelByEan(cfg, ean);
+  return lookup.ok && lookup.data.length > 0 ? lookup.data[0] : null;
+}
+
+/**
+ * Check ob ein bereits aufgelöster Artikel in der Order einer bestimmten
+ * Case enthalten ist. Nutzt den orderPositionsJson-Snapshot (lazy-
+ * populated via Webisco beleganfrage).
+ */
+export async function isArticleInCaseOrder(
+  caseId: string,
+  artikelnummer: string,
+): Promise<boolean> {
+  const orderPositions = await ensureOrderPositionsSnapshot(caseId);
+  return orderPositions.some(
+    (p) =>
+      p.artikelnummer &&
+      p.artikelnummer.trim().toLowerCase() ===
+        artikelnummer.trim().toLowerCase(),
+  );
+}
+
+/**
+ * Convenience: kombinierter Webisco-Check für eine einzelne Case. Wird
+ * vom Single-Case-Endpoint genutzt; Multi-Case nutzt die separierten
+ * Helpers oben um den EAN→Artikel-Lookup nicht N-mal zu wiederholen.
  */
 export async function classifyAgainstWebisco(
   caseId: string,
@@ -252,25 +285,14 @@ export async function classifyAgainstWebisco(
   resolvedArticle: ResolvedArticle | null;
   articleInOrder: boolean;
 }> {
-  const cfg = getWebiscoConfig();
-  if (!cfg) return { resolvedArticle: null, articleInOrder: false };
-
-  const lookup = await fetchArtikelByEan(cfg, ean);
-  const resolvedArticle =
-    lookup.ok && lookup.data.length > 0 ? lookup.data[0] : null;
-
+  const resolvedArticle = await lookupArticleByEan(ean);
   if (!resolvedArticle?.artikelnummer) {
     return { resolvedArticle, articleInOrder: false };
   }
-
-  const orderPositions = await ensureOrderPositionsSnapshot(caseId);
-  const articleInOrder = orderPositions.some(
-    (p) =>
-      p.artikelnummer &&
-      p.artikelnummer.trim().toLowerCase() ===
-        resolvedArticle.artikelnummer!.trim().toLowerCase(),
+  const articleInOrder = await isArticleInCaseOrder(
+    caseId,
+    resolvedArticle.artikelnummer,
   );
-
   return { resolvedArticle, articleInOrder };
 }
 

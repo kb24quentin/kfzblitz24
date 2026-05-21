@@ -52,6 +52,25 @@ class CaseRepository(
         api.scanEan(caseId, ScanEanRequest(ean = ean, pdaId = pdaId))
     }
 
+    /**
+     * Multi-Case-Variante: matched gegen ALLE übergebenen Cases. Response
+     * enthält `matchedCaseId` damit das ViewModel weiß welcher Case
+     * betroffen war.
+     */
+    suspend fun scanEanInSession(
+        caseIds: List<String>,
+        ean: String,
+    ): Result<ScanEanResponse> = safeApi("EAN scannen") {
+        val pdaId = tokenStore.getPdaId() ?: "unknown"
+        api.scanEanInSession(
+            SessionScanEanRequest(
+                caseIds = caseIds,
+                ean = ean,
+                pdaId = pdaId,
+            ),
+        )
+    }
+
     /** Worker tappt "Fertig mit Scannen" → Wizard advanced. */
     suspend fun scanComplete(caseId: String): Result<Unit> =
         safeApi("Scan abschließen") {

@@ -128,6 +128,24 @@ data class ScanEanResponse(
     val scannedEan: String,
     val item: PdaItem? = null,
     val resolvedArticle: ResolvedArticle? = null,
+    /**
+     * Nur gesetzt wenn der Scan über /api/pda/sessions/scan-ean lief
+     * (Multi-Case-Session, Use Case 1). Sagt welche Case den Match
+     * gewonnen hat — die UI kann das Item dann der richtigen Case
+     * zuordnen.
+     */
+    val matchedCaseId: String? = null,
+)
+
+/**
+ * Multi-Case-Variante des Scan-EAN: Worker hat mehrere Retourenscheine
+ * im Paket gefunden, alle laufen im gleichen Wizard-Durchgang.
+ */
+@Serializable
+data class SessionScanEanRequest(
+    val caseIds: List<String>,
+    val ean: String,
+    val pdaId: String? = null,
 )
 
 @Serializable

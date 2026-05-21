@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import de.kfzblitz24.retoure_pda.data.api.dto.CaseDetail
+import de.kfzblitz24.retoure_pda.data.api.dto.PdaItem
 import de.kfzblitz24.retoure_pda.data.api.dto.ScanEanResponse
 import de.kfzblitz24.retoure_pda.data.api.dto.SupplierDto
 import de.kfzblitz24.retoure_pda.data.repo.CaseRepository
@@ -13,32 +14,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Wizard-Schritte. Seit dem Inline-Rating-Pass sind SCAN + Bewertung
- * EIN Schritt — pro Artikel scannen + sofort bewerten. Daher kein
- * separater "Bewerten"-Step mehr im Top-Indicator. Falls items vom
- * Fallback-Pfad (manuelle Da/Fehlt-Buttons ohne EAN-Scan) noch
- * bewertet werden müssen, bleiben wir trotzdem im "Erfassen"-Step —
- * die Fallback-Liste/Anzeige passiert dort inline.
+ * Wizard-Schritte. SCAN + ASSESS sind UI-seitig zusammengelegt
+ * ("Artikel erfassen"). PALETTE und DONE folgen.
  */
 enum class WizardStep(val label: String) {
     RECEIVE("Eingang"),
     SCAN("Artikel erfassen"),
-    ASSESS("Artikel erfassen"),  // gleicher Label-Text → optisch ein Step
+    ASSESS("Artikel erfassen"),
     PALETTE("Palette"),
     DONE("Fertig"),
 }
 
 /**
- * Leitet den aktuellen Wizard-Schritt aus den Case-Daten ab.
- *
- *   - kein partnerReceivedAt          → RECEIVE
- *   - scanCompletedAt nicht gesetzt   → SCAN ("Artikel erfassen")
- *       Inline-Rating passiert innerhalb dieses Steps.
- *   - irgendein Item mit status=received|photographed → ASSESS
- *       (Fallback: nur wenn ein Item ohne EAN per Da-Button bestätigt
- *       wurde und deshalb durch den Inline-Pfad nicht gerated wurde)
- *   - irgendein Item assessed mit verdict ≠ red → PALETTE
- *   - sonst → DONE
+ * Step-Derivation für eine einzelne Case. Wird auch von der Multi-Case-
+ * Variante aufgerufen — das aggregierte Ergebnis ist dann der "frühste"
+ * Step über alle Cases hinweg (Wizard hängt am langsamsten Case).
  */
 fun deriveStep(case: CaseDetail): WizardStep {
     if (case.partnerReceivedAt == null) return WizardStep.RECEIVE
@@ -48,18 +38,51 @@ fun deriveStep(case: CaseDetail): WizardStep {
     return WizardStep.DONE
 }
 
+/**
+ * Aggregierter Step für eine Multi-Case-Session: der "kleinste" Step
+ * über alle Cases ist der globale Step. Wir können erst weitergehen
+ * wenn ALLE Cases den nächsten Schritt zulassen — sonst hängt eine
+ * Case im Limbo.
+ *
+ * Reihenfolge: RECEIVE < SCAN < ASSESS < PALETTE < DONE.
+ */
+fun deriveStep(cases: List<CaseDetail>): WizardStep {
+    if (cases.isEmpty()) return WizardStep.RECEIVE
+    return cases.map { deriveStep(it) }.minOrNull() ?: WizardStep.RECEIVE
+}
+
+/**
+ * UnifiedItem — kombiniert PdaItem mit dem caseId aus dem es stammt.
+ * Wird in UI-Listen verwendet damit jede Aktion auf das richtige
+ * Backend-Case routen kann.
+ */
+data class UnifiedItem(
+    val caseId: String,
+    val item: PdaItem,
+)
+
 data class CaseDetailUiState(
+    /** Primärer Case — der mit dem die Session geöffnet wurde. */
     val caseDetail: CaseDetail? = null,
+    /** Zusätzliche Cases die per "+ Weiterer Retourenschein" hinzukamen. */
+    val secondaryCases: List<CaseDetail> = emptyList(),
     val loading: Boolean = true,
     val error: String? = null,
     val suppliers: List<SupplierDto> = emptyList(),
     val actionLoading: Boolean = false,
     val actionError: String? = null,
-    /** Letztes Scan-Ergebnis fürs Big-OK/NOT-OK-Display im ScanStep. */
     val lastScanResult: ScanEanResponse? = null,
-    /** Toast/Banner nach dem Hinzufügen eines weiteren Pakets. */
-    val addPackageBanner: String? = null,
-)
+    /** Banner nach Hinzufügen eines weiteren Cases zur Session. */
+    val addCaseBanner: String? = null,
+) {
+    /** Alle Cases in der Session: Primary first. */
+    val allCases: List<CaseDetail>
+        get() = listOfNotNull(caseDetail) + secondaryCases
+
+    /** Alle Item-IDs aus allen Cases — für ViewModel-Routing-Lookups. */
+    val unifiedItems: List<UnifiedItem>
+        get() = allCases.flatMap { c -> c.items.map { UnifiedItem(c.id, it) } }
+}
 
 class CaseDetailViewModel(
     private val caseId: String,
@@ -75,19 +98,35 @@ class CaseDetailViewModel(
         loadSuppliers()
     }
 
+    // ── Loading ───────────────────────────────────────────────────────────────
+
+    /**
+     * Reload ALLE Cases in der aktuellen Session — primärer + alle
+     * secondaries. Wird nach jeder Action gerufen damit die UI synchron
+     * mit dem Backend ist.
+     */
     fun load() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
-            caseRepository.getCase(caseId)
-                .onSuccess { detail ->
-                    _uiState.value = _uiState.value.copy(loading = false, caseDetail = detail)
+            val primaryResult = caseRepository.getCase(caseId)
+            primaryResult.onSuccess { primary ->
+                // Secondaries parallel nachladen
+                val secondaryIds = _uiState.value.secondaryCases.map { it.id }
+                val reloaded = mutableListOf<CaseDetail>()
+                for (sid in secondaryIds) {
+                    caseRepository.getCase(sid).onSuccess { reloaded.add(it) }
                 }
-                .onFailure { e ->
-                    _uiState.value = _uiState.value.copy(
-                        loading = false,
-                        error = e.message ?: "Laden fehlgeschlagen.",
-                    )
-                }
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
+                    caseDetail = primary,
+                    secondaryCases = reloaded,
+                )
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
+                    error = e.message ?: "Laden fehlgeschlagen.",
+                )
+            }
         }
     }
 
@@ -100,38 +139,117 @@ class CaseDetailViewModel(
         }
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────
+    // ── Multi-Case-Session: weiteren Retourenschein hinzufügen ───────────────
 
-    // Alle Action-Funktionen folgen demselben Pattern:
-    //   - actionLoading=true, actionError=null beim Start
-    //   - actionLoading=false + reload() bei Success
-    //   - actionLoading=false + Fehlermeldung bei Failure
-    // Der Bug vorher: bei Success wurde load() gerufen, aber load()
-    // touched `loading`, nicht `actionLoading` — also blieb der Button
-    // ewig im Spinner-State hängen.
+    /**
+     * Worker scannt einen weiteren Retourenschein/Paket-Code zum selben
+     * Paket. Wir machen einen Lookup, holen den Case-Detail, und hängen
+     * ihn als secondary an.
+     *
+     * Validierung:
+     *   - Code darf nicht primärer Case sein (else: silent ignore)
+     *   - Code darf nicht bereits in secondaries sein (else: Banner
+     *     "schon in der Session")
+     */
+    fun addCaseToSession(code: String) {
+        val cleaned = code.trim()
+        if (cleaned.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
+            caseRepository.lookup(cleaned, attachTracking = null)
+                .onFailure { e ->
+                    _uiState.value = _uiState.value.copy(
+                        actionLoading = false,
+                        actionError = e.message ?: "Lookup fehlgeschlagen",
+                    )
+                }
+                .onSuccess { lookup ->
+                    val foundId = lookup.case.id
+                    val primaryId = _uiState.value.caseDetail?.id
+                    val secondaryIds = _uiState.value.secondaryCases.map { it.id }
+                    if (foundId == primaryId) {
+                        _uiState.value = _uiState.value.copy(
+                            actionLoading = false,
+                            addCaseBanner = "Dieser Retourenschein ist bereits der primäre Case",
+                        )
+                        return@onSuccess
+                    }
+                    if (foundId in secondaryIds) {
+                        _uiState.value = _uiState.value.copy(
+                            actionLoading = false,
+                            addCaseBanner = "Retourenschein ${lookup.case.bestellnummer} ist schon in der Session",
+                        )
+                        return@onSuccess
+                    }
+                    // Vollen Case-Detail holen und an secondaries hängen
+                    caseRepository.getCase(foundId)
+                        .onSuccess { detail ->
+                            _uiState.value = _uiState.value.copy(
+                                actionLoading = false,
+                                secondaryCases = _uiState.value.secondaryCases + detail,
+                                addCaseBanner = "+ ${detail.bestellnummer} zur Session hinzugefügt",
+                            )
+                        }
+                        .onFailure { e ->
+                            _uiState.value = _uiState.value.copy(
+                                actionLoading = false,
+                                actionError = e.message ?: "Case-Detail konnte nicht geladen werden",
+                            )
+                        }
+                }
+        }
+    }
+
+    fun clearAddCaseBanner() {
+        _uiState.value = _uiState.value.copy(addCaseBanner = null)
+    }
+
+    // ── Routing-Helper: zu welchem Case gehört dieses Item? ──────────────────
+
+    private fun caseIdForItem(itemId: String): String? =
+        _uiState.value.unifiedItems.firstOrNull { it.item.id == itemId }?.caseId
+
+    // ── Actions ───────────────────────────────────────────────────────────────
 
     private fun resetActionLoading() {
         _uiState.value = _uiState.value.copy(actionLoading = false, actionError = null)
     }
 
+    /**
+     * Receive: muss für JEDE Case in der Session laufen die noch nicht
+     * partnerReceivedAt hat. Wir iterieren sequenziell — bei Fehler in
+     * einer Case brechen wir ab und zeigen den Fehler.
+     */
     fun receiveCase(onDone: () -> Unit = {}) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
-            caseRepository.receiveCase(caseId)
-                .onSuccess { resetActionLoading(); load(); onDone() }
-                .onFailure { e ->
+            val pending = _uiState.value.allCases.filter { it.partnerReceivedAt == null }
+            for (c in pending) {
+                val res = caseRepository.receiveCase(c.id)
+                if (res.isFailure) {
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
-                        actionError = e.message,
+                        actionError = res.exceptionOrNull()?.message,
                     )
+                    return@launch
                 }
+            }
+            resetActionLoading()
+            load()
+            onDone()
         }
     }
 
     fun scanItem(itemId: String, present: Boolean) {
+        val cId = caseIdForItem(itemId) ?: run {
+            _uiState.value = _uiState.value.copy(
+                actionError = "Item ${itemId} keiner Case zugeordnet",
+            )
+            return
+        }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
-            caseRepository.scanItem(caseId, itemId, present)
+            caseRepository.scanItem(cId, itemId, present)
                 .onSuccess { resetActionLoading(); load() }
                 .onFailure { e ->
                     _uiState.value = _uiState.value.copy(
@@ -143,15 +261,15 @@ class CaseDetailViewModel(
     }
 
     /**
-     * EAN-Scan: ein Aufruf, Server klassifiziert automatisch (registered/
-     * extra/unknown). Result landet in `lastScanResult` für die GROßE
-     * GRÜN/ROT-Anzeige im ScanStep. Anschliessend neuladen damit die
-     * Item-Liste den neuen Status reflektiert.
+     * EAN-Scan via Multi-Case-Session-Endpoint. Auch bei nur einer Case
+     * — gleicher Code-Pfad, kein Verzweigen nötig.
      */
     fun scanEan(ean: String) {
+        val caseIds = _uiState.value.allCases.map { it.id }
+        if (caseIds.isEmpty()) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
-            caseRepository.scanEan(caseId, ean)
+            caseRepository.scanEanInSession(caseIds, ean)
                 .onSuccess { result ->
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
@@ -169,55 +287,44 @@ class CaseDetailViewModel(
         }
     }
 
-    /** Räumt das letzte Scan-Ergebnis ab — z. B. wenn der User weiterklickt. */
     fun clearLastScanResult() {
         _uiState.value = _uiState.value.copy(lastScanResult = null)
     }
 
-    /** Worker tappt "Fertig mit Scannen" → Wizard advanced zu ASSESS. */
+    /**
+     * Scan-Complete: muss für JEDE Case in der Session laufen. Pro Case
+     * idempotent — wenn scanCompletedAt schon gesetzt ist, ändert
+     * Backend nichts.
+     */
     fun completeScanStep() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
-            caseRepository.scanComplete(caseId)
-                .onSuccess { resetActionLoading(); load() }
-                .onFailure { e ->
+            for (c in _uiState.value.allCases) {
+                if (c.scanCompletedAt != null) continue
+                val res = caseRepository.scanComplete(c.id)
+                if (res.isFailure) {
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
-                        actionError = e.message,
+                        actionError = res.exceptionOrNull()?.message,
                     )
+                    return@launch
                 }
+            }
+            resetActionLoading()
+            load()
         }
-    }
-
-    /** Hängt ein weiteres Paket an die Retoure an (Multi-Paket-Szenario). */
-    fun addPackage(tracking: String) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
-            caseRepository.addPackage(caseId, tracking)
-                .onSuccess { resp ->
-                    _uiState.value = _uiState.value.copy(
-                        actionLoading = false,
-                        addPackageBanner = resp.message,
-                    )
-                    load()
-                }
-                .onFailure { e ->
-                    _uiState.value = _uiState.value.copy(
-                        actionLoading = false,
-                        actionError = e.message,
-                    )
-                }
-        }
-    }
-
-    fun clearAddPackageBanner() {
-        _uiState.value = _uiState.value.copy(addPackageBanner = null)
     }
 
     fun assessItem(itemId: String, score: Int, reason: String?) {
+        val cId = caseIdForItem(itemId) ?: run {
+            _uiState.value = _uiState.value.copy(
+                actionError = "Item ${itemId} keiner Case zugeordnet",
+            )
+            return
+        }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
-            caseRepository.assessItem(caseId, itemId, score, reason)
+            caseRepository.assessItem(cId, itemId, score, reason)
                 .onSuccess { resetActionLoading(); load() }
                 .onFailure { e ->
                     _uiState.value = _uiState.value.copy(
@@ -229,6 +336,8 @@ class CaseDetailViewModel(
     }
 
     fun addItemToContainer(containerId: String, itemId: String) {
+        // Container-Operation ist Case-übergreifend (Item kennt sein Case
+        // selbst), Repository nimmt nur containerId + itemId.
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
             containerRepository.addItemToContainer(containerId, itemId)
@@ -265,17 +374,25 @@ class CaseDetailViewModel(
         }
     }
 
+    /**
+     * Finalize: läuft über alle Cases der Session. Cases die schon
+     * unterwegs_lieferant sind, kann das Backend idempotent ignorieren.
+     */
     fun finalizeCase() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(actionLoading = true, actionError = null)
-            caseRepository.finalizeCase(caseId)
-                .onSuccess { resetActionLoading(); load() }
-                .onFailure { e ->
+            for (c in _uiState.value.allCases) {
+                val res = caseRepository.finalizeCase(c.id)
+                if (res.isFailure) {
                     _uiState.value = _uiState.value.copy(
                         actionLoading = false,
-                        actionError = e.message,
+                        actionError = res.exceptionOrNull()?.message,
                     )
+                    return@launch
                 }
+            }
+            resetActionLoading()
+            load()
         }
     }
 

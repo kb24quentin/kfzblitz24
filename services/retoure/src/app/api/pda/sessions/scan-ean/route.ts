@@ -29,10 +29,10 @@ import { checkPdaAuth } from "@/lib/pda-auth";
 import {
   findRegisteredMatch,
   applyRegisteredMatch,
-  classifyAgainstWebisco,
+  lookupArticleByEan,
+  isArticleInCaseOrder,
   applyExtraMatch,
   applyUnknown,
-  type ResolvedArticle,
 } from "@/lib/scan-ean";
 
 export const dynamic = "force-dynamic";
@@ -98,27 +98,21 @@ export async function POST(req: Request) {
   }
 
   // ── Phase 2a: Webisco-extra über alle Cases ──────────────────────
-  // Wir klassifizieren EINMAL via Webisco (EAN→Artikel) und checken dann
-  // jede Case's Order-Snapshot. Erster Match wins.
-  let resolvedArticle: ResolvedArticle | null = null;
-  let extraCaseId: string | null = null;
-  for (const caseId of caseIds) {
-    const cls = await classifyAgainstWebisco(caseId, ean);
-    if (cls.resolvedArticle) resolvedArticle = cls.resolvedArticle;
-    if (cls.articleInOrder && cls.resolvedArticle) {
-      extraCaseId = caseId;
-      break;
+  // EINMAL via Webisco klassifizieren (EAN→Artikel), dann pro Case
+  // checken ob er auf der jeweiligen Order war. Erster Match wins.
+  const resolvedArticle = await lookupArticleByEan(ean);
+  if (resolvedArticle?.artikelnummer) {
+    for (const caseId of caseIds) {
+      if (await isArticleInCaseOrder(caseId, resolvedArticle.artikelnummer)) {
+        const result = await applyExtraMatch(
+          caseId,
+          ean,
+          resolvedArticle,
+          actor,
+        );
+        return NextResponse.json({ ...result, matchedCaseId: caseId });
+      }
     }
-  }
-
-  if (extraCaseId && resolvedArticle) {
-    const result = await applyExtraMatch(
-      extraCaseId,
-      ean,
-      resolvedArticle,
-      actor,
-    );
-    return NextResponse.json({ ...result, matchedCaseId: extraCaseId });
   }
 
   // ── Phase 2b: unknown auf primäre Case ───────────────────────────

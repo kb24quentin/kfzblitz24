@@ -94,6 +94,17 @@ interface RetoureApi {
     ): GenericSuccess
 
     /**
+     * Multi-Case-Variante des Scan-EAN. Body enthält die Liste aller
+     * Cases in der aktuellen Session. Backend versucht den EAN-Match
+     * gegen jede Case und gibt im Response zurück welche gewonnen hat
+     * (matchedCaseId). Siehe /api/pda/sessions/scan-ean.
+     */
+    @POST("api/pda/sessions/scan-ean")
+    suspend fun scanEanInSession(
+        @Body body: SessionScanEanRequest,
+    ): ScanEanResponse
+
+    /**
      * Hängt ein weiteres Paket-Tracking an die Retoure (Multi-Paket-
      * Szenario). Backend speichert es entweder als customerTracking
      * (wenn noch leer) oder im additionalTrackings-Array.
