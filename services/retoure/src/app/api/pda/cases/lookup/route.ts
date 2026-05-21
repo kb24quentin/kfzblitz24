@@ -158,16 +158,49 @@ export async function GET(req: Request) {
         attachedTracking = true;
 
         // ── Auto-Reopen (Use Case 3) ─────────────────────────────────
-        // Wenn beim 2./3. Paket noch pending registered items existieren,
-        // muss der Wizard wieder in den Scan-Step gehen — egal in welchem
-        // konkreten Zustand der Case war. Worker hat 1. Paket vielleicht
-        // schon palettiert und auf "Fertig mit Scannen" gedrückt, aber
-        // die 2 fehlenden Items aus Paket 2 müssen noch gescannt werden.
+        // Wenn beim 2./3. Paket noch nicht-finale Items existieren,
+        // muss der Wizard zurück zum SCAN-Step.
         //
-        // Wir leeren immer `scanCompletedAt` wenn pending items existieren
-        // (PDA-deriveStep zwingt dann SCAN). Und wir resetten den Status
-        // auf eingang_partner wenn der Case schon auf partner_verarbeitet/
-        // unterwegs_lieferant gestanden hatte.
+        // SUBTILITÄT: Der "Fertig mit Scannen"-Button im PDA markiert
+        // alle übrig-gebliebenen Items per onScanItem(id, present=false)
+        // automatisch als status="missing". Beim Eingang vom 2. Paket
+        // sind das aber die Kandidaten die JETZT scanbar werden — wir
+        // setzen sie deshalb zurück auf "pending". Wenn sie auch im 2.
+        // Paket nicht drin sind, kann der Worker einfach nochmal "Fertig"
+        // tappen und sie werden wieder "missing".
+        const missingItems = await prisma.retoureItem.findMany({
+          where: {
+            caseId: c.id,
+            source: "registered",
+            status: "missing",
+          },
+          select: { id: true },
+        });
+        if (missingItems.length > 0) {
+          await prisma.retoureItem.updateMany({
+            where: { id: { in: missingItems.map((i) => i.id) } },
+            data: {
+              status: "pending",
+              receivedAt: null,
+              receivedByPda: null,
+              scanCount: 0,
+            },
+          });
+          await prisma.retoureEvent.create({
+            data: {
+              caseId: c.id,
+              type: "items_reopened",
+              message: `${missingItems.length} als "fehlend" markierte Artikel wieder auf "pending" gesetzt — neues Paket angekommen`,
+              meta: JSON.stringify({
+                count: missingItems.length,
+                itemIds: missingItems.map((i) => i.id),
+                trigger: "additional-package-arrived",
+              }),
+              actor: "pda",
+            },
+          });
+        }
+
         const stillPending = await prisma.retoureItem.count({
           where: {
             caseId: c.id,
