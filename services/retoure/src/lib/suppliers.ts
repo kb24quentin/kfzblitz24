@@ -37,6 +37,8 @@ export type SupplierReturnStatus = (typeof SUPPLIER_RETURN_STATUSES)[number];
 
 export interface SupplierInput {
   name: string;
+  /** 2–4-stelliger Container-Code-Prefix (z. B. "IP", "AP", "KB"). */
+  shortCode?: string | null;
   contactPerson?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -49,6 +51,13 @@ export interface SupplierInput {
   active?: boolean;
 }
 
+function normalizeShortCode(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const cleaned = s.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (cleaned.length === 0) return null;
+  return cleaned.slice(0, 4);
+}
+
 /**
  * Legt einen neuen Lieferanten an. Wirft, wenn `name` schon existiert
  * (`@unique` constraint). Leere Strings werden zu `null` normalisiert,
@@ -58,6 +67,7 @@ export async function createSupplier(data: SupplierInput): Promise<Supplier> {
   return prisma.supplier.create({
     data: {
       name: data.name.trim(),
+      shortCode: normalizeShortCode(data.shortCode),
       contactPerson: nullify(data.contactPerson),
       email: nullify(data.email),
       phone: nullify(data.phone),
@@ -87,6 +97,9 @@ export async function updateSupplier(
     where: { id },
     data: {
       ...(data.name !== undefined && { name: data.name.trim() }),
+      ...(data.shortCode !== undefined && {
+        shortCode: normalizeShortCode(data.shortCode),
+      }),
       ...(data.contactPerson !== undefined && {
         contactPerson: nullify(data.contactPerson),
       }),

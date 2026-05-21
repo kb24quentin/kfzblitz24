@@ -43,24 +43,16 @@ export type ContainerStatus =
   | "received_supplier";
 
 /**
- * Hard-coded 2-Buchstaben-Codes pro Supplier — Container-Codes
- * starten immer mit diesem Prefix damit der Lager-Mitarbeiter den
- * Empfänger schon aus dem Code erkennt:
+ * Liefert den 2–4-Buchstaben-Code-Prefix für einen Supplier. Quelle:
+ *   1. Supplier.shortCode aus der DB (admin-konfigurierbar pro Lieferant)
+ *   2. Fallback: erste 2 Großbuchstaben des Namens, normalisiert
  *
- *   Interparts                  → "IP-042"
- *   Autopartner                 → "AP-117"
- *   kfzBlitz24 Retoure (intern) → "KB-003"
- *
- * Fallback bei unbekanntem Supplier: erste 2 Großbuchstaben des Namens.
+ * Beispiele (Default-Seeds):
+ *   Interparts          (shortCode="IP")  → "IP-042"
+ *   Autopartner         (shortCode="AP")  → "AP-117"
+ *   kfzblitz24-internal (shortCode="KB")  → "KB-003"
  */
-const SUPPLIER_SHORT_CODES: Record<string, string> = {
-  Interparts: "IP",
-  Autopartner: "AP",
-  "kfzBlitz24 Retoure (intern)": "KB",
-};
-
-function supplierShortCode(name: string): string {
-  if (SUPPLIER_SHORT_CODES[name]) return SUPPLIER_SHORT_CODES[name];
+function supplierShortCodeFromName(name: string): string {
   const cleaned = name
     .normalize("NFKD")
     .replace(/[^a-zA-Z0-9]/g, "")
@@ -129,12 +121,14 @@ export async function createContainer(
   }
   const supplier = await prisma.supplier.findUnique({
     where: { id: opts.supplierId },
-    select: { name: true },
+    select: { name: true, shortCode: true },
   });
   if (!supplier) {
     throw new Error(`Supplier nicht gefunden: ${opts.supplierId}`);
   }
-  const prefix = supplierShortCode(supplier.name);
+  const prefix =
+    supplier.shortCode?.trim().toUpperCase() ||
+    supplierShortCodeFromName(supplier.name);
 
   // Einmal retryen wenn UNIQUE-Constraint feuert (race mit parallelem
   // Insert). Beim zweiten Treffer geben wir den Fehler durch.

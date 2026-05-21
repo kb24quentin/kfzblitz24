@@ -302,6 +302,10 @@ model Container {
 model Supplier {
   id              String   @id @default(cuid())
   name            String   @unique
+  /// 2–4-stelliger Container-Code-Prefix (z. B. "IP", "AP", "KB").
+  /// Optional — wenn null, leitet `supplierShortCode()` automatisch
+  /// aus dem Namen ab (erste 2 Großbuchstaben).
+  shortCode       String?
   contactPerson   String?
   email           String?
   phone           String?

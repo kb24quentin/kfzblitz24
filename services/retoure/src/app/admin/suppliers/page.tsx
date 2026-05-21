@@ -84,7 +84,14 @@ export default async function SuppliersListPage() {
               {suppliers.map((s) => (
                 <tr key={s.id} className="hover:bg-[#f4f5f7]/60">
                   <td className="px-4 py-3 font-semibold text-[#0b3756]">
-                    {s.name}
+                    <span className="inline-flex items-center gap-2">
+                      {s.shortCode && (
+                        <span className="px-1.5 py-0.5 rounded bg-[#0b3756] text-white text-[10px] font-mono font-bold tracking-wider">
+                          {s.shortCode}
+                        </span>
+                      )}
+                      {s.name}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-[#3d4654]">
                     {[s.postalCode, s.city].filter(Boolean).join(" ") || (

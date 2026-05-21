@@ -66,10 +66,11 @@ export async function GET(
   const isInternal = container.supplier?.id === "kfzblitz24-internal";
 
   // Receiver-Adresszeilen für das Routing-Label (Designguide §7.4):
-  // Letzte Zeile = Land in CAPS. Wenn die Stammdaten leer sind, bekommt
-  // der Designguide-Fallback aus label-pdf.ts den Job.
+  // Adresse kommt IMMER aus den Supplier-Stammdaten — auch für die
+  // interne kfzBlitz24-Palette (Worker sieht den Hinweis "Adresse
+  // pflegen" wenn das Supplier-Profil leer ist).
   const supplier = container.supplier;
-  const receiverLines = !isInternal && supplier && (supplier.street || supplier.city)
+  const receiverLines = supplier && (supplier.street || supplier.city)
     ? [
         supplier.street ?? "",
         `${supplier.postalCode ?? ""} ${supplier.city ?? ""}`.trim(),

@@ -125,26 +125,20 @@ function deriveRoute(receiverName: string, isInternal: boolean): string {
 /**
  * Baut die finalen Receiver-Adresszeilen (mind. 2, max. 4). Letzte
  * Zeile = Land in Großbuchstaben (Designguide §7.4).
+ *
+ * Adresse kommt immer aus opts.receiverLines (die Route baut die aus
+ * Supplier.street/city/country). Wenn die fehlen, kommt ein deutlicher
+ * "Adresse pflegen"-Hinweis — gilt für ALLE Lieferanten inkl. intern.
  */
 function buildReceiverLines(
   opts: PalletPdfOptions,
 ): { name: string; lines: string[] } {
-  if (opts.isInternal) {
-    return {
-      name: "kfzBlitz24 GmbH",
-      lines: ["Lager Retoure", "Sortierfach intern", "GERMANY"],
-    };
-  }
-  // Wenn User schon Zeilen mitgegeben hat — nehmen.
   if (opts.receiverLines && opts.receiverLines.length >= 2) {
     return {
       name: opts.partnerName,
       lines: opts.receiverLines.slice(0, 4),
     };
   }
-  // Fallback wenn der Supplier in der DB keine Adresse hat: einfacher
-  // Platzhalter mit "Adresse pflegen" Hinweis. Eigene Worker sehen das
-  // sofort und können's im Admin-Dashboard nachpflegen.
   return {
     name: opts.partnerName,
     lines: ["Adresse im Admin pflegen", "—", "GERMANY"],

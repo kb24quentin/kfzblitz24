@@ -20,6 +20,7 @@ function extractSupplierInput(formData: FormData): SupplierInput {
   const leadDays = leadDaysRaw ? Number(leadDaysRaw) : 30;
   return {
     name: String(formData.get("name") ?? "").trim(),
+    shortCode: String(formData.get("shortCode") ?? "") || null,
     contactPerson: String(formData.get("contactPerson") ?? "") || null,
     email: String(formData.get("email") ?? "") || null,
     phone: String(formData.get("phone") ?? "") || null,

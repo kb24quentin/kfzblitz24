@@ -25,17 +25,33 @@ export function SupplierForm({
     <form action={action} className="space-y-6 bg-white rounded-xl border border-[#e6e8eb] p-6">
       {v && <input type="hidden" name="id" value={v.id} />}
 
-      <Field label="Name" required>
-        <input
-          autoFocus
-          name="name"
-          defaultValue={v?.name ?? ""}
-          required
-          maxLength={200}
-          className={input()}
-          placeholder="z. B. Bosch Mobility Solutions GmbH"
-        />
-      </Field>
+      <div className="grid grid-cols-[1fr_140px] gap-4">
+        <Field label="Name" required>
+          <input
+            autoFocus
+            name="name"
+            defaultValue={v?.name ?? ""}
+            required
+            maxLength={200}
+            className={input()}
+            placeholder="z. B. Bosch Mobility Solutions GmbH"
+          />
+        </Field>
+        <Field label="Container-Kürzel">
+          <input
+            name="shortCode"
+            defaultValue={v?.shortCode ?? ""}
+            maxLength={4}
+            className={input("uppercase font-mono tracking-wider")}
+            placeholder="z. B. KB"
+          />
+        </Field>
+      </div>
+      <p className="-mt-3 text-xs text-[#8a93a0]">
+        2–4 Buchstaben — wird als Prefix für alle Container-Codes dieses
+        Lieferanten verwendet (z. B. <code className="font-mono">KB-042</code>).
+        Leer lassen → automatisch aus dem Namen abgeleitet.
+      </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Kontaktperson">
