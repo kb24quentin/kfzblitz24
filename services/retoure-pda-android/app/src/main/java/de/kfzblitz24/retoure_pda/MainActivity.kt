@@ -112,7 +112,11 @@ class MainActivity : ComponentActivity() {
                             containerRepository = app.containerRepository,
                             printerRepository = app.printerRepository,
                             printerStore = app.printerStore,
-                            onBack = { navController.popBackStack() },
+                            onBack = {
+                                if (navController.previousBackStackEntry != null) {
+                                    navController.popBackStack()
+                                }
+                            },
                             onOpenPrinterSettings = {
                                 navController.navigate(Routes.PRINTER_SETTINGS)
                             },
@@ -130,7 +134,16 @@ class MainActivity : ComponentActivity() {
                             caseRepository = app.caseRepository,
                             containerRepository = app.containerRepository,
                             scanner = app.compositeScanner,
-                            onBack = { navController.popBackStack() },
+                            onBack = {
+                                // Defensiv: nur popBackStack wenn auch wirklich
+                                // was zum Pop'en da ist. Mehrfachklick auf den
+                                // Back-Arrow konnte sonst unter die Start-
+                                // Destination poppen → leerer NavHost = blauer
+                                // Theme-Hintergrund + App-Restart nötig.
+                                if (navController.previousBackStackEntry != null) {
+                                    navController.popBackStack()
+                                }
+                            },
                             onOpenPhotos = { cId, itemId ->
                                 navController.navigate(Routes.photos(cId, itemId))
                             },
@@ -152,7 +165,11 @@ class MainActivity : ComponentActivity() {
                             itemId = itemId,
                             photoRepository = app.photoRepository,
                             tokenStore = app.tokenStore,
-                            onBack = { navController.popBackStack() },
+                            onBack = {
+                                if (navController.previousBackStackEntry != null) {
+                                    navController.popBackStack()
+                                }
+                            },
                         )
                     }
 
@@ -160,7 +177,11 @@ class MainActivity : ComponentActivity() {
                     composable(Routes.SETTINGS) {
                         SettingsScreen(
                             tokenStore = app.tokenStore,
-                            onBack = { navController.popBackStack() },
+                            onBack = {
+                                if (navController.previousBackStackEntry != null) {
+                                    navController.popBackStack()
+                                }
+                            },
                             onLogout = {
                                 navController.navigate(Routes.PAIR) {
                                     popUpTo(0) { inclusive = true }
@@ -178,7 +199,11 @@ class MainActivity : ComponentActivity() {
                             printerStore = app.printerStore,
                             bluetoothPrinter = app.bluetoothPrinter,
                             printerRepository = app.printerRepository,
-                            onBack = { navController.popBackStack() },
+                            onBack = {
+                                if (navController.previousBackStackEntry != null) {
+                                    navController.popBackStack()
+                                }
+                            },
                         )
                     }
                 }
