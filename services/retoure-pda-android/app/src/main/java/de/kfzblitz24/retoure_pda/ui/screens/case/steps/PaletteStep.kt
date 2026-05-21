@@ -63,10 +63,10 @@ fun PaletteStep(
     onCreateContainerAndLink: (supplierId: String, itemId: String) -> Unit,
 ) {
     val queue = remember(caseDetail.items) {
-        caseDetail.items.filter {
-            (it.status == "assessed" && it.verdict != "red") ||
-                (it.source == "unknown" && it.status == "assessed")
-        }
+        // ALLE assessed-Items kommen auf die Palette — auch rot. Das rote
+        // verdict ist nur Hinweis für die Back-Office-Erstattungsentscheidung,
+        // der Artikel selbst geht ganz normal zurück zum Lieferanten.
+        caseDetail.items.filter { it.status == "assessed" }
     }
     val completed = caseDetail.items.count { it.status == "on_pallet" }
     val totalToPalettize = queue.size + completed

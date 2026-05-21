@@ -26,7 +26,9 @@ fun DoneStep(
 ) {
     val onPallet = caseDetail.items.filter { it.status == "on_pallet" }
     val missing  = caseDetail.items.filter { it.status == "missing" }
-    val red      = caseDetail.items.filter { it.status == "assessed" && it.verdict == "red" }
+    // Rote Artikel sind palettiert wie alle anderen; der Hinweis hier ist
+    // für die Erstattungs-Entscheidung im Back-Office gedacht.
+    val redOnPallet = onPallet.filter { it.verdict == "red" }
     val refunded = caseDetail.items.filter { it.status == "refunded" }
     val rejected = caseDetail.items.filter { it.status == "rejected" }
 
@@ -62,8 +64,8 @@ fun DoneStep(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SummaryRow("Auf Palette",             onPallet.size, SummaryColor.GREEN)
+            if (redOnPallet.isNotEmpty()) SummaryRow("davon rot · Erstattung prüfen", redOnPallet.size, SummaryColor.RED)
             if (missing.isNotEmpty())  SummaryRow("Fehlend",                missing.size,  SummaryColor.YELLOW)
-            if (red.isNotEmpty())      SummaryRow("Nicht zurücknehmbar",     red.size,      SummaryColor.RED)
             if (refunded.isNotEmpty()) SummaryRow("Bereits erstattet",       refunded.size, SummaryColor.GREEN)
             if (rejected.isNotEmpty()) SummaryRow("Abgelehnt",               rejected.size, SummaryColor.RED)
         }

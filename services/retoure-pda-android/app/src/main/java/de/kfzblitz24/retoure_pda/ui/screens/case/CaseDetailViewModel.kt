@@ -45,7 +45,10 @@ fun deriveStep(case: CaseDetail): WizardStep {
 
     if (case.scanCompletedAt == null) return WizardStep.SCAN
     if (case.items.any { it.status == "received" || it.status == "photographed" }) return WizardStep.ASSESS
-    if (case.items.any { it.status == "assessed" && it.verdict != "red" }) return WizardStep.PALETTE
+    // Rote Artikel kommen TROTZDEM auf die Palette. Das verdict ist nur
+    // ein Hinweis für die Back-Office-Erstattungsentscheidung — physisch
+    // geht der Artikel zurück zum Lieferanten wie alle anderen.
+    if (case.items.any { it.status == "assessed" }) return WizardStep.PALETTE
     return WizardStep.DONE
 }
 
