@@ -38,12 +38,24 @@ class KeyboardWedgeScanner : BarcodeScanner {
     private val buffer = StringBuilder()
     private var listening = false
 
+    /**
+     * Ref-Counting — kritisch bei Navigationsübergängen: Compose mounted
+     * den neuen Screen bevor der alte sein onDispose laufen lässt. Ohne
+     * Counter würde der zweite startListening() durch das spätere
+     * stopListening() des alten Screens komplett abgeschaltet.
+     */
+    private var refCount = 0
+
     override fun startListening() {
+        refCount++
+        if (listening) return
         listening = true
         buffer.clear()
     }
 
     override fun stopListening() {
+        if (refCount > 0) refCount--
+        if (refCount > 0) return
         listening = false
         buffer.clear()
     }

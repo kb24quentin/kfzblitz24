@@ -69,7 +69,17 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
 
     private var receiver: BroadcastReceiver? = null
 
+    /**
+     * Ref-Counting: HomeScreen + ScanStep (oder CaseDetail-Composables)
+     * können sich überlappen während Navigation. Mit reinem
+     * "if receiver != null return" droppen wir den Receiver in der
+     * Disposal-Reihenfolge falsch. Counter sichert: Receiver bleibt
+     * registriert solange MINDESTENS EIN Caller listening will.
+     */
+    private var refCount = 0
+
     override fun startListening() {
+        refCount++
         if (receiver != null) return  // already registered
 
         val br = object : BroadcastReceiver() {
@@ -118,6 +128,8 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
     }
 
     override fun stopListening() {
+        if (refCount > 0) refCount--
+        if (refCount > 0) return  // anderer Caller hört noch zu
         receiver?.let {
             try {
                 context.unregisterReceiver(it)
