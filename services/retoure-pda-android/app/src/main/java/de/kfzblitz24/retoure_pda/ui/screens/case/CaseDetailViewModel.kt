@@ -189,6 +189,15 @@ class CaseDetailViewModel(
                                 secondaryCases = _uiState.value.secondaryCases + detail,
                                 addCaseBanner = "+ ${detail.bestellnummer} zur Session hinzugefügt",
                             )
+                            // Auto-receive: damit der Wizard nicht zurück
+                            // auf RECEIVE springt nur weil der gerade neu
+                            // hinzugefügte Case noch kein partnerReceivedAt
+                            // hat. Idempotent — primärer Case wird in der
+                            // gleichen Aktion nicht doppelt empfangen
+                            // (receiveCase iteriert nur über null-Cases).
+                            if (detail.partnerReceivedAt == null) {
+                                receiveCase()
+                            }
                         }
                         .onFailure { e ->
                             _uiState.value = _uiState.value.copy(
