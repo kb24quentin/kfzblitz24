@@ -166,7 +166,7 @@ fun ScanStep(
                     textAlign = TextAlign.Center,
                 )
                 Text(
-                    "Q900-Scanner an den EAN-Barcode halten.",
+                    "Scanner an den EAN-Barcode halten.",
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,

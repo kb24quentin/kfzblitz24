@@ -168,7 +168,7 @@ fun HomeScreen(
                         textAlign = TextAlign.Center,
                     )
                     Text(
-                        "Carrier-Tracking auf dem Paket — Q900 darüber halten und triggern.",
+                        "Carrier-Tracking auf dem Paket — Scanner darüber halten und triggern.",
                         color = Color.White.copy(alpha = 0.6f),
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center,
