@@ -53,6 +53,21 @@ export function SupplierForm({
         Leer lassen → automatisch aus dem Namen abgeleitet.
       </p>
 
+      <Field label="Routing-Code (Label-Aufdruck)">
+        <input
+          name="routeCode"
+          defaultValue={v?.routeCode ?? ""}
+          maxLength={40}
+          className={input("font-mono uppercase")}
+          placeholder="z. B. R01 · INTERPARTS-PL"
+        />
+      </Field>
+      <p className="-mt-3 text-xs text-[#8a93a0]">
+        Erscheint im ROUTE-Block auf dem Container-Label. Format frei,
+        Konvention: <code className="font-mono">R## · ZIELORT-LL</code>.
+        Leer lassen → wird aus dem Namen generiert.
+      </p>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Kontaktperson">
           <input

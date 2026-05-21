@@ -90,8 +90,13 @@ export default async function SuppliersListPage() {
                           {s.shortCode}
                         </span>
                       )}
-                      {s.name}
+                      <span>{s.name}</span>
                     </span>
+                    {s.routeCode && (
+                      <div className="text-[10px] text-[#8a93a0] font-mono mt-0.5">
+                        {s.routeCode}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-[#3d4654]">
                     {[s.postalCode, s.city].filter(Boolean).join(" ") || (

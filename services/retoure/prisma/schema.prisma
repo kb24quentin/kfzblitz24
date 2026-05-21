@@ -306,6 +306,9 @@ model Supplier {
   /// Optional — wenn null, leitet `supplierShortCode()` automatisch
   /// aus dem Namen ab (erste 2 Großbuchstaben).
   shortCode       String?
+  /// Routing-ID auf dem Container-Label (z. B. "R01 · INTERPARTS-PL").
+  /// Optional — wenn null, wird via deriveRoute() aus dem Namen abgeleitet.
+  routeCode       String?
   contactPerson   String?
   email           String?
   phone           String?

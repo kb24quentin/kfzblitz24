@@ -21,6 +21,7 @@ function extractSupplierInput(formData: FormData): SupplierInput {
   return {
     name: String(formData.get("name") ?? "").trim(),
     shortCode: String(formData.get("shortCode") ?? "") || null,
+    routeCode: String(formData.get("routeCode") ?? "").trim() || null,
     contactPerson: String(formData.get("contactPerson") ?? "") || null,
     email: String(formData.get("email") ?? "") || null,
     phone: String(formData.get("phone") ?? "") || null,

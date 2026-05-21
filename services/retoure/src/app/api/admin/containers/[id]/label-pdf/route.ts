@@ -45,6 +45,7 @@ export async function GET(
         select: {
           id: true,
           name: true,
+          routeCode: true,
           street: true,
           postalCode: true,
           city: true,
@@ -87,6 +88,7 @@ export async function GET(
     maxOpenUntil: container.maxOpenUntil ?? container.openedAt,
     isInternal,
     receiverLines,
+    route: container.supplier?.routeCode ?? undefined,
     retoureReference: `PAL-${container.code}|${container.openedAt
       .toISOString()
       .slice(0, 10)}`,

@@ -39,6 +39,8 @@ export interface SupplierInput {
   name: string;
   /** 2–4-stelliger Container-Code-Prefix (z. B. "IP", "AP", "KB"). */
   shortCode?: string | null;
+  /** Routing-Code auf dem Label (z. B. "R01 · INTERPARTS-PL"). */
+  routeCode?: string | null;
   contactPerson?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -68,6 +70,7 @@ export async function createSupplier(data: SupplierInput): Promise<Supplier> {
     data: {
       name: data.name.trim(),
       shortCode: normalizeShortCode(data.shortCode),
+      routeCode: nullify(data.routeCode),
       contactPerson: nullify(data.contactPerson),
       email: nullify(data.email),
       phone: nullify(data.phone),
@@ -99,6 +102,9 @@ export async function updateSupplier(
       ...(data.name !== undefined && { name: data.name.trim() }),
       ...(data.shortCode !== undefined && {
         shortCode: normalizeShortCode(data.shortCode),
+      }),
+      ...(data.routeCode !== undefined && {
+        routeCode: nullify(data.routeCode),
       }),
       ...(data.contactPerson !== undefined && {
         contactPerson: nullify(data.contactPerson),

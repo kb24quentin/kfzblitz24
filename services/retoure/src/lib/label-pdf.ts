@@ -10,7 +10,7 @@
  *   - Pure Schwarz/Weiß (keine Brand-Farben — Thermo-Optimierung)
  *   - Helvetica-Bold ausschließlich
  *   - Linker Brand-Bar 11 pt + rotiertes "RETURNS · ROUTING"-Ribbon
- *   - Top-Banner 46 pt schwarz mit weißer "RETURNS / WAREHOUSE"-Headline
+ *   - Top-Banner 46 pt schwarz mit weißem "OUTBOUND"-Headliner + Logo
  *   - Sektionen von oben nach unten:
  *       BIN (riesig in 2 pt-Box, 46 pt Text)
  *       ROUTE
@@ -186,17 +186,23 @@ export async function buildPalletLabelPdf(
     height: TOP_BANNER_H,
     color: BLACK,
   });
-  page.drawText("RETURNS / WAREHOUSE", {
+  // Großer OUTBOUND-Headliner — der Worker erkennt schon aus 2m
+  // Entfernung dass das ein Outbound-Label ist und keine Anlieferung.
+  // Logo darunter im selben Banner: "kfzblitz24" gesetzt in Helvetica-
+  // Bold (Brand-Guide §1: kein SVG/Bitmap, nur Schrift). Auf dem
+  // schwarzen Banner pures Weiß — die Brand-Farben Navy/Orange gehen
+  // auf B/W-Thermo eh verloren, also rein typografisch.
+  page.drawText("OUTBOUND", {
     x: TEXT_X,
-    y: bannerY + TOP_BANNER_H - 19,
-    size: 14,
+    y: bannerY + TOP_BANNER_H - 26,
+    size: 26,
     font: helvBold,
     color: WHITE,
   });
-  page.drawText("kfzBlitz24 · Outbound to supplier", {
+  page.drawText("kfzblitz24", {
     x: TEXT_X,
-    y: bannerY + TOP_BANNER_H - 33,
-    size: 8,
+    y: bannerY + TOP_BANNER_H - 40,
+    size: 11,
     font: helvBold,
     color: WHITE,
   });
