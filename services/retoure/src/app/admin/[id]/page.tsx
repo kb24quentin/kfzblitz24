@@ -393,6 +393,50 @@ export default async function CaseDetailPage({
               ) : (
                 <p className="text-xs text-[#8a93a0]">Kein DHL-Label über uns.</p>
               )}
+
+              {/*
+                Multi-Paket-Trackings: vom PDA beim Scan eines weiteren
+                Pakets eingehängt (additionalTrackings JSON-Array). Wir
+                zeigen sie nummeriert ab "Paket 2" — die primäre Nummer
+                ist Paket 1 (siehe oben).
+              */}
+              {(() => {
+                let extras: string[] = [];
+                try {
+                  const parsed = JSON.parse(c.additionalTrackings ?? "[]");
+                  if (Array.isArray(parsed)) {
+                    extras = parsed.filter(
+                      (s: unknown) => typeof s === "string",
+                    );
+                  }
+                } catch {}
+                if (extras.length === 0) return null;
+                return (
+                  <div className="pt-3 border-t border-[#e6e8eb]">
+                    <p className="text-xs text-[#8a93a0] mb-2">
+                      Weitere Pakete ({extras.length})
+                    </p>
+                    <ul className="space-y-1">
+                      {extras.map((trk, i) => (
+                        <li key={trk + i} className="flex items-center gap-2">
+                          <span className="text-xs text-[#8a93a0] font-mono">
+                            Paket {i + 2}:
+                          </span>
+                          <a
+                            href={`https://www.dhl.de/de/privatkunden/dhl-sendungsverfolgung.html?piececode=${trk}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-mono text-sm text-[#ff6600] hover:underline inline-flex items-center gap-1"
+                          >
+                            {trk}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
             </div>
 
             <form action={setCustomerTrackingAction} className="pt-3 border-t border-[#e6e8eb] space-y-2">

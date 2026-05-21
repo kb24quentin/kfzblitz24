@@ -29,9 +29,20 @@ enum class WizardStep(val label: String) {
  * Step-Derivation für eine einzelne Case. Wird auch von der Multi-Case-
  * Variante aufgerufen — das aggregierte Ergebnis ist dann der "frühste"
  * Step über alle Cases hinweg (Wizard hängt am langsamsten Case).
+ *
+ * Wichtig für Multi-Paket-Szenarien (Use Case 3): wenn noch registrierte
+ * Items im pending-Zustand sind, muss der Wizard zurück auf SCAN selbst
+ * wenn scanCompletedAt bereits gesetzt war. Sonst kann der Worker nach
+ * Eingang vom 2. Paket die fehlenden Items nicht erfassen.
  */
 fun deriveStep(case: CaseDetail): WizardStep {
     if (case.partnerReceivedAt == null) return WizardStep.RECEIVE
+
+    val hasPendingRegistered = case.items.any {
+        it.source == "registered" && it.status == "pending"
+    }
+    if (hasPendingRegistered) return WizardStep.SCAN
+
     if (case.scanCompletedAt == null) return WizardStep.SCAN
     if (case.items.any { it.status == "received" || it.status == "photographed" }) return WizardStep.ASSESS
     if (case.items.any { it.status == "assessed" && it.verdict != "red" }) return WizardStep.PALETTE

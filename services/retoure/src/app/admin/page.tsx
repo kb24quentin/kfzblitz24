@@ -31,6 +31,10 @@ export default async function AdminListPage({
       // Auch customer-eingegebene Tracking-Nummern matchen — wichtig
       // wenn das Paket-Label im PDA gescannt wurde und dort gespeichert ist.
       { customerTrackingNumber: { contains: q } },
+      // Multi-Paket-Trackings (JSON-Array als String gespeichert).
+      // Substring-Match auf `"<code>"` damit wir nicht zufällig auf
+      // Teilstrings matchen.
+      { additionalTrackings: { contains: `"${q}"` } },
     ];
   }
 
@@ -178,26 +182,59 @@ export default async function AdminListPage({
                     <td className="px-4 py-3 font-mono text-xs">
                       {/*
                         Tracking-Spalte zeigt dhlTrackingNumber ODER
-                        customerTrackingNumber. Letzteres wird vom PDA
-                        beim Paket-Scan gesetzt — Worker scannt Carrier-
-                        Label, Backend hängt's automatisch an den Case.
+                        customerTrackingNumber + Badge wenn weitere
+                        Pakete (additionalTrackings) drin sind. Letzteres
+                        wird vom PDA beim Paket-Scan gesetzt — Worker
+                        scannt Carrier-Label, Backend hängt's automatisch
+                        an den Case.
                       */}
                       {(() => {
                         const trk = c.dhlTrackingNumber ?? c.customerTrackingNumber;
-                        if (!trk) {
+                        let extras: string[] = [];
+                        try {
+                          const parsed = JSON.parse(c.additionalTrackings ?? "[]");
+                          if (Array.isArray(parsed)) {
+                            extras = parsed.filter(
+                              (s: unknown) => typeof s === "string",
+                            );
+                          }
+                        } catch {}
+                        if (!trk && extras.length === 0) {
                           return <span className="text-[#8a93a0]">—</span>;
                         }
+                        const primary = trk ?? extras[0];
+                        const extrasAfter = trk ? extras : extras.slice(1);
+                        const tooltip = [
+                          c.dhlTrackingNumber
+                            ? `DHL: ${c.dhlTrackingNumber}`
+                            : c.customerTrackingNumber
+                              ? `Kunde: ${c.customerTrackingNumber}`
+                              : null,
+                          ...extrasAfter.map((e, i) => `Paket ${i + 2}: ${e}`),
+                        ]
+                          .filter(Boolean)
+                          .join("\n");
                         return (
-                          <a
-                            href={`https://www.dhl.de/de/privatkunden/dhl-sendungsverfolgung.html?piececode=${trk}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[#ff6600] hover:underline inline-flex items-center gap-1"
-                            title={c.dhlTrackingNumber ? "DHL-Tracking" : "Vom PDA gescanntes Paket-Label"}
-                          >
-                            {trk}
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
+                          <span className="inline-flex items-center gap-1">
+                            <a
+                              href={`https://www.dhl.de/de/privatkunden/dhl-sendungsverfolgung.html?piececode=${primary}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[#ff6600] hover:underline inline-flex items-center gap-1"
+                              title={tooltip}
+                            >
+                              {primary}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                            {extrasAfter.length > 0 && (
+                              <span
+                                className="px-1.5 py-0.5 rounded bg-[#ff6600] text-white text-[10px] font-bold"
+                                title={tooltip}
+                              >
+                                +{extrasAfter.length}
+                              </span>
+                            )}
+                          </span>
                         );
                       })()}
                     </td>
