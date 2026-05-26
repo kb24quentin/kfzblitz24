@@ -229,23 +229,46 @@ export async function POST(req: Request) {
   let webiscoSkipReason: string | null = null;
 
   const webiscoConfig = getWebiscoConfig();
+  // Diagnostik: was kam wirklich von Webisco zurück? Wird ins Event-Meta
+  // geschrieben damit Shop-Dev / Admin im Dashboard nachvollziehen kann
+  // ob das Mapping greift.
+  let webiscoDebug: {
+    lookupId?: string;
+    belegCount?: number;
+    positionCount?: number;
+    firstArtikelnummern?: string[];
+  } = {};
   if (!webiscoConfig) {
     webiscoSkipReason = "webisco_not_configured";
   } else {
-    // Prio: abiscoAuftragsnummer wenn vorhanden (zuverlässig), sonst
-    // bestellnummer (klappt nicht immer — Webisco-Internals).
     const lookupId = body.abiscoAuftragsnummer?.trim() || bestellnummer;
+    webiscoDebug.lookupId = lookupId;
     try {
       const wbRes = await fetchBelegByNumber(webiscoConfig, {
         typ: "auftrag",
         id: lookupId,
       });
+      console.log(
+        `[submit] webisco-lookup id="${lookupId}" ok=${wbRes.ok} ` +
+          (wbRes.ok
+            ? `data.length=${wbRes.data.length}`
+            : `error=${wbRes.error}`),
+      );
       if (wbRes.ok && wbRes.data.length > 0) {
         const beleg = wbRes.data[0];
         webiscoBelegId = beleg.id != null ? String(beleg.id) : null;
         webiscoBelegnummer = beleg.belegnummer ?? null;
         webiscoBelegdatum = beleg.belegdatum ?? null;
         webiscoPositions = (beleg.positionen ?? []) as WebiscoPosition[];
+        webiscoDebug.belegCount = wbRes.data.length;
+        webiscoDebug.positionCount = webiscoPositions.length;
+        webiscoDebug.firstArtikelnummern = webiscoPositions
+          .slice(0, 5)
+          .map((p) => p.artikelnummer ?? "(null)");
+        console.log(
+          `[submit] webisco-beleg id=${webiscoBelegId} belegnummer=${webiscoBelegnummer} ` +
+            `positions=${webiscoPositions.length} first-artNrs=${JSON.stringify(webiscoDebug.firstArtikelnummern)}`,
+        );
       } else {
         webiscoSkipReason = wbRes.ok ? "order_not_found_in_webisco" : `webisco_error:${wbRes.error ?? "unknown"}`;
       }
@@ -419,6 +442,7 @@ export async function POST(req: Request) {
       orderId: body.orderId,
       webiscoEnriched: webiscoSkipReason === null,
       webiscoSkipReason,
+      webiscoDebug,
       warenwertBrutto,
     },
     `shop:${source}`,
