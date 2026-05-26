@@ -7,13 +7,21 @@
  * Source-of-Truth für Shop-Dev: `docs/06-decisions-log.md` § D-009.
  */
 
+/**
+ * Final-Liste laut Quentin's DECISIONS_REPLY.md (2026-05-26):
+ * - `defekt` + `beschaedigt_transport` zusammengeführt zu `defekt_oder_beschaedigt`
+ *   (Customer kann selten Ursache zuordnen, Lager differenziert beim Auspacken).
+ * - `customer_reue` aufgeteilt in `nicht_mehr_benoetigt` + `anders_entschieden`
+ *   (klareres Wording, bessere KPI-Auswertung).
+ * - `qualitaet` umbenannt zu `qualitaet_nicht_wie_erwartet` (Photo nur optional).
+ */
 export const RETURN_REASON_CODES = [
   "passt_nicht_zum_fahrzeug",
-  "customer_reue",
-  "defekt",
   "falsche_lieferung",
-  "beschaedigt_transport",
-  "qualitaet",
+  "defekt_oder_beschaedigt",
+  "qualitaet_nicht_wie_erwartet",
+  "nicht_mehr_benoetigt",
+  "anders_entschieden",
   "anderes",
 ] as const;
 
@@ -44,58 +52,58 @@ export interface ReturnReasonSpec {
 export const RETURN_REASONS: Record<ReturnReasonCode, ReturnReasonSpec> = {
   passt_nicht_zum_fahrzeug: {
     code: "passt_nicht_zum_fahrzeug",
-    labelDe: "Passt nicht zum Fahrzeug",
+    labelDe: "Passt nicht zu meinem Fahrzeug",
     labelEn: "Doesn't fit my vehicle",
     photoRequired: false,
     autoVerdictHint: "yellow",
     internalFault: false,
   },
-  customer_reue: {
-    code: "customer_reue",
-    labelDe: "Doch nicht benötigt / falsch bestellt",
-    labelEn: "No longer needed / wrong order",
-    photoRequired: false,
-    autoVerdictHint: "yellow",
-    internalFault: false,
-  },
-  defekt: {
-    code: "defekt",
-    labelDe: "Artikel defekt",
-    labelEn: "Defective item",
-    photoRequired: true,
-    autoVerdictHint: "red",
-    internalFault: false,
-  },
   falsche_lieferung: {
     code: "falsche_lieferung",
-    labelDe: "Falsche Lieferung von uns",
-    labelEn: "Wrong item delivered by us",
+    labelDe: "Falsche Lieferung (anderer Artikel als bestellt)",
+    labelEn: "Wrong item delivered",
     photoRequired: true,
-    autoVerdictHint: "green", // Customer kriegt 100% — er kann ja nichts dafür
+    autoVerdictHint: "red",
     internalFault: true,
   },
-  beschaedigt_transport: {
-    code: "beschaedigt_transport",
-    labelDe: "Transportschaden",
-    labelEn: "Damaged in transit",
+  defekt_oder_beschaedigt: {
+    code: "defekt_oder_beschaedigt",
+    labelDe: "Artikel defekt oder beschädigt",
+    labelEn: "Defective or damaged",
     photoRequired: true,
+    autoVerdictHint: "red",
+    internalFault: true, // Default; Lager kann beim Auspacken override (Transport vs Customer-Schuld)
+  },
+  qualitaet_nicht_wie_erwartet: {
+    code: "qualitaet_nicht_wie_erwartet",
+    labelDe: "Qualität entspricht nicht der Erwartung",
+    labelEn: "Quality didn't meet expectations",
+    photoRequired: false, // Optional — Shop-UI kann nudgen, aber nicht hart durchsetzen
     autoVerdictHint: "yellow",
     internalFault: false,
   },
-  qualitaet: {
-    code: "qualitaet",
-    labelDe: "Qualität unzureichend",
-    labelEn: "Quality issues",
+  nicht_mehr_benoetigt: {
+    code: "nicht_mehr_benoetigt",
+    labelDe: "Nicht mehr benötigt / falsch bestellt",
+    labelEn: "No longer needed / ordered by mistake",
     photoRequired: false,
-    autoVerdictHint: "yellow",
+    autoVerdictHint: "green",
+    internalFault: false,
+  },
+  anders_entschieden: {
+    code: "anders_entschieden",
+    labelDe: "Anders entschieden (z.B. anderen Anbieter genommen)",
+    labelEn: "Changed my mind",
+    photoRequired: false,
+    autoVerdictHint: "green",
     internalFault: false,
   },
   anderes: {
     code: "anderes",
-    labelDe: "Anderer Grund (Freitext)",
+    labelDe: "Anderer Grund (mit Freitext)",
     labelEn: "Other reason",
     photoRequired: false,
-    autoVerdictHint: "green",
+    autoVerdictHint: "yellow",
     internalFault: false,
   },
 };
