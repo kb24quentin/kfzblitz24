@@ -36,6 +36,18 @@ export const runtime = "nodejs";
 
 interface SubmitBody {
   bestellnummer?: string;
+  /**
+   * Abisco-interne Auftragsnummer (z. B. "AW243775571"). Shop hat die
+   * aus seinem Webisco-Sync (`kb24_webisco_order_sync.abisco_auftragsnummer`).
+   *
+   * **Empfohlen mitzuschicken** wenn vorhanden — Webisco's `beleganfrage`
+   * mit `typ="auftrag"` matched zuverlässig nur über `auftragsnummer`,
+   * die customer-facing `bestellnummer` führt zu order_not_found.
+   *
+   * Fallback wenn fehlt: wir versuchen mit bestellnummer (funktioniert
+   * nicht immer — dann webisco_enrichment_skipped Event mit Warning).
+   */
+  abiscoAuftragsnummer?: string;
   orderId?: string;
   source?: "shopware" | "amazon" | "ebay" | "direct";
   kategorie?: "widerruf" | "gewaehrleistung";
@@ -220,10 +232,13 @@ export async function POST(req: Request) {
   if (!webiscoConfig) {
     webiscoSkipReason = "webisco_not_configured";
   } else {
+    // Prio: abiscoAuftragsnummer wenn vorhanden (zuverlässig), sonst
+    // bestellnummer (klappt nicht immer — Webisco-Internals).
+    const lookupId = body.abiscoAuftragsnummer?.trim() || bestellnummer;
     try {
       const wbRes = await fetchBelegByNumber(webiscoConfig, {
-        typ: "auftrag", // Bestellnummer-Suche braucht typ=auftrag (lessons learned)
-        id: bestellnummer,
+        typ: "auftrag",
+        id: lookupId,
       });
       if (wbRes.ok && wbRes.data.length > 0) {
         const beleg = wbRes.data[0];

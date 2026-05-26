@@ -16,6 +16,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkBearer } from "@/lib/api-auth";
+import { fetchShipmentLabelPdf } from "@/lib/dodajpaczke";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,51 +57,28 @@ export async function GET(
     );
   }
 
-  // dodajpaczke.eu Label-Endpoint
-  const apiBase = process.env.DODAJPACZKE_BASE_URL?.trim() ?? "https://api.dodajpaczke.eu/v1";
-  const apiToken = process.env.DODAJPACZKE_TOKEN?.trim();
-  if (!apiToken) {
+  // Label via Helper holen (nutzt Login+Password→Token Auth-Flow)
+  const result = await fetchShipmentLabelPdf(c.dhlShipmentId);
+  if (!result.ok && "skipped" in result && result.skipped) {
     return NextResponse.json(
-      { error: "dodajpaczke_not_configured" },
+      { error: "dodajpaczke_not_configured", note: result.reason },
       { status: 503 },
     );
   }
-
-  try {
-    const resp = await fetch(`${apiBase}/shippingLabel/${c.dhlShipmentId}`, {
-      headers: {
-        Authorization: apiToken, // raw token, KEIN Bearer-Prefix (CLAUDE.md §7)
-        Accept: "application/pdf",
-      },
-    });
-    if (!resp.ok) {
-      const errText = await resp.text();
-      return NextResponse.json(
-        {
-          error: "label_fetch_failed",
-          providerStatus: resp.status,
-          providerBody: errText.slice(0, 500),
-        },
-        { status: 502 },
-      );
-    }
-    const buf = Buffer.from(await resp.arrayBuffer());
-    return new Response(buf, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Length": String(buf.length),
-        "Content-Disposition": `inline; filename="versandlabel-${c.bestellnummer}.pdf"`,
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
-  } catch (err) {
+  if (!result.ok) {
     return NextResponse.json(
-      {
-        error: "label_fetch_error",
-        message: err instanceof Error ? err.message : String(err),
-      },
+      { error: "label_fetch_failed", message: result.error },
       { status: 502 },
     );
   }
+
+  return new Response(new Uint8Array(result.pdfBuffer), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Length": String(result.pdfBuffer.length),
+      "Content-Disposition": `inline; filename="versandlabel-${c.bestellnummer}.pdf"`,
+      "Cache-Control": "private, max-age=3600",
+    },
+  });
 }

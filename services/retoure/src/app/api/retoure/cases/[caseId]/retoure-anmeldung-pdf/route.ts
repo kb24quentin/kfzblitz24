@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { checkBearer } from "@/lib/api-auth";
 import { buildRetoureAnmeldungPdf } from "@/lib/retoure-anmeldung-pdf";
+import { fetchShipmentLabelPdf } from "@/lib/dodajpaczke";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,37 +51,14 @@ export async function GET(
   // Optional: DHL-Label-PDF von dodajpaczke holen (best-effort, blockiert nicht)
   let labelPdfBytes: Uint8Array | null = null;
   if (c.dhlShipmentId) {
-    try {
-      const apiBase =
-        process.env.DODAJPACZKE_BASE_URL?.trim() ?? "https://api.dodajpaczke.eu/v1";
-      const apiToken = process.env.DODAJPACZKE_TOKEN?.trim();
-      if (apiToken) {
-        let resp = await fetch(
-          `${apiBase}/shipments/${c.dhlShipmentId}/shippingLabel`,
-          { headers: { Authorization: apiToken } },
-        );
-        if (resp.status === 404) {
-          resp = await fetch(
-            `${apiBase}/shipments/${c.dhlShipmentId}/retoureLabel`,
-            { headers: { Authorization: apiToken } },
-          );
-        }
-        if (resp.ok) {
-          const json = (await resp.json()) as { data?: { file?: string } };
-          if (json.data?.file) {
-            labelPdfBytes = Buffer.from(
-              json.data.file.replace(/\s+/g, ""),
-              "base64",
-            );
-          }
-        }
-      }
-    } catch (err) {
+    const result = await fetchShipmentLabelPdf(c.dhlShipmentId);
+    if (result.ok) {
+      labelPdfBytes = new Uint8Array(result.pdfBuffer);
+    } else {
       console.warn(
         `[retoure-anmeldung-pdf] label fetch failed for case ${caseId}:`,
-        err,
+        "skipped" in result ? result.reason : result.error,
       );
-      // Defensive — wir liefern trotzdem das PDF ohne Label-Seite
     }
   }
 

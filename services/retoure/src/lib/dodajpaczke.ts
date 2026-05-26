@@ -103,6 +103,72 @@ async function authedFetch(
   return fetch(`${cfg.baseUrl}${path}`, { ...init, headers, cache: "no-store" });
 }
 
+/**
+ * Holt das Label-PDF für eine bereits gebuchte Sendung. Wird im Customer-
+ * Account + Retoure-Anmeldung-PDF-Endpoint genutzt um das Label nochmal
+ * abzurufen, ohne neue Sendung anzulegen.
+ *
+ * Returnt:
+ *   - { ok: true, pdfBuffer } wenn alles klappt
+ *   - { ok: false, skipped: true, reason } wenn Config fehlt
+ *   - { ok: false, error } bei API-Fehlern
+ */
+export async function fetchShipmentLabelPdf(
+  shipmentId: number | string,
+): Promise<
+  | { ok: true; pdfBuffer: Buffer; mimeType: string }
+  | { ok: false; skipped: true; reason: string }
+  | { ok: false; skipped?: false; error: string }
+> {
+  const cfg = getDodajpaczkeConfig();
+  if (!cfg) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "DODAJPACZKE_LOGIN / _PASSWORD / _SHIPPER_ID nicht konfiguriert",
+    };
+  }
+
+  let labelRes: Response;
+  try {
+    labelRes = await authedFetch(cfg, `/shipments/${shipmentId}/shippingLabel`);
+    if (labelRes.status === 404) {
+      labelRes = await authedFetch(cfg, `/shipments/${shipmentId}/retoureLabel`);
+    }
+  } catch (e) {
+    return { ok: false, error: `dodajpaczke fetch network: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  if (!labelRes.ok) {
+    const txt = await labelRes.text().catch(() => "");
+    return {
+      ok: false,
+      error: `dodajpaczke label HTTP ${labelRes.status}: ${txt.slice(0, 200)}`,
+    };
+  }
+
+  const json = (await labelRes.json()) as {
+    data?: { file?: string; mimeType?: string };
+    error?: string;
+  };
+  if (json.error || !json.data?.file) {
+    return {
+      ok: false,
+      error: `dodajpaczke label: ${json.error ?? "kein file in Antwort"}`,
+    };
+  }
+
+  const pdfBuffer = Buffer.from(json.data.file.replace(/\s+/g, ""), "base64");
+  if (pdfBuffer.length < 200) {
+    return { ok: false, error: "dodajpaczke retoureLabel: leeres PDF" };
+  }
+
+  return {
+    ok: true,
+    pdfBuffer,
+    mimeType: json.data.mimeType ?? "application/pdf",
+  };
+}
+
 // ─── Retoure shipment + label ──────────────────────────────────────────
 
 export type RetoureLabelResult =
