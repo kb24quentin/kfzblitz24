@@ -218,9 +218,20 @@ function formatDate(d: Date): string {
  * the customer-facing external order number (anything else — typically
  * contains a hyphen, like "KB24-73627372300").
  */
-function classifyInput(s: string): { kind: "id" | "bestellnummer"; value: string } {
+function classifyInput(
+  s: string,
+): { kind: "id" | "bestellnummer" | "auftragsnummer"; value: string } {
   const trimmed = s.trim();
-  // "A243775523", "R123456", "243775523" → internal id
+  // "AW243775607" → Abisco-Auftragsnummer. Webisco akzeptiert die nur als
+  // explizites `auftragsnummer="..."` Attribut, NICHT als id ohne Prefix
+  // (das wäre eine Belegnummer, anderes Konzept). Customer-Portal-Lookup
+  // mit nur bestellnummer="KB24-..." liefert leere Belegliste — Webisco
+  // matched die external order numbers offenbar nicht zuverlässig, daher
+  // ist der auftragsnummer-Pfad der zuverlässige.
+  if (/^AW\d+$/i.test(trimmed)) {
+    return { kind: "auftragsnummer", value: trimmed };
+  }
+  // "A243775523", "R123456", "243775523" → internal beleg-id
   if (/^[A-Za-z]?\d+$/.test(trimmed)) {
     return { kind: "id", value: trimmed.replace(/^[A-Za-z]+/, "") };
   }
@@ -242,14 +253,15 @@ export async function fetchBelegByNumber(
   }
 ): Promise<WebiscoResult<Beleg[]>> {
   const input = classifyInput(options.id);
-  // bestellnummer lookups require typ=auftrag; fall back for id lookups
-  // to the user's choice or 'auftrag' as the most useful default.
-  const typ = input.kind === "bestellnummer" ? "auftrag" : options.typ ?? "auftrag";
+  // bestellnummer + auftragsnummer-Lookups require typ=auftrag; fall back
+  // for id lookups to the user's choice or 'auftrag' as the most useful
+  // default.
+  const typ =
+    input.kind === "id" ? options.typ ?? "auftrag" : "auftrag";
 
   // Webisco requires von/bis for non-id searches and caps the range at
   // 365 days. We send a ~360-day window which is effectively "all recent
-  // belege" for a retouren portal (returns are almost always well within
-  // a year of the order).
+  // belege" for a retouren portal.
   const bis = new Date();
   const von = new Date();
   von.setDate(von.getDate() - 360);
@@ -257,6 +269,8 @@ export async function fetchBelegByNumber(
   const attrs = [`typ="${typ}"`];
   if (input.kind === "id") {
     attrs.push(`id="${xmlEscape(input.value)}"`);
+  } else if (input.kind === "auftragsnummer") {
+    attrs.push(`auftragsnummer="${xmlEscape(input.value)}"`);
   } else {
     attrs.push(`bestellnummer="${xmlEscape(input.value)}"`);
   }
