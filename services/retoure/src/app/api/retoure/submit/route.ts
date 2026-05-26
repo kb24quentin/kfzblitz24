@@ -56,17 +56,32 @@ interface SubmitBody {
     photo_ids?: string[];
   }>;
   /**
-   * Service-Mode:
-   *   "sicher"   — Customer hat „Sichere Rückgabe" (Rückgabe+) gebucht → Label kostenfrei
-   *   "standard" — Default. Customer entscheidet ob er Label über uns will (label_requested)
-   */
-  shipping_mode?: "sicher" | "standard";
-  /**
    * Hat der Customer im Shop-Form „DHL-Label über uns" gewählt?
-   * - shipping_mode="sicher"   → Label kostenfrei (labelFee=0)
-   * - shipping_mode="standard" → Label kostet 5,50 € (wird vom Refund abgezogen)
+   * - Wenn premium_return.free_label=true → Label kostenfrei (labelFee=0)
+   * - Sonst → Label kostet 5,50 € (wird vom Refund abgezogen)
+   * - false → Customer versendet selbst, kein Label generiert
    */
   label_requested?: boolean;
+  /**
+   * Rückgabe+ Premium-Service. Wird vom Shop ermittelt anhand der
+   * Original-Order (Line-Item mit productNumber=RUECKGABE-PLUS).
+   * Beeinflusst Frist (30 Tage statt 14) und Label-Kosten (gratis).
+   */
+  premium_return?: {
+    active?: boolean;
+    frist_tage?: 14 | 30;
+    free_label?: boolean;
+    purchased_price_eur?: number;
+  };
+  /**
+   * Frist bis Customer das Paket abschicken muss. KOMMT VOM SHOP als
+   * Source-of-Truth — wir kennen das Rückgabe+-Konzept nicht und
+   * können nicht autonom rechnen ob 14 oder 30 Tage.
+   *
+   * Wenn nicht gesetzt → Backend-Fallback auf 14 Tage ab createdAt
+   * (defensive, weil Standard-Frist).
+   */
+  eligibleUntil?: string;
   abholung_gewuenscht?: boolean;
 }
 
@@ -103,12 +118,19 @@ export async function POST(req: Request) {
   const source = body.source ?? "direct";
   const kategorie = body.kategorie ?? "widerruf";
   const kundenstatus = body.kundenstatus ?? "privat";
-  const shippingMode = body.shipping_mode ?? "standard";
+
+  // Rückgabe+ Premium-Service-Detection
+  const premiumReturn = body.premium_return ?? null;
+  const isPremium = premiumReturn?.active === true;
+  const freeLabel = isPremium && premiumReturn?.free_label !== false;
+
   const labelRequested = body.label_requested ?? false;
-  // Bei Sichere Rückgabe ist das Label gratis; Standard kostet 5,50 € wenn Customer es will.
+  // Premium → Label gratis. Standard + label_requested → 5,50 €. Sonst kein Label.
   const labelFeeBrutto =
-    labelRequested && shippingMode === "standard" ? LABEL_FEE_STANDARD_EUR : 0;
-  const labelPaid = labelRequested && shippingMode === "standard";
+    labelRequested && !freeLabel ? LABEL_FEE_STANDARD_EUR : 0;
+  const labelPaid = labelRequested && !freeLabel;
+  // shippingMode persistieren als Audit/Display: "sicher" bei Premium, sonst "standard"
+  const shippingMode = isPremium ? "sicher" : "standard";
 
   if (!body.customer?.email) {
     errors["customer.email"] = "required";
@@ -167,7 +189,22 @@ export async function POST(req: Request) {
 
   // ── Case + Items anlegen ──────────────────────────────────────────
   const customer = body.customer ?? {};
-  const eligibleUntil = elig.eligibleUntil ?? computeEligibleUntil(new Date(), kategorie);
+
+  // eligibleUntil-Priorität:
+  //   1. Body-Wert vom Shop (kennt Premium-Return, AGB-Sonderfälle etc.)
+  //   2. Eligibility-Check-Wert (berechnet aus deliveredAt-Hint)
+  //   3. computeEligibleUntil-Fallback (14 Tage ab jetzt)
+  let eligibleUntil: Date;
+  if (body.eligibleUntil) {
+    const parsed = new Date(body.eligibleUntil);
+    if (!isNaN(parsed.getTime())) {
+      eligibleUntil = parsed;
+    } else {
+      eligibleUntil = elig.eligibleUntil ?? computeEligibleUntil(new Date(), kategorie);
+    }
+  } else {
+    eligibleUntil = elig.eligibleUntil ?? computeEligibleUntil(new Date(), kategorie);
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     // RetoureCase
@@ -188,6 +225,7 @@ export async function POST(req: Request) {
         customerEmail: customer.email ?? null,
         customerTelefon: customer.telefon ?? null,
         itemsJson: JSON.stringify(body.items ?? []),
+        premiumReturnJson: premiumReturn ? JSON.stringify(premiumReturn) : null,
         shippingMode,
         labelRequested,
         labelPaid,

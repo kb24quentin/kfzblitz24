@@ -46,6 +46,14 @@ model RetoureCase {
   /// JSON: { einbauDatum, ausbauDatum, kmEinbau, kmAusbau, werkstattkostenEur, beiAbgelehnt, beiErfolg, mangelBeschreibung }
   gewaehrJson String?
 
+  /// Rückgabe+ Premium-Service-Snapshot (vom Shop beim Submit übermittelt).
+  /// JSON: { active, fristTage, freeLabel, purchasedPriceEur }
+  /// Null bei Standard-Retoure (kein Rückgabe+ gebucht).
+  ///
+  /// Wenn active=true: eligibleUntil kommt vom Shop, Frist ist 30 statt 14 Tage,
+  /// Label-Generation läuft kostenfrei (free_label=true).
+  premiumReturnJson String?
+
   /// Webisco-Gutschrift-Nummer nach Refund-Decision (z. B. "KG-2026-12345")
   gutschriftNr String?
 
