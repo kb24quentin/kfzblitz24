@@ -532,12 +532,17 @@ export async function POST(req: Request) {
   });
 
   // ── Response ──────────────────────────────────────────────────────
+  const baseUrl = process.env.RETOURE_PUBLIC_URL?.replace(/\/+$/, "") ?? "";
   return NextResponse.json({
     caseId: result.case.id,
     status: result.case.status,
     createdAt: result.case.createdAt.toISOString(),
     eligibleUntil: result.case.eligibleUntil?.toISOString() ?? null,
     shippingLabel: shippingLabelInfo,
+    // Komplettes Customer-Retoure-PDF (Retourenschein + Label).
+    // Identisches Layout zum Customer-Portal. Shop kann den Link auf
+    // Confirmation-Page anbieten + per Mail mitschicken.
+    retoureAnmeldungPdfUrl: `${baseUrl}/api/retoure/cases/${result.case.id}/retoure-anmeldung-pdf`,
     items: result.items,
   });
 }
