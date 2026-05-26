@@ -115,7 +115,6 @@ export async function GET(
       belegId: beleg.id != null ? String(beleg.id) : null,
       belegnummer: beleg.belegnummer ?? null,
       belegdatum: beleg.belegdatum ?? null,
-      rechnungsdatum: beleg.rechnungsdatum ?? null,
       orderTotalBrutto,
       customer,
     },
