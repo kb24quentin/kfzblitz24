@@ -6,16 +6,32 @@
  *
  * Auth: Bearer (API_TOKEN).
  *
- * Workflow:
- *   1. Validation (bestellnummer, items, grund_codes, photo-required-Logik)
- *   2. Eligibility-Check (Frist + offene Cases)
- *   3. RetoureCase + RetoureItem-Rows anlegen
- *   4. Pending-Photos den Items zuordnen + zu RetoureItemPhoto promovieren
- *   5. Status-Event "status_changed" (null → angemeldet) feuern
- *   6. Response mit caseId + eligibleUntil + Item-IDs zurückgeben
+ * # API-Version 2 (27.05.2026) — Shop-Source-of-Truth-Architektur
  *
- * DHL-Label-Generation passiert NICHT inline — der Shop kann sie via
- * GET /cases/{id}/shipping-label-pdf abholen sobald sie da ist.
+ * Shop MUSS pro Item liefern: artikelnummer, menge, grund_code,
+ * `hersteller`, `beschreibung`, `einzelpreis_brutto`. Diese Daten kommen
+ * aus der Shopware-Order und werden 1:1 auf die Customer-PDF + ins
+ * RMA-Dashboard übernommen. Validation lehnt Submits ohne diese Felder
+ * mit `422 validation_failed` ab.
+ *
+ * Webisco-Enrichment ist seit v2 nur noch best-effort — wir füllen
+ * damit ausschließlich die INTERNEN Felder die der Shop nicht kennt:
+ * `einkaufspreis_brutto` (Refund-Margin), `einspeiserid` (Lieferanten-
+ * Routing), `einzelgewicht_g` (DHL-Manifest). Schlägt der Webisco-
+ * Lookup fehl → Case ist trotzdem komplett für den Customer korrekt,
+ * PDA-Worker pflegt fehlende interne Felder beim Wareneingang nach.
+ *
+ * Workflow:
+ *   1. Validation (bestellnummer, items, hersteller+beschreibung+preis,
+ *      grund_codes, photo-required-Logik)
+ *   2. Eligibility-Check (Frist + offene Cases)
+ *   3. Webisco best-effort Enrichment (Internal-Fields-Augmentation)
+ *   4. RetoureCase + RetoureItem-Rows anlegen (Shop-Daten als Primary,
+ *      Webisco-Match nur für interne Felder)
+ *   5. Pending-Photos den Items zuordnen + zu RetoureItemPhoto promovieren
+ *   6. DHL-Label inline buchen (wenn label_requested)
+ *   7. Status-Event + Webhook feuern
+ *   8. Response mit caseId + Label-URL + PDF-URL zurückgeben
  *
  * Siehe `docs/03-integration-guide.md` für Plugin-Side-Implementierung.
  */
@@ -40,12 +56,14 @@ interface SubmitBody {
    * Abisco-interne Auftragsnummer (z. B. "AW243775571"). Shop hat die
    * aus seinem Webisco-Sync (`kb24_webisco_order_sync.abisco_auftragsnummer`).
    *
-   * **Empfohlen mitzuschicken** wenn vorhanden — Webisco's `beleganfrage`
-   * mit `typ="auftrag"` matched zuverlässig nur über `auftragsnummer`,
-   * die customer-facing `bestellnummer` führt zu order_not_found.
+   * **Optional** seit API-v2. Nur noch nötig wenn der Shop möchte dass
+   * wir die INTERNEN Felder (`einkaufspreis_brutto`, `einspeiserid`,
+   * `einzelgewicht_g`) befüllen — alle Customer-sichtbaren Werte kommen
+   * aus dem Shop-Body und sind davon unabhängig.
    *
    * Fallback wenn fehlt: wir versuchen mit bestellnummer (funktioniert
-   * nicht immer — dann webisco_enrichment_skipped Event mit Warning).
+   * nicht immer). Schlägt der Lookup fehl → Submit läuft trotzdem durch,
+   * Event `webisco_enrichment_skipped` markiert den PDA-Worker.
    */
   abiscoAuftragsnummer?: string;
   orderId?: string;
@@ -64,11 +82,42 @@ interface SubmitBody {
     telefon?: string;
   };
   items?: Array<{
+    /**
+     * Artikelnummer wie in der Shopware-Order. Optional mit `#<positionId>`-
+     * Suffix für Multi-Same-Item-Disambiguierung (z. B. `"F 026 407 147 #169251"`).
+     */
     artikelnummer?: string;
     menge?: number;
     grund_code?: string;
     grund_freitext?: string;
     photo_ids?: string[];
+    /**
+     * **REQUIRED** ab Submit-API v2 (27.05.2026).
+     *
+     * Hersteller-Name aus dem Shopware-Order-Line-Item. Wird 1:1 auf die
+     * Customer-PDF + ins RMA-Dashboard übernommen. Falls Webisco-Enrichment
+     * fehlschlägt, ist das der einzige Wert den der Customer sieht — daher
+     * muss er stimmen.
+     */
+    hersteller?: string;
+    /**
+     * **REQUIRED** ab Submit-API v2 (27.05.2026).
+     *
+     * Artikel-Beschreibung aus der Shopware-Order. Gleiche Begründung wie
+     * `hersteller` — Customer-Display-Field, Webisco-Enrichment ist nur
+     * best-effort Augmentierung.
+     */
+    beschreibung?: string;
+    /**
+     * **REQUIRED** ab Submit-API v2 (27.05.2026).
+     *
+     * Brutto-Einzelpreis wie auf der Original-Rechnung. Server-side
+     * Refund-Berechnung (`warenwertBrutto`, `voraussichtlicheErstattung`)
+     * basiert auf diesem Wert.
+     *
+     * Bei Multi-Currency später → in EUR umgerechnet.
+     */
+    einzelpreis_brutto?: number;
   }>;
   /**
    * Hat der Customer im Shop-Form „DHL-Label über uns" gewählt?
@@ -160,6 +209,21 @@ export async function POST(req: Request) {
     body.items.forEach((it, idx) => {
       if (!it.artikelnummer) errors[`items[${idx}].artikelnummer`] = "required";
       if (!it.menge || it.menge < 1) errors[`items[${idx}].menge`] = "min_one";
+      // Shop-Source-of-Truth-Felder — der Customer sieht das auf der PDF
+      // auch wenn Webisco-Enrichment fehlschlägt. Daher hart required.
+      if (!it.hersteller || !it.hersteller.trim()) {
+        errors[`items[${idx}].hersteller`] = "required";
+      }
+      if (!it.beschreibung || !it.beschreibung.trim()) {
+        errors[`items[${idx}].beschreibung`] = "required";
+      }
+      if (
+        it.einzelpreis_brutto == null ||
+        typeof it.einzelpreis_brutto !== "number" ||
+        it.einzelpreis_brutto < 0
+      ) {
+        errors[`items[${idx}].einzelpreis_brutto`] = "required_non_negative_number";
+      }
       if (!it.grund_code) {
         errors[`items[${idx}].grund_code`] = "required";
       } else if (!isValidReasonCode(it.grund_code)) {
@@ -325,13 +389,13 @@ export async function POST(req: Request) {
     eligibleUntil = elig.eligibleUntil ?? computeEligibleUntil(new Date(), kategorie);
   }
 
-  // Voraussichtliche Erstattung serverseitig aus Webisco-Preisen berechnen
+  // Voraussichtliche Erstattung: primär aus Shop-`einzelpreis_brutto`
+  // (Source-of-Truth = Shopware-Order). Webisco-Preise sind seit Submit-API
+  // v2 nur noch best-effort second opinion und werden hier ignoriert.
   let warenwertBrutto = 0;
   for (const it of body.items ?? []) {
-    const parsed = parseArtikelnummer(it.artikelnummer ?? "");
-    const match = findWebiscoMatch(parsed.artikelnummer, parsed.positionId);
-    if (match?.einzelpreis_brutto != null) {
-      warenwertBrutto += match.einzelpreis_brutto * (it.menge ?? 1);
+    if (typeof it.einzelpreis_brutto === "number" && it.einzelpreis_brutto > 0) {
+      warenwertBrutto += it.einzelpreis_brutto * (it.menge ?? 1);
     }
   }
   const voraussichtlicheErstattung = Math.max(0, warenwertBrutto - labelFeeBrutto);
@@ -392,24 +456,28 @@ export async function POST(req: Request) {
           caseId: c.id,
           source: "registered",
           status: "pending",
-          // Webisco-enrichted Felder, mit Shop-Daten als Fallback.
-          // Achtung Webisco-Naming: `einzelgewicht` (nicht `einzelgewicht_g`,
-          // aber Webisco liefert es bereits in Gramm), `positionspreis_brutto`
-          // ist der Total-Preis pro Position.
-          artikelnummer: match?.artikelnummer ?? parsed.artikelnummer ?? null,
-          hersteller: match?.hersteller ?? null,
-          beschreibung: match?.beschreibung ?? null,
+          // Submit-API v2 (27.05.2026): Shop-Felder sind Source-of-Truth
+          // für alle Customer-sichtbaren Werte. Webisco-Enrichment füllt
+          // nur die INTERNEN Felder die der Shop nicht liefern kann
+          // (Einkaufspreis, Einspeiser-ID fürs Lieferanten-Routing,
+          // Einzelgewicht für DHL-Manifest).
+          // Achtung Webisco-Naming: Field heißt `einzelgewicht` (Gramm),
+          // `positionspreis_brutto` ist der Total-Preis pro Position.
+          artikelnummer: parsed.artikelnummer || it.artikelnummer || null,
+          hersteller: it.hersteller ?? null,
+          beschreibung: it.beschreibung ?? null,
           menge,
           grund: it.grund_freitext ?? spec?.labelDe ?? null,
           grundCode: it.grund_code ?? null,
           grundFreitext: it.grund_freitext ?? null,
           internalFault: spec?.internalFault ?? false,
-          einzelpreis_brutto: match?.einzelpreis_brutto ?? null,
+          einzelpreis_brutto: it.einzelpreis_brutto ?? null,
           gesamtpreis_brutto:
-            match?.positionspreis_brutto ??
-            (match?.einzelpreis_brutto != null
-              ? match.einzelpreis_brutto * menge
-              : null),
+            it.einzelpreis_brutto != null
+              ? it.einzelpreis_brutto * menge
+              : null,
+          // Best-effort enrichment aus Webisco — fallback null wenn Lookup
+          // gescheitert ist. PDA-Worker pflegt fehlende Werte beim Eingang.
           einzelgewicht_g: match?.einzelgewicht ?? null,
           einkaufspreis_brutto: match?.einkaufspreis_brutto ?? null,
           einspeiserid: match?.einspeiserid ?? null,
@@ -423,7 +491,7 @@ export async function POST(req: Request) {
 
       createdItems.push({
         id: item.id,
-        artikelnummer: match?.artikelnummer ?? parsed.artikelnummer ?? "",
+        artikelnummer: parsed.artikelnummer || it.artikelnummer || "",
       });
     }
 
@@ -452,7 +520,10 @@ export async function POST(req: Request) {
     await addEvent(
       result.case.id,
       "webisco_enrichment_skipped",
-      `Webisco-Enrichment übersprungen: ${webiscoSkipReason}. Item-Preise + Beschreibungen fehlen — PDA-Worker muss beim Eingang nachpflegen.`,
+      `Webisco-Enrichment übersprungen: ${webiscoSkipReason}. ` +
+        `Customer-Daten (Hersteller, Beschreibung, Preis) sind vom Shop ` +
+        `gefüllt und unverändert. Interne Felder (Einkaufspreis, ` +
+        `Einspeiser-ID, Einzelgewicht) fehlen — PDA-Worker pflegt beim Eingang nach.`,
       { reason: webiscoSkipReason },
       `shop:${source}`,
     );
