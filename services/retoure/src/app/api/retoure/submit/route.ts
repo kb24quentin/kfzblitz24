@@ -203,12 +203,12 @@ export async function POST(req: Request) {
     artikelnummer?: string;
     hersteller?: string;
     beschreibung?: string;
-    einzelpreis_brutto?: number | null;
-    gesamtpreis_brutto?: number | null;
-    einkaufspreis_brutto?: number | null;
-    einzelgewicht_g?: number | null;
-    einspeiserid?: number | null;
-    positionId?: string | number;
+    einzelpreis_brutto?: number;
+    positionspreis_brutto?: number;
+    einkaufspreis_brutto?: number;
+    einzelgewicht?: number;
+    einspeiserid?: number;
+    id?: number;
   };
   let webiscoBelegId: string | null = null;
   let webiscoBelegnummer: string | null = null;
@@ -251,11 +251,12 @@ export async function POST(req: Request) {
       (s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
     const target = normalize(parsedArtNr);
 
-    // 1) Wenn positionId angegeben: exaktes Match anstreben
+    // 1) Wenn positionId angegeben: exaktes Match anstreben (id ist
+    //    Webisco's numerische Positions-ID).
     if (parsedPosId) {
       const hit = webiscoPositions.find(
         (p) =>
-          String(p.positionId ?? "") === parsedPosId &&
+          String(p.id ?? "") === parsedPosId &&
           normalize(p.artikelnummer) === target,
       );
       if (hit) return hit;
@@ -353,7 +354,10 @@ export async function POST(req: Request) {
           caseId: c.id,
           source: "registered",
           status: "pending",
-          // Webisco-enrichted Felder, mit Shop-Daten als Fallback
+          // Webisco-enrichted Felder, mit Shop-Daten als Fallback.
+          // Achtung Webisco-Naming: `einzelgewicht` (nicht `einzelgewicht_g`,
+          // aber Webisco liefert es bereits in Gramm), `positionspreis_brutto`
+          // ist der Total-Preis pro Position.
           artikelnummer: match?.artikelnummer ?? parsed.artikelnummer ?? null,
           hersteller: match?.hersteller ?? null,
           beschreibung: match?.beschreibung ?? null,
@@ -364,10 +368,11 @@ export async function POST(req: Request) {
           internalFault: spec?.internalFault ?? false,
           einzelpreis_brutto: match?.einzelpreis_brutto ?? null,
           gesamtpreis_brutto:
-            match?.einzelpreis_brutto != null
+            match?.positionspreis_brutto ??
+            (match?.einzelpreis_brutto != null
               ? match.einzelpreis_brutto * menge
-              : null,
-          einzelgewicht_g: match?.einzelgewicht_g ?? null,
+              : null),
+          einzelgewicht_g: match?.einzelgewicht ?? null,
           einkaufspreis_brutto: match?.einkaufspreis_brutto ?? null,
           einspeiserid: match?.einspeiserid ?? null,
         },

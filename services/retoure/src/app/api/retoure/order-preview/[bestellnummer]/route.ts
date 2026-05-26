@@ -92,17 +92,18 @@ export async function GET(
   // ("F 026 407 147 #169251") wenn Customer denselben Artikel mehrfach
   // in der Order hat.
   const positions = (beleg.positionen ?? []).map((p) => ({
-    positionId: p.positionId != null ? String(p.positionId) : null,
+    // Webisco-Feld heißt `id` (numerisch) — wir stringen für Shop-Side
+    // Disambiguierung im #-Suffix-Trick ("F 026 407 147 #169251").
+    positionId: p.id != null ? String(p.id) : null,
     artikelnummer: p.artikelnummer ?? null,
     hersteller: p.hersteller ?? null,
     beschreibung: p.beschreibung ?? null,
     menge: p.menge ?? 1,
     einzelpreis_brutto: p.einzelpreis_brutto ?? null,
-    gesamtpreis_brutto: p.gesamtpreis_brutto ?? null,
-    einzelgewicht_g: p.einzelgewicht_g ?? null,
+    gesamtpreis_brutto: p.positionspreis_brutto ?? null,
+    einzelgewicht_g: p.einzelgewicht ?? null,
   }));
 
-  // Total-Wert für vorgeschlagene Erstattungsanzeige im Shop-UI
   const orderTotalBrutto = positions.reduce(
     (sum, p) => sum + (p.gesamtpreis_brutto ?? 0),
     0,
