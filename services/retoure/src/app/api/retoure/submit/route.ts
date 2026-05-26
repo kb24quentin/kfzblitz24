@@ -55,8 +55,22 @@ interface SubmitBody {
     grund_freitext?: string;
     photo_ids?: string[];
   }>;
+  /**
+   * Service-Mode:
+   *   "sicher"   — Customer hat „Sichere Rückgabe" (Rückgabe+) gebucht → Label kostenfrei
+   *   "standard" — Default. Customer entscheidet ob er Label über uns will (label_requested)
+   */
+  shipping_mode?: "sicher" | "standard";
+  /**
+   * Hat der Customer im Shop-Form „DHL-Label über uns" gewählt?
+   * - shipping_mode="sicher"   → Label kostenfrei (labelFee=0)
+   * - shipping_mode="standard" → Label kostet 5,50 € (wird vom Refund abgezogen)
+   */
+  label_requested?: boolean;
   abholung_gewuenscht?: boolean;
 }
+
+const LABEL_FEE_STANDARD_EUR = 5.5;
 
 interface ValidationErrors {
   [field: string]: string;
@@ -89,6 +103,12 @@ export async function POST(req: Request) {
   const source = body.source ?? "direct";
   const kategorie = body.kategorie ?? "widerruf";
   const kundenstatus = body.kundenstatus ?? "privat";
+  const shippingMode = body.shipping_mode ?? "standard";
+  const labelRequested = body.label_requested ?? false;
+  // Bei Sichere Rückgabe ist das Label gratis; Standard kostet 5,50 € wenn Customer es will.
+  const labelFeeBrutto =
+    labelRequested && shippingMode === "standard" ? LABEL_FEE_STANDARD_EUR : 0;
+  const labelPaid = labelRequested && shippingMode === "standard";
 
   if (!body.customer?.email) {
     errors["customer.email"] = "required";
@@ -168,6 +188,10 @@ export async function POST(req: Request) {
         customerEmail: customer.email ?? null,
         customerTelefon: customer.telefon ?? null,
         itemsJson: JSON.stringify(body.items ?? []),
+        shippingMode,
+        labelRequested,
+        labelPaid,
+        labelFeeBrutto,
         status: "angemeldet",
       },
     });
