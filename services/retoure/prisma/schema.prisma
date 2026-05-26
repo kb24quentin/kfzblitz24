@@ -14,6 +14,44 @@ model RetoureCase {
   id          String  @id @default(cuid())
   externalRef String? @unique // optional ext. ID für Shop-Anbindung
 
+  /// Source-Channel — entscheidet wer den Refund-Webhook bekommt:
+  /// "shopware" → Shopware-Plugin via HTTP-Webhook
+  /// "amazon" / "ebay" / "direct" → manueller Admin-Workflow
+  source      String  @default("direct")
+
+  /// Shop-interne Order-ID — wird in allen Webhook-Payloads zurückgegeben
+  /// damit der Shop seine Order-Records matchen kann (z. B. Shopware-UUID).
+  orderId     String?
+
+  /// Retoure-Kategorie:
+  /// "widerruf" — §312g BGB, 14 Tage Frist, Standard-Flow
+  /// "gewaehrleistung" — §437 BGB, 2 Jahre Frist, mit Antrag-PDF (V2)
+  kategorie   String  @default("widerruf")
+
+  /// Customer-Steuerstatus für Gutschrifts-Berechnung:
+  /// "privat" — brutto (Default)
+  /// "gewerbe_vorsteuer" — netto-Gutschrift (B2B mit Vorsteuer-Abzug)
+  kundenstatus String @default("privat")
+
+  /// Frist bis wann Customer das Paket abschicken muss.
+  /// Bei Widerruf: 14 Tage nach Anmeldung. Bei Gewährleistung: 30 Tage.
+  /// Cron prüft täglich und storniert abgelaufene Cases mit Status="angemeldet".
+  eligibleUntil DateTime?
+
+  /// V2 Gewährleistung: Fahrzeug-Daten (HSN/TSN/Fahrgestellnr/Erstzulassung etc.)
+  /// JSON: { hsn, tsn, hersteller, typ, fahrgestellnr, erstzulassung, motorKennbuchstabe, hubraumCm3, leistungKw }
+  vehicleDataJson String?
+
+  /// V2 Gewährleistung: Spezifische Felder (Einbaudaten, Werkstattkosten, Erfolgs-Präferenz)
+  /// JSON: { einbauDatum, ausbauDatum, kmEinbau, kmAusbau, werkstattkostenEur, beiAbgelehnt, beiErfolg, mangelBeschreibung }
+  gewaehrJson String?
+
+  /// Webisco-Gutschrift-Nummer nach Refund-Decision (z. B. "KG-2026-12345")
+  gutschriftNr String?
+
+  /// Final entschiedener Erstattungsbetrag (gefüllt nach Admin-Decision)
+  tatsaechlicheErstattung Float?
+
   // Bestelldaten aus Webisco
   bestellnummer String  // KB24-...
   belegId       String? // numerisch (z.B. "243775570")
@@ -144,7 +182,20 @@ model RetoureItem {
   beschreibung        String?
   menge               Int     @default(1)
   /// Bei source=registered Pflicht; bei extra/unknown vom PDA gewählt.
+  /// Freitext (legacy). Bei neuen Cases parallel zu grundCode/grundFreitext.
   grund               String?
+  /// Standardisierter Rückgabe-Grund-Code (siehe lib/return-reasons.ts):
+  /// passt_nicht_zum_fahrzeug | customer_reue | defekt | falsche_lieferung |
+  /// beschaedigt_transport | qualitaet | anderes
+  grundCode           String?
+  /// Zusätzlicher Freitext zum Grund (bei grundCode=anderes Pflicht).
+  grundFreitext       String?
+  /// True wenn Retoure unser Verschulden ist (z. B. falsche_lieferung).
+  /// Auswertbar für interne KPI „Eigen-Fehlerquote". Kein Refund-Impact.
+  internalFault       Boolean @default(false)
+  /// Final entschiedener Erstattungsbetrag pro Item (nach Admin-Decision).
+  /// Null bis Refund freigegeben wurde.
+  erstattungsbetragBrutto Float?
   einzelpreis_brutto  Float?
   gesamtpreis_brutto  Float?
   einzelgewicht_g     Int?
@@ -487,4 +538,110 @@ model PdaDevice {
   @@index([token])
   @@index([active])
   @@index([pairingCode])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// PendingPhoto — Customer-Photos die VOR dem Case-Submit hochgeladen
+// wurden und noch nicht zugeordnet sind.
+//
+// Workflow:
+//   1. Shop-Plugin lädt Datei via POST /api/retoure/photos/upload hoch
+//   2. Wir speichern Bytes auf Disk + PendingPhoto-Row mit photoId
+//   3. Plugin packt photoId in Submit-Payload (items[].photo_ids)
+//   4. Beim Submit-Handler: PendingPhoto → RetoureItemPhoto promovieren
+//      + PendingPhoto-Row löschen
+//   5. Cron räumt nicht-referenzierte PendingPhotos > 1h alt weg
+// ─────────────────────────────────────────────────────────────────────
+model PendingPhoto {
+  id        String   @id @default(cuid())
+  /// `customer_submitted` (Standardfall) oder `customer_receipt` (Rechnungs-Scan)
+  kind      String   @default("customer_submitted")
+  filename  String
+  path      String   // Pfad unter UPLOAD_DIR/pending/
+  mimeType  String
+  sizeBytes Int
+  /// IP des Uploaders (Shop-Backend-Server, nicht End-Customer)
+  uploaderIp String?
+  /// Source-Token-Hash für Audit (welcher Shop hat hochgeladen)
+  uploaderTokenHash String?
+  /// Nach 1h löschen wenn nicht referenziert.
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// WebhookEndpoint — pro Source konfigurierbarer Empfänger.
+//
+// Admin legt für `source=shopware` einen Endpoint an mit URL + HMAC-
+// Secret. Wenn Status-Events fired werden, suchen wir nach passendem
+// Endpoint und triggern Delivery.
+// ─────────────────────────────────────────────────────────────────────
+model WebhookEndpoint {
+  id          String   @id @default(cuid())
+  /// Welche Source dieser Endpoint behandelt. UNIQUE.
+  /// `shopware` für jetzt. Später ggf. `amazon` wenn Marketplace-Webhook kommt.
+  source      String   @unique
+  /// Vollständige URL inkl. Pfad (z. B. https://shop.kfzblitz24.de/api/kb24-retoure-webhook)
+  url         String
+  /// HMAC-Secret (mind. 32 chars). Wird zum Signieren genutzt.
+  secret      String
+  active      Boolean  @default(true)
+  /// Optionale IP-Allowlist für extra Defense-in-Depth (CSV)
+  allowedIps  String?
+  /// Welche Events soll dieser Endpoint bekommen? CSV.
+  /// Default alle drei: "status_changed,refund_decided,case_canceled"
+  events      String   @default("status_changed,refund_decided,case_canceled")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deliveries  WebhookDelivery[]
+
+  @@index([source])
+  @@index([active])
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// WebhookDelivery — pro Versuch ein Row. Ermöglicht Retry, Audit,
+// Manual-Replay.
+//
+// Lifecycle:
+//   1. Event fired → ein Row mit status="pending" + scheduledAt=now()
+//   2. Worker pickt sich pending+overdue Rows auf
+//   3. POST an URL, response loggen, status setzen
+//      - 2xx → "ok"
+//      - andere → "failed" + retryCount++, nextRetryAt setzen
+//   4. Nach 5 Failures: status="hard_failed" + Admin-Alert
+// ─────────────────────────────────────────────────────────────────────
+model WebhookDelivery {
+  id          String   @id @default(cuid())
+  endpointId  String
+  /// Idempotency-Key der an den Shop geschickt wird (UUID).
+  /// Bei Retries identisch — Shop dedupliziert.
+  deliveryUuid String  @unique
+  /// Welche Case betrifft das Event (für Manual-Replay UI)
+  caseId      String?
+  event       String   // "status_changed" | "refund_decided" | "case_canceled"
+  /// JSON-Payload das wir POST'en (idempotent zwischen Retries)
+  payload     String
+  /// "pending" | "ok" | "failed" | "hard_failed" | "canceled"
+  status      String   @default("pending")
+  retryCount  Int      @default(0)
+  scheduledAt DateTime
+  nextRetryAt DateTime?
+  lastAttemptAt DateTime?
+  lastResponseCode Int?
+  lastResponseBody String?
+  /// Idempotency-Body bei erfolgreichem ACK (z. B. mollieRefundId)
+  ackBody     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  endpoint    WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([caseId])
+  @@index([event])
+  @@index([deliveryUuid])
+  @@index([createdAt])
 }

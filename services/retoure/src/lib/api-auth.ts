@@ -12,3 +12,10 @@ export function checkBearer(req: Request): { ok: true } | { ok: false; status: n
   if (!token || token !== required) return { ok: false, status: 401 };
   return { ok: true };
 }
+
+/** Liest den Bearer-Token aus dem Header (für Audit-Logging). Null wenn fehlt. */
+export function getBearerToken(req: Request): string | null {
+  const header = req.headers.get("authorization") || "";
+  const token = header.replace(/^Bearer\s+/i, "").trim();
+  return token || null;
+}
