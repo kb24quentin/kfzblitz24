@@ -27,6 +27,7 @@ import { checkEligibility, computeEligibleUntil } from "@/lib/eligibility";
 import { enqueueWebhook } from "@/lib/webhook-dispatcher";
 import { addEvent } from "@/lib/retoure-cases";
 import { promoteToItemPhoto } from "@/lib/pending-photos";
+import { createRetoureLabel } from "@/lib/dodajpaczke";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -283,6 +284,98 @@ export async function POST(req: Request) {
     `shop:${source}`,
   );
 
+  // ── DHL-Label generieren (wenn vom Customer angefragt) ───────────
+  // Inline (nicht async) damit die Submit-Response direkt die Label-URL
+  // mitschicken kann. Bei dodajpaczke-Fehler: Case ist trotzdem angelegt,
+  // wir loggen einen Event, der Shop kriegt `shippingLabel: null` zurück
+  // und kann später nochmal pullen.
+  let shippingLabelInfo: {
+    pdfUrl: string;
+    trackingCode: string;
+    carrier: "DHL";
+  } | null = null;
+
+  if (labelRequested) {
+    try {
+      const labelResult = await createRetoureLabel({
+        weightInKg: 5, // Default 5kg — wird später vom PDA bei Eingang aktualisiert
+        customerReference: bestellnummer,
+        description: `Retoure ${bestellnummer}`,
+        customer: {
+          salutation: customer.anrede ?? undefined,
+          firstname: customer.vorname ?? undefined,
+          lastname: customer.name ?? undefined,
+          streetName: customer.strasse ?? undefined,
+          zipNumber: customer.plz ?? undefined,
+          city: customer.ort ?? undefined,
+          countryISOCode: customer.land ?? "DE",
+          email: customer.email ?? undefined,
+          phone: customer.telefon ?? undefined,
+        },
+      });
+
+      if (labelResult.ok) {
+        await prisma.retoureCase.update({
+          where: { id: result.case.id },
+          data: {
+            dhlShipmentId: labelResult.shipmentId,
+            dhlTrackingNumber: labelResult.trackingNumber ?? null,
+            dhlRetoureIdc: labelResult.retoureIdc ?? null,
+            weightSentKg: 5,
+          },
+        });
+        await addEvent(
+          result.case.id,
+          "label_created",
+          `DHL-Label erzeugt — Tracking ${labelResult.trackingNumber ?? "?"}`,
+          {
+            shipmentId: labelResult.shipmentId,
+            trackingNumber: labelResult.trackingNumber,
+          },
+          `shop:${source}`,
+        );
+
+        const baseUrl =
+          process.env.RETOURE_PUBLIC_URL?.replace(/\/+$/, "") ?? "";
+        shippingLabelInfo = {
+          pdfUrl: `${baseUrl}/api/retoure/cases/${result.case.id}/shipping-label-pdf`,
+          trackingCode: labelResult.trackingNumber ?? "",
+          carrier: "DHL",
+        };
+      } else if ("skipped" in labelResult && labelResult.skipped) {
+        // Provider nicht konfiguriert (dev/staging-Setup) — kein Fehler
+        await addEvent(
+          result.case.id,
+          "label_skipped",
+          `DHL-Label-Erzeugung übersprungen: ${labelResult.reason}`,
+          { reason: labelResult.reason },
+          `shop:${source}`,
+        );
+      } else {
+        // Echter Fehler — Case bleibt aber angelegt
+        await addEvent(
+          result.case.id,
+          "label_failed",
+          `DHL-Label-Erzeugung fehlgeschlagen: ${labelResult.error}`,
+          { error: labelResult.error },
+          `shop:${source}`,
+        );
+        console.error("[submit] createRetoureLabel failed:", labelResult.error);
+      }
+    } catch (err) {
+      // Defensive — Label-Generierung darf den Submit nicht killen
+      const msg = err instanceof Error ? err.message : String(err);
+      await addEvent(
+        result.case.id,
+        "label_failed",
+        `DHL-Label-Generierung Exception: ${msg}`,
+        { error: msg },
+        `shop:${source}`,
+      );
+      console.error("[submit] createRetoureLabel exception:", err);
+    }
+  }
+
   // ── Webhook fire (async, non-blocking) ────────────────────────────
   void enqueueWebhook({
     source,
@@ -314,7 +407,7 @@ export async function POST(req: Request) {
     status: result.case.status,
     createdAt: result.case.createdAt.toISOString(),
     eligibleUntil: result.case.eligibleUntil?.toISOString() ?? null,
-    shippingLabel: null, // wird async generiert, Shop pullt via /shipping-label-pdf
+    shippingLabel: shippingLabelInfo,
     items: result.items,
   });
 }
