@@ -54,10 +54,15 @@ export async function GET(
     const result = await fetchShipmentLabelPdf(c.dhlShipmentId);
     if (result.ok) {
       labelPdfBytes = new Uint8Array(result.pdfBuffer);
+    } else if (result.skipped === true) {
+      console.warn(
+        `[retoure-anmeldung-pdf] label fetch skipped for case ${caseId}:`,
+        result.reason,
+      );
     } else {
       console.warn(
         `[retoure-anmeldung-pdf] label fetch failed for case ${caseId}:`,
-        "skipped" in result ? result.reason : result.error,
+        result.error,
       );
     }
   }

@@ -59,7 +59,7 @@ export async function GET(
 
   // Label via Helper holen (nutzt Login+Password→Token Auth-Flow)
   const result = await fetchShipmentLabelPdf(c.dhlShipmentId);
-  if (!result.ok && "skipped" in result && result.skipped) {
+  if (!result.ok && result.skipped === true) {
     return NextResponse.json(
       { error: "dodajpaczke_not_configured", note: result.reason },
       { status: 503 },
