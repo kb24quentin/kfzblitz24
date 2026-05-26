@@ -29,9 +29,15 @@ export async function GET(req: Request) {
 
   const result = await runDeliveryQueue({ limit: 50 });
 
+  // Wir geben das ganze Result raus + Wrapper-Status separat damit's
+  // keinen Property-Collision mit result.ok (Count erfolgreicher Deliveries)
+  // gibt.
   return NextResponse.json({
-    ok: true,
-    ...result,
+    success: true,
+    processed: result.processed,
+    ok: result.ok,
+    failed: result.failed,
+    hardFailed: result.hardFailed,
     timestamp: new Date().toISOString(),
   });
 }
