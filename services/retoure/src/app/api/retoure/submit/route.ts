@@ -28,6 +28,8 @@ import { enqueueWebhook } from "@/lib/webhook-dispatcher";
 import { addEvent } from "@/lib/retoure-cases";
 import { promoteToItemPhoto } from "@/lib/pending-photos";
 import { createRetoureLabel } from "@/lib/dodajpaczke";
+import { fetchBelegByNumber, getWebiscoConfig } from "@/lib/webisco";
+import { parseArtikelnummer } from "@/lib/artikelnummer-parser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -188,6 +190,83 @@ export async function POST(req: Request) {
     );
   }
 
+  // ── Webisco-Enrichment ────────────────────────────────────────────
+  // Shop schickt nur artikelnummer + menge. Wir holen die Order aus
+  // Webisco und matchen Items → bekommen Preise, Gewicht, Hersteller,
+  // Beschreibung, EK-Preis. Plus: belegId/belegnummer/belegdatum am Case
+  // + Order-Snapshot in orderPositionsJson (für PDA extra/unknown-Logik).
+  //
+  // Wenn Webisco nicht erreichbar oder Order nicht gefunden: Submit läuft
+  // trotzdem durch mit den Shop-Daten als Fallback. Event mit warning
+  // dokumentiert den Skip.
+  type WebiscoPosition = {
+    artikelnummer?: string;
+    hersteller?: string;
+    beschreibung?: string;
+    einzelpreis_brutto?: number | null;
+    gesamtpreis_brutto?: number | null;
+    einkaufspreis_brutto?: number | null;
+    einzelgewicht_g?: number | null;
+    einspeiserid?: number | null;
+    positionId?: string | number;
+  };
+  let webiscoBelegId: string | null = null;
+  let webiscoBelegnummer: string | null = null;
+  let webiscoBelegdatum: string | null = null;
+  let webiscoPositions: WebiscoPosition[] = [];
+  let webiscoSkipReason: string | null = null;
+
+  const webiscoConfig = getWebiscoConfig();
+  if (!webiscoConfig) {
+    webiscoSkipReason = "webisco_not_configured";
+  } else {
+    try {
+      const wbRes = await fetchBelegByNumber(webiscoConfig, {
+        typ: "auftrag", // Bestellnummer-Suche braucht typ=auftrag (lessons learned)
+        id: bestellnummer,
+      });
+      if (wbRes.ok && wbRes.data.length > 0) {
+        const beleg = wbRes.data[0];
+        webiscoBelegId = beleg.id != null ? String(beleg.id) : null;
+        webiscoBelegnummer = beleg.belegnummer ?? null;
+        webiscoBelegdatum = beleg.belegdatum ?? null;
+        webiscoPositions = (beleg.positionen ?? []) as WebiscoPosition[];
+      } else {
+        webiscoSkipReason = wbRes.ok ? "order_not_found_in_webisco" : `webisco_error:${wbRes.error ?? "unknown"}`;
+      }
+    } catch (err) {
+      webiscoSkipReason = `webisco_exception:${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+
+  // Helper: matche eine Submit-Item-Artikelnummer gegen Webisco-Positionen.
+  // Bei Multi-Same-Item-Cases (Customer hat 2× gleichen Artikel im Cart)
+  // hilft die positionId aus dem #-Suffix zur Disambiguierung.
+  function findWebiscoMatch(
+    parsedArtNr: string,
+    parsedPosId: string | null,
+  ): WebiscoPosition | null {
+    if (!parsedArtNr) return null;
+    const normalize = (s: string | undefined) =>
+      (s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+    const target = normalize(parsedArtNr);
+
+    // 1) Wenn positionId angegeben: exaktes Match anstreben
+    if (parsedPosId) {
+      const hit = webiscoPositions.find(
+        (p) =>
+          String(p.positionId ?? "") === parsedPosId &&
+          normalize(p.artikelnummer) === target,
+      );
+      if (hit) return hit;
+    }
+    // 2) Sonst: erstes Artikelnummer-Match
+    return (
+      webiscoPositions.find((p) => normalize(p.artikelnummer) === target) ??
+      null
+    );
+  }
+
   // ── Case + Items anlegen ──────────────────────────────────────────
   const customer = body.customer ?? {};
 
@@ -207,8 +286,19 @@ export async function POST(req: Request) {
     eligibleUntil = elig.eligibleUntil ?? computeEligibleUntil(new Date(), kategorie);
   }
 
+  // Voraussichtliche Erstattung serverseitig aus Webisco-Preisen berechnen
+  let warenwertBrutto = 0;
+  for (const it of body.items ?? []) {
+    const parsed = parseArtikelnummer(it.artikelnummer ?? "");
+    const match = findWebiscoMatch(parsed.artikelnummer, parsed.positionId);
+    if (match?.einzelpreis_brutto != null) {
+      warenwertBrutto += match.einzelpreis_brutto * (it.menge ?? 1);
+    }
+  }
+  const voraussichtlicheErstattung = Math.max(0, warenwertBrutto - labelFeeBrutto);
+
   const result = await prisma.$transaction(async (tx) => {
-    // RetoureCase
+    // RetoureCase mit Webisco-Beleg-Snapshot
     const c = await tx.retoureCase.create({
       data: {
         source,
@@ -217,6 +307,9 @@ export async function POST(req: Request) {
         kundenstatus,
         eligibleUntil,
         bestellnummer,
+        belegId: webiscoBelegId,
+        belegnummer: webiscoBelegnummer,
+        belegdatum: webiscoBelegdatum,
         customerAnrede: customer.anrede ?? null,
         customerVorname: customer.vorname ?? null,
         customerName: customer.name ?? null,
@@ -226,11 +319,20 @@ export async function POST(req: Request) {
         customerEmail: customer.email ?? null,
         customerTelefon: customer.telefon ?? null,
         itemsJson: JSON.stringify(body.items ?? []),
+        orderPositionsJson: JSON.stringify(
+          webiscoPositions.map((p) => ({
+            artikelnummer: p.artikelnummer,
+            hersteller: p.hersteller,
+            beschreibung: p.beschreibung,
+          })),
+        ),
         premiumReturnJson: premiumReturn ? JSON.stringify(premiumReturn) : null,
         shippingMode,
         labelRequested,
         labelPaid,
         labelFeeBrutto,
+        warenwertBrutto,
+        voraussichtlicheErstattung,
         status: "angemeldet",
       },
     });
@@ -242,17 +344,32 @@ export async function POST(req: Request) {
         ? RETURN_REASONS[it.grund_code as keyof typeof RETURN_REASONS]
         : null;
 
+      const parsed = parseArtikelnummer(it.artikelnummer ?? "");
+      const match = findWebiscoMatch(parsed.artikelnummer, parsed.positionId);
+      const menge = it.menge ?? 1;
+
       const item = await tx.retoureItem.create({
         data: {
           caseId: c.id,
           source: "registered",
           status: "pending",
-          artikelnummer: it.artikelnummer ?? null,
-          menge: it.menge ?? 1,
+          // Webisco-enrichted Felder, mit Shop-Daten als Fallback
+          artikelnummer: match?.artikelnummer ?? parsed.artikelnummer ?? null,
+          hersteller: match?.hersteller ?? null,
+          beschreibung: match?.beschreibung ?? null,
+          menge,
           grund: it.grund_freitext ?? spec?.labelDe ?? null,
           grundCode: it.grund_code ?? null,
           grundFreitext: it.grund_freitext ?? null,
           internalFault: spec?.internalFault ?? false,
+          einzelpreis_brutto: match?.einzelpreis_brutto ?? null,
+          gesamtpreis_brutto:
+            match?.einzelpreis_brutto != null
+              ? match.einzelpreis_brutto * menge
+              : null,
+          einzelgewicht_g: match?.einzelgewicht_g ?? null,
+          einkaufspreis_brutto: match?.einkaufspreis_brutto ?? null,
+          einspeiserid: match?.einspeiserid ?? null,
         },
       });
 
@@ -263,7 +380,7 @@ export async function POST(req: Request) {
 
       createdItems.push({
         id: item.id,
-        artikelnummer: it.artikelnummer ?? "",
+        artikelnummer: match?.artikelnummer ?? parsed.artikelnummer ?? "",
       });
     }
 
@@ -280,9 +397,22 @@ export async function POST(req: Request) {
       kategorie,
       itemCount: result.items.length,
       orderId: body.orderId,
+      webiscoEnriched: webiscoSkipReason === null,
+      webiscoSkipReason,
+      warenwertBrutto,
     },
     `shop:${source}`,
   );
+
+  if (webiscoSkipReason) {
+    await addEvent(
+      result.case.id,
+      "webisco_enrichment_skipped",
+      `Webisco-Enrichment übersprungen: ${webiscoSkipReason}. Item-Preise + Beschreibungen fehlen — PDA-Worker muss beim Eingang nachpflegen.`,
+      { reason: webiscoSkipReason },
+      `shop:${source}`,
+    );
+  }
 
   // ── DHL-Label generieren (wenn vom Customer angefragt) ───────────
   // Inline (nicht async) damit die Submit-Response direkt die Label-URL
