@@ -1,20 +1,34 @@
 /**
  * GET /api/retoure/order-preview/{bestellnummer}
  *
- * Live-Pull der Bestelldaten aus Webisco — analog zum Customer-Portal-Flow.
- * Shop ruft das BEVOR er den Retoure-Form rendert, bekommt:
- *   - Order-Header (belegId, belegnummer, belegdatum, Customer-Snapshot)
- *   - Alle Positionen mit Preisen, Beschreibung, Hersteller, Gewicht
- *   - Vorgeschlagener Versand-Modus + Default-Wert
+ * Live-Pull der Bestelldaten aus Webisco — **canonical Data-Source** für
+ * den Native-in-Shop-Form-Render seit Architektur-v3 (28.05.2026).
  *
- * Damit kann der Shop dem Customer dieselbe Item-Selection-UX zeigen wie
- * unser Retouren-Portal: Customer wählt aus den echten Order-Positionen,
- * Preise stimmen 1:1 mit der Original-Rechnung.
+ * Flow:
+ *   1. Shop ruft das BEVOR er den Retoure-Form rendert (idealerweise mit
+ *      `?abiscoAuftragsnummer=AW...` für narrowing).
+ *   2. Wir liefern alle Order-Positionen mit Webisco-canonical Werten
+ *      (artikelnummer, hersteller, beschreibung, einzelgewicht_g,
+ *      positionId für Multi-Same-Item-Disambiguierung).
+ *   3. Shop rendert genau diese Items als Auswahl im Form (analog
+ *      Customer-Portal — selbe UX).
+ *   4. Customer wählt aus + grund_code + photos.
+ *   5. Shop submitted mit `artikelnummer` (1:1 echo) + `hersteller` (1:1
+ *      echo) + `beschreibung` (1:1 echo) + `menge` (Customer-Wahl) +
+ *      `einzelpreis_brutto` (Shopware-Original — actual-paid, NICHT
+ *      Webisco-current).
+ *   6. RET-Backend matched per `#positionId`-Suffix-Trick → 100% reliable.
+ *
+ * Query-Params:
+ *   `abiscoAuftragsnummer` — Abisco-interne Auftragsnummer (z. B.
+ *     "AW243775571") aus `kb24_webisco_order_sync`. Stark empfohlen —
+ *     bestellnummer-only-Lookup matched nicht zuverlässig.
  *
  * Auth: Bearer (Shop-API-Token).
  *
  * Response: `{ order: {...}, positions: [...] }` oder 404 wenn Webisco
- * die Bestellnummer nicht kennt.
+ * die Bestellung nicht kennt — Shop MUSS dann auf Shopware-Order-Daten
+ * fallback'en (degraded UX, aber Submit funktioniert trotzdem).
  */
 import { NextResponse } from "next/server";
 import { checkBearer } from "@/lib/api-auth";
@@ -44,6 +58,9 @@ export async function GET(
     return NextResponse.json({ error: "bestellnummer_missing" }, { status: 400 });
   }
 
+  const url = new URL(req.url);
+  const abiscoAuftragsnummer = url.searchParams.get("abiscoAuftragsnummer")?.trim() || null;
+
   const cfg = getWebiscoConfig();
   if (!cfg) {
     return NextResponse.json(
@@ -52,10 +69,22 @@ export async function GET(
     );
   }
 
-  const result = await fetchBelegByNumber(cfg, {
+  // Prio: AW-Nummer (zuverlässig, via auftragsnummer-Pfad) →
+  // bestellnummer-Fallback. Wenn AW-Nummer gegeben aber Webisco nichts
+  // findet, versuchen wir trotzdem nochmal mit bestellnummer (manche
+  // Sync-Records sind out-of-date).
+  const lookupId = abiscoAuftragsnummer || trimmed;
+  let result = await fetchBelegByNumber(cfg, {
     typ: "auftrag",
-    id: trimmed,
+    id: lookupId,
   });
+  // Fallback-Versuch wenn AW-Nummer nichts brachte
+  if (result.ok && result.data.length === 0 && abiscoAuftragsnummer && trimmed !== abiscoAuftragsnummer) {
+    result = await fetchBelegByNumber(cfg, {
+      typ: "auftrag",
+      id: trimmed,
+    });
+  }
 
   if (!result.ok) {
     return NextResponse.json(
@@ -71,7 +100,25 @@ export async function GET(
     );
   }
 
-  const beleg = result.data[0];
+  // Defensive: wenn Webisco viele Belege zurückgibt obwohl wir mit
+  // auftragsnummer/bestellnummer narrow'en wollten, ist der Filter
+  // wahrscheinlich nicht griff. Wir nehmen das spezifischste Match:
+  // bevorzugt jenes wo bestellnummer exakt passt, sonst Newest-First.
+  // (Beobachteter Bug: AW-Lookup gibt manchmal 270 Belege zurück statt 1.)
+  let beleg = result.data[0];
+  if (result.data.length > 1) {
+    const exactMatch = result.data.find(
+      (b) => b.bestellnummer != null && b.bestellnummer === trimmed,
+    );
+    if (exactMatch) {
+      beleg = exactMatch;
+    } else {
+      // Fallback: neuester Beleg (höchste id)
+      beleg = result.data.reduce((latest, b) =>
+        (b.id ?? 0) > (latest.id ?? 0) ? b : latest,
+      );
+    }
+  }
 
   // Customer-Snapshot (Rechnungs- oder Lieferadresse aus Webisco)
   const rechAdr = beleg.rechnungsadresse ?? {};
@@ -119,5 +166,14 @@ export async function GET(
       customer,
     },
     positions,
+    // Diagnostik damit Shop sehen kann ob das Narrowing zuverlässig
+    // war. `belegCount > 1` heißt: Webisco lieferte mehrere Kandidaten,
+    // wir haben den specifischst-matching ausgewählt — Shop sollte das
+    // monitoren.
+    meta: {
+      lookupId,
+      belegCount: result.data.length,
+      narrowed: result.data.length > 1,
+    },
   });
 }

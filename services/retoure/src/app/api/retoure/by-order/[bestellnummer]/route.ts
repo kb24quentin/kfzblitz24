@@ -62,14 +62,24 @@ export async function GET(
     case: {
       id: c.id,
       bestellnummer: c.bestellnummer,
+      // Bug-A-Fix (28.05.2026): die Felder waren bereits persistiert,
+      // aber im API-Response nicht exposed. Shop sah dadurch null/0
+      // obwohl die DB-Werte korrekt sind.
+      belegnummer: c.belegnummer,
+      belegdatum: c.belegdatum,
+      belegId: c.belegId,
       kategorie: c.kategorie,
       status: c.status,
       source: c.source,
       createdAt: c.createdAt.toISOString(),
       updatedAt: c.updatedAt.toISOString(),
       eligibleUntil: c.eligibleUntil?.toISOString() ?? null,
+      warenwertBrutto: c.warenwertBrutto,
       voraussichtlicheErstattung: c.voraussichtlicheErstattung,
       tatsaechlicheErstattung: c.tatsaechlicheErstattung,
+      labelFeeBrutto: c.labelFeeBrutto,
+      labelRequested: c.labelRequested,
+      shippingMode: c.shippingMode,
       gutschriftNr: c.gutschriftNr,
       customer: {
         anrede: c.customerAnrede,
