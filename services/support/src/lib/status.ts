@@ -34,13 +34,13 @@ export const PRIORITY_CLASSES: Record<string, string> = {
 export const TERMINAL_STATUSES: readonly TicketStatus[] = ["resolved", "closed"];
 
 /**
- * Reopen-on-customer-reply: everything reopens EXCEPT `closed`.
- * - `resolved` → open (customer wants more help)
- * - `pending` (warten auf kunde) → open (customer answered!)
- * - `on_hold` → open (customer input unblocks)
- * - `open` → stays open (no-op)
- * - `closed` → stays closed (explicit final state, no auto-reopen)
+ * Reopen-on-customer-reply: any customer reply reopens the ticket,
+ * regardless of its previous status. Otherwise the customer's message
+ * would silently disappear in an already-terminal ticket.
+ *
+ * - open → stays open (no-op)
+ * - pending / on_hold / resolved / closed → all become open
  */
 export function shouldReopenOnCustomerReply(status: string): boolean {
-  return status !== "closed";
+  return status !== "open";
 }
