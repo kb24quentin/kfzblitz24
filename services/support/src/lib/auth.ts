@@ -73,7 +73,8 @@ const config: NextAuthConfig = {
       const existing = await prisma.user.findUnique({ where: { email } });
 
       if (existing) {
-        if (!existing.active) return false;
+        // Keep google-metadata up to date even for inactive users so admin
+        // sees the current name/photo in the team-management view.
         if (
           existing.googleId !== googleId ||
           existing.imageUrl !== picture ||
@@ -88,10 +89,13 @@ const config: NextAuthConfig = {
             },
           });
         }
+        if (!existing.active) return "/pending";
         return true;
       }
 
-      // Auto-provision new Workspace user as `agent`
+      // Auto-provision new Workspace user with role=agent but INACTIVE —
+      // an admin must explicitly grant access via team-management. Prevents
+      // any new @kfzblitz24.de account from silently gaining full access.
       await prisma.user.create({
         data: {
           email,
@@ -99,10 +103,10 @@ const config: NextAuthConfig = {
           googleId,
           imageUrl: picture,
           role: "agent",
-          active: true,
+          active: false,
         },
       });
-      return true;
+      return "/pending";
     },
     async jwt({ token, user }) {
       // Load fresh role/id from DB on sign-in

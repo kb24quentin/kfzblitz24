@@ -43,7 +43,7 @@ export default async function SettingsPage({
     ackSubject,
     ackBody,
   ] = await Promise.all([
-    prisma.user.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({ orderBy: [{ active: "asc" }, { name: "asc" }] }),
     prisma.gmailCursor.findFirst({ where: { id: "singleton" } }),
     isGmailConfigured(),
     getGmailUserEmail(),
@@ -232,7 +232,19 @@ export default async function SettingsPage({
       </Link>
 
       <div className="bg-bg-card border border-border rounded-xl p-6">
-        <h2 className="font-semibold text-text mb-4">Team</h2>
+        <div className="flex items-baseline justify-between mb-1">
+          <h2 className="font-semibold text-text">Team</h2>
+          {users.filter((u) => !u.active).length > 0 && (
+            <span className="text-xs text-warning font-medium">
+              {users.filter((u) => !u.active).length} Konto/Konten wartet auf Freigabe
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-text-light mb-4">
+          Neue Google-SSO-Logins landen automatisch als deaktivierte Konten hier
+          und brauchen eine Freigabe. Kollegen sehen bis dahin eine
+          &quot;warten auf Freigabe&quot;-Seite.
+        </p>
         {currentUser ? (
           <UserManagement
             users={users}
