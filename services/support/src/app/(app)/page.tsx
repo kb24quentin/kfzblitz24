@@ -216,7 +216,7 @@ export default async function DashboardPage() {
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-xs text-text-light">#{t.number}</span>
+                        <span className="font-mono text-xs text-text-light">#{t.code}</span>
                         <span className="font-medium text-text truncate">{t.subject}</span>
                       </div>
                       <div className="text-xs text-text-light mt-0.5">
@@ -260,7 +260,7 @@ export default async function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-2">
                         <span className="font-mono text-xs text-text-light">
-                          #{t.number}
+                          #{t.code}
                         </span>
                         <span className="font-medium text-text truncate">
                           {t.subject}

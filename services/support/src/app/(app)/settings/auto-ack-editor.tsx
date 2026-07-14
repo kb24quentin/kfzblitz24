@@ -96,7 +96,7 @@ export function AutoAckEditor({
           <span className="font-mono">
             {"{{customer.first_name}}"}, {"{{customer.last_name}}"},{" "}
             {"{{customer.email}}"}, {"{{customer.phone}}"},{" "}
-            {"{{ticket.number}}"}, {"{{ticket.subject}}"},{" "}
+            {"{{ticket.code}}"}, {"{{ticket.subject}}"},{" "}
             {"{{sla.first_response_hours}}"}
           </span>
         </p>

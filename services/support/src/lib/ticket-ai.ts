@@ -43,7 +43,7 @@ export async function generateDraftForTicket(ticketId: string): Promise<void> {
     customerFirstName: ticket.contact.firstName,
     customerLastName: ticket.contact.lastName,
     bodyText: lastInbound.bodyText || lastInbound.bodyHtml.replace(/<[^>]+>/g, ""),
-    ticketNumber: ticket.number,
+    ticketCode: ticket.code,
     previousMessages: ticket.messages.map((m) => ({
       direction: m.direction,
       bodyText: m.bodyText || m.bodyHtml.replace(/<[^>]+>/g, ""),

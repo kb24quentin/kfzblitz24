@@ -5,6 +5,7 @@ import { splitName } from "@/lib/name-parse";
 import { computeSlaDeadlines } from "@/lib/settings";
 import { shouldReopenOnCustomerReply } from "@/lib/status";
 import { sendAcknowledgement } from "@/lib/resend-send";
+import { generateTicketCode, extractTicketCode } from "@/lib/ticket-code";
 
 const INGEST_LABEL_NAME = "kb24-support-ingested";
 let cachedLabelId: string | null = null;
@@ -159,44 +160,74 @@ async function parseMessage(id: string): Promise<Parsed | null> {
   };
 }
 
+async function applyReopenLogic(
+  ticket: { id: string; status: string; snoozedUntil: Date | null; resolvedAt: Date | null },
+  gmailThreadId: string
+) {
+  const shouldReopen = shouldReopenOnCustomerReply(ticket.status);
+  const shouldClearSnooze = ticket.snoozedUntil !== null;
+  const shouldWakeFromPending = ticket.status === "pending";
+  const shouldPatchThread = true; // always sync gmailThreadId in case it wasn't set
+
+  if (!shouldReopen && !shouldClearSnooze && !shouldWakeFromPending && !shouldPatchThread) {
+    return;
+  }
+  await prisma.ticket.update({
+    where: { id: ticket.id },
+    data: {
+      status: shouldReopen || shouldWakeFromPending ? "open" : ticket.status,
+      resolvedAt: shouldReopen ? null : ticket.resolvedAt,
+      snoozedUntil: null,
+      snoozedReason: null,
+      gmailThreadId,
+    },
+  });
+}
+
 async function findOrCreateTicket(p: Parsed): Promise<{ ticketId: string; isNew: boolean }> {
-  // 1. Try to find ticket by gmailThreadId
+  // 1. Gmail thread match — most reliable for Gmail-native replies
   const byThread = await prisma.ticket.findFirst({
     where: { gmailThreadId: p.gmailThreadId },
   });
   if (byThread) {
-    // Reopen ONLY if resolved. "closed" stays closed. Also clear snooze.
-    const shouldReopen = shouldReopenOnCustomerReply(byThread.status);
-    if (shouldReopen || byThread.snoozedUntil || byThread.status === "pending") {
-      await prisma.ticket.update({
-        where: { id: byThread.id },
-        data: {
-          status: shouldReopen || byThread.status === "pending" ? "open" : byThread.status,
-          resolvedAt: shouldReopen ? null : byThread.resolvedAt,
-          snoozedUntil: null,
-          snoozedReason: null,
-        },
-      });
-    }
+    await applyReopenLogic(byThread, p.gmailThreadId);
     return { ticketId: byThread.id, isNew: false };
   }
 
-  // 2. Try to find ticket by In-Reply-To → message.messageIdHeader
-  if (p.inReplyTo) {
-    const byReply = await prisma.message.findFirst({
-      where: { messageIdHeader: p.inReplyTo },
-      select: { ticketId: true },
-    });
-    if (byReply) {
-      await prisma.ticket.update({
-        where: { id: byReply.ticketId },
-        data: { gmailThreadId: p.gmailThreadId },
-      });
-      return { ticketId: byReply.ticketId, isNew: false };
+  // 2. Ticket-code marker in subject — survives ALL mail-client quirks
+  //    (Outlook/Apple/Web-Mail strip In-Reply-To, break threading, etc.)
+  const subjectCode = extractTicketCode(p.subject);
+  if (subjectCode) {
+    const byCode = await prisma.ticket.findUnique({ where: { code: subjectCode } });
+    if (byCode) {
+      await applyReopenLogic(byCode, p.gmailThreadId);
+      return { ticketId: byCode.id, isNew: false };
     }
   }
 
-  // 3. New ticket
+  // 3. Ticket-code embedded in body (HTML comment we injected, OR plain-text mention)
+  const bodyCode = extractTicketCode(p.bodyHtml) || extractTicketCode(p.bodyText);
+  if (bodyCode) {
+    const byBodyCode = await prisma.ticket.findUnique({ where: { code: bodyCode } });
+    if (byBodyCode) {
+      await applyReopenLogic(byBodyCode, p.gmailThreadId);
+      return { ticketId: byBodyCode.id, isNew: false };
+    }
+  }
+
+  // 4. In-Reply-To / References → our own outbound Message-Id header
+  if (p.inReplyTo) {
+    const byReply = await prisma.message.findFirst({
+      where: { messageIdHeader: p.inReplyTo },
+      select: { ticket: true },
+    });
+    if (byReply?.ticket) {
+      await applyReopenLogic(byReply.ticket, p.gmailThreadId);
+      return { ticketId: byReply.ticket.id, isNew: false };
+    }
+  }
+
+  // 5. New ticket
   const { firstName, lastName } = splitName(p.fromName);
   const contact = await prisma.contact.upsert({
     where: { email: p.fromEmail },
@@ -217,11 +248,19 @@ async function findOrCreateTicket(p: Parsed): Promise<{ ticketId: string; isNew:
 
   const { firstResponseDueAt, resolutionDueAt } = await computeSlaDeadlines(p.receivedAt);
 
-  const cleanSubject = p.subject.replace(/^(Re|Aw|Fwd|Wg):\s*/gi, "");
+  // Strip common reply prefixes AND any lingering [#CODE] marker from prior
+  // mails that we couldn't resolve to a ticket (e.g. code was deleted or wrong).
+  const cleanSubject = p.subject
+    .replace(/^(Re|Aw|Fwd|Wg):\s*/gi, "")
+    .replace(/\s*\[?#[A-Za-z0-9]{6}\]?\s*$/, "")
+    .trim() || "(kein Betreff)";
+
+  const code = await generateTicketCode();
 
   const ticket = await prisma.ticket.create({
     data: {
       subject: cleanSubject,
+      code,
       contactId: contact.id,
       firstResponseDueAt,
       resolutionDueAt,

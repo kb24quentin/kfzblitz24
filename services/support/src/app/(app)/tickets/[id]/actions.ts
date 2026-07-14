@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { sendMailAndPersist } from "@/lib/resend-send";
 import { computeSlaDeadlines } from "@/lib/settings";
 import { TICKET_STATUSES } from "@/lib/status";
+import { generateTicketCode } from "@/lib/ticket-code";
 
 async function requireUser() {
   const session = await auth();
@@ -366,10 +367,12 @@ export async function createTicketAction(formData: FormData) {
 
   const now = new Date();
   const { firstResponseDueAt, resolutionDueAt } = await computeSlaDeadlines(now);
+  const code = await generateTicketCode();
 
   const ticket = await prisma.ticket.create({
     data: {
       subject,
+      code,
       priority,
       contactId: contact.id,
       firstResponseDueAt,

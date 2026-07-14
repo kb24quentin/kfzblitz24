@@ -65,7 +65,7 @@ export async function classifyAndDraft(input: {
   customerFirstName?: string | null;
   customerLastName?: string | null;
   bodyText: string;
-  ticketNumber: number;
+  ticketCode: string;
   previousMessages?: Array<{ direction: string; bodyText: string; createdAt: Date }>;
 }): Promise<AiResult> {
   const c = client();
@@ -88,7 +88,7 @@ export async function classifyAndDraft(input: {
       : "Sehr geehrte Damen und Herren";
 
   const userMsg = [
-    `Ticket #${input.ticketNumber}`,
+    `Ticket-Referenz: #${input.ticketCode}`,
     `Kunde: ${displayName} <${input.fromEmail}>`,
     `Empfohlene Anrede: ${salutation}`,
     `Betreff: ${input.subject}`,

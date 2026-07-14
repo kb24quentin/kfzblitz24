@@ -53,6 +53,7 @@ model Contact {
 model Ticket {
   id                 String    @id @default(cuid())
   number             Int       @unique @default(autoincrement())
+  code               String    @unique // 6-char alphanumeric, displayed as #CODE, used for reply-threading
   subject            String
   status             String    @default("open") // open, pending (warten auf kunde), on_hold, resolved, closed
   priority           String    @default("normal") // low, normal, high, urgent

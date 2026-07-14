@@ -95,6 +95,7 @@ type Order = {
 type Ticket = {
   id: string;
   number: number;
+  code: string;
   subject: string;
   status: string;
   priority: string;
@@ -208,6 +209,7 @@ export function TicketDetail({
       "customer.email": c.email,
       "customer.phone": c.phone || "",
       "order.id": c.orderRef || "",
+      "ticket.code": ticket.code,
       "ticket.number": String(ticket.number),
       "ticket.subject": ticket.subject,
     };
@@ -350,7 +352,7 @@ export function TicketDetail({
 
       <div className="mb-4">
         <div className="flex items-baseline gap-3 mb-1">
-          <span className="text-sm font-mono text-text-light">#{ticket.number}</span>
+          <span className="text-sm font-mono text-text-light">#{ticket.code}</span>
           <h1 className="text-xl font-bold text-text flex-1">{ticket.subject}</h1>
         </div>
         <div className="flex items-center gap-3 flex-wrap text-sm text-text-light">

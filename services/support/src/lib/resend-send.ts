@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getFromAddress, getReplyToAddress, wrapEmailHtml, htmlToPlainText } from "@/lib/email";
 import { insertToGmailSent } from "@/lib/gmail";
 import { isFullHtmlDocument } from "@/lib/mail-template";
+import { ensureCodeInSubject } from "@/lib/ticket-code";
 import {
   getAutoAckEnabled,
   getAutoAckSubject,
@@ -65,6 +66,7 @@ export async function sendAcknowledgement(ticketId: string): Promise<void> {
 
   const ctx = {
     ticketNumber: ticket.number,
+    ticketCode: ticket.code,
     ticketSubject: ticket.subject,
     contact: ticket.contact,
     slaFirstResponseHours: slaHours,
@@ -124,15 +126,22 @@ export async function sendMailAndPersist({
 
   const to = ticket.contact.email;
   const lastMsg = ticket.messages[0];
-  const finalSubject =
+  const rawSubject =
     subject?.trim() || (ticket.subject.startsWith("Re: ") ? ticket.subject : `Re: ${ticket.subject}`);
+  // Ensure ticket code marker in subject so customer replies thread back to this ticket
+  // even if their client strips In-Reply-To (Outlook, some webmails).
+  const finalSubject = ensureCodeInSubject(rawSubject, ticket.code);
 
   // `bodyHtml` may be a bare inner-content fragment (typical, from the
   // TipTap composer or from the ack template) OR a pre-wrapped full HTML
   // document (rare — legacy resend of pre-refactor messages). The double-
   // wrap check below keeps both cases correct.
   const signatureHtml = appendSignature ? await loadSignatureHtml(authorUserId) : null;
-  const innerContent = joinBodyWithSignature(bodyHtml, signatureHtml);
+  const innerContentRaw = joinBodyWithSignature(bodyHtml, signatureHtml);
+  // Embed the ticket code as an HTML comment right before the body — invisible
+  // to the customer but preserved by most mail clients on reply, giving us a
+  // fallback thread anchor when the subject marker gets stripped.
+  const innerContent = `<!-- TICKET-REF:${ticket.code} -->\n${innerContentRaw}`;
   const wrappedHtml = isFullHtmlDocument(innerContent)
     ? innerContent
     : wrapEmailHtml(innerContent);
@@ -140,7 +149,10 @@ export async function sendMailAndPersist({
 
   // Build In-Reply-To / References to preserve threading
   const inReplyTo = lastMsg?.messageIdHeader || undefined;
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    // Custom header — some clients pass it through on reply.
+    "X-KB24-Ticket": ticket.code,
+  };
   if (inReplyTo) {
     headers["In-Reply-To"] = inReplyTo;
     headers["References"] = inReplyTo;

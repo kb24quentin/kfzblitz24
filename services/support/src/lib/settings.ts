@@ -7,10 +7,11 @@ const KEY_AUTO_ACK_ENABLED = "autoAckEnabled";
 const KEY_AUTO_ACK_SUBJECT = "autoAckSubject";
 const KEY_AUTO_ACK_BODY = "autoAckBody";
 
-const DEFAULT_ACK_SUBJECT = "Ihre Anfrage bei kfzBlitz24 (Ticket #{{ticket.number}})";
+const DEFAULT_ACK_SUBJECT = "Ihre Anfrage bei kfzBlitz24 [#{{ticket.code}}]";
 const DEFAULT_ACK_BODY = `<p>Guten Tag {{customer.first_name}},</p>
-<p>vielen Dank für Ihre Nachricht. Wir haben Ihre Anfrage erhalten und uns unter der Ticket-Nummer <strong>#{{ticket.number}}</strong> vorgemerkt.</p>
+<p>vielen Dank für Ihre Nachricht. Wir haben Ihre Anfrage erhalten und unter der Referenz <strong>#{{ticket.code}}</strong> vorgemerkt.</p>
 <p>Sie erhalten innerhalb von {{sla.first_response_hours}} Stunden eine Antwort von unserem Team.</p>
+<p style="font-size:12px;color:#8a93a0;margin-top:24px">Wichtig: Bei Antworten bitte den Betreff unverändert lassen — die Referenz <strong>#{{ticket.code}}</strong> hilft uns bei der Zuordnung.</p>
 <p>Mit freundlichen Grüßen<br>Ihr kfzBlitz24 Support</p>`;
 
 function parseHoursOrDefault(raw: string | undefined | null, def: number): number {
@@ -121,6 +122,7 @@ export function substituteAckVariables(
   template: string,
   ctx: {
     ticketNumber: number;
+    ticketCode: string;
     ticketSubject: string;
     contact: {
       firstName: string | null;
@@ -141,7 +143,8 @@ export function substituteAckVariables(
     "customer.name": [first, last].filter(Boolean).join(" ") || ctx.contact.name || "",
     "customer.email": ctx.contact.email,
     "customer.phone": ctx.contact.phone || "",
-    "ticket.number": String(ctx.ticketNumber),
+    "ticket.code": ctx.ticketCode,
+    "ticket.number": String(ctx.ticketNumber), // legacy support
     "ticket.subject": ctx.ticketSubject,
     "sla.first_response_hours": String(ctx.slaFirstResponseHours),
   };

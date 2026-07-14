@@ -59,10 +59,13 @@ export async function TicketList({
 
   const q = query?.trim();
   if (q) {
+    // Strip leading '#' from code searches like "#K3M7XZ"
+    const codeQuery = q.replace(/^#/, "").toUpperCase();
     const numeric = Number(q);
     const matchNum = !Number.isNaN(numeric) && Number.isFinite(numeric);
     where.OR = [
       { subject: { contains: q, mode: "insensitive" } },
+      { code: { equals: codeQuery } },
       { contact: { email: { contains: q, mode: "insensitive" } } },
       { contact: { name: { contains: q, mode: "insensitive" } } },
       { contact: { firstName: { contains: q, mode: "insensitive" } } },
@@ -131,7 +134,7 @@ export async function TicketList({
             type="search"
             name="q"
             defaultValue={q || ""}
-            placeholder="Suche: Betreff, Kunde, Bestellnr., #Ticket-Nr., oder Text…"
+            placeholder="Suche: #CODE, Betreff, Kunde, Bestellnr., oder Text…"
             className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
@@ -234,7 +237,7 @@ export async function TicketList({
                 return (
                   <tr key={t.id} className="hover:bg-bg-secondary/50 transition-colors">
                     <td className="px-4 py-3 font-mono text-text-light">
-                      #{t.number}
+                      #{t.code}
                     </td>
                     <td className="px-4 py-3">
                       <Link
