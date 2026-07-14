@@ -29,13 +29,26 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # damit das pixel-perfekte Dashboard-Design auf dem Xprinter XP-420B
 # im Warehouse landet, statt einfaches Text-TSPL.
 #
-# ttf-freefont + fontconfig sind ZWINGEND — poppler auf nacktem Alpine
-# hat KEINE Base-14-Fonts (Helvetica/Times/Courier). Ohne Font-Substitution
-# rendert pdftoppm alle Text-Runs als leere Boxen: Layout kommt raus,
-# aber alle Beschriftungen fehlen (empirisch bestätigt in Prod-Test).
-# ttf-freefont bringt FreeSans/FreeSerif/FreeMono die 1:1-metrisch als
-# Helvetica/Times/Courier-Ersatz einspringen.
-RUN apk add --no-cache openssl poppler-utils ttf-freefont fontconfig \
+# ttf-freefont + ttf-dejavu + fontconfig sind ZWINGEND — poppler auf
+# nacktem Alpine hat KEINE Base-14-Fonts (Helvetica/Times/Courier).
+# Ohne Font-Substitution rendert pdftoppm alle Text-Runs als leere Boxen:
+# Layout kommt raus, aber alle Beschriftungen fehlen (empirisch bestätigt).
+#
+# ttf-freefont: FreeSans/FreeSerif/FreeMono als 1:1-metrisch Ersatz für
+#               Helvetica/Times/Courier.
+# ttf-dejavu:   DejaVu Sans hat deutlich vollständigere Unicode-Coverage,
+#               v. a. WinAnsi-Sonderzeichen wie · (U+00B7 middle dot,
+#               genutzt in "R00 · KB24-INTERNAL" und "OPENED · OTWARTO"
+#               im Palette-Label). FreeSans allein droppt die.
+# poppler-data: Extra CIDMap für erweiterte Zeichen-Ranges (CJK, aber
+#               auch bessere Fallback-Mappings für Latin-1-Supplement).
+RUN apk add --no-cache \
+    openssl \
+    poppler-utils \
+    poppler-data \
+    ttf-freefont \
+    ttf-dejavu \
+    fontconfig \
  && fc-cache -f \
  && npm install -g prisma@6.19.3
 
