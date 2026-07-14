@@ -13,9 +13,13 @@ import {
   Clock,
   AlertCircle,
   Check,
-  X,
   Mail,
   ArrowRight,
+  Bell,
+  Package,
+  Trash2,
+  Plus,
+  BellOff,
 } from "lucide-react";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
 import {
@@ -26,7 +30,12 @@ import {
   setAssigneeAction,
   rejectDraftAction,
   updateContactAction,
+  snoozeTicketAction,
+  wakeTicketAction,
+  addOrderAction,
+  removeOrderAction,
 } from "./actions";
+import { STATUS_LABEL, PRIORITY_LABEL, PRIORITY_CLASSES } from "@/lib/status";
 
 type UserLite = { id: string; name: string; email: string };
 type TemplateLite = { id: string; name: string; subject: string; bodyHtml: string; category: string | null };
@@ -72,6 +81,13 @@ type Event = {
   createdAt: string;
 };
 
+type Order = {
+  id: string;
+  ref: string;
+  note: string | null;
+  createdAt: string;
+};
+
 type Ticket = {
   id: string;
   number: number;
@@ -81,9 +97,12 @@ type Ticket = {
   category: string | null;
   contactId: string;
   assigneeId: string | null;
-  slaDueAt: string;
+  firstResponseDueAt: string;
+  resolutionDueAt: string;
   firstResponseAt: string | null;
   resolvedAt: string | null;
+  snoozedUntil: string | null;
+  snoozedReason: string | null;
   gmailThreadId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -98,6 +117,7 @@ type Ticket = {
     notes: string | null;
   };
   assignee: UserLite | null;
+  orders: Order[];
   messages: Message[];
   notes: Note[];
   drafts: Draft[];
@@ -105,37 +125,36 @@ type Ticket = {
 };
 
 const STATUSES: [string, string][] = [
-  ["open", "Offen"],
-  ["pending", "Wartend"],
-  ["on_hold", "Pausiert"],
-  ["resolved", "Gelöst"],
+  ["open", STATUS_LABEL.open],
+  ["pending", STATUS_LABEL.pending],
+  ["on_hold", STATUS_LABEL.on_hold],
+  ["resolved", STATUS_LABEL.resolved],
+  ["closed", STATUS_LABEL.closed],
 ];
 
 const PRIORITIES: [string, string][] = [
-  ["low", "Niedrig"],
-  ["normal", "Normal"],
-  ["high", "Hoch"],
-  ["urgent", "Dringend"],
+  ["low", PRIORITY_LABEL.low],
+  ["normal", PRIORITY_LABEL.normal],
+  ["high", PRIORITY_LABEL.high],
+  ["urgent", PRIORITY_LABEL.urgent],
 ];
-
-const PRIO_CLASS: Record<string, string> = {
-  low: "bg-gray-100 text-gray-700",
-  normal: "bg-info/10 text-info",
-  high: "bg-warning/15 text-warning",
-  urgent: "bg-danger/15 text-danger",
-};
 
 const EVENT_LABEL: Record<string, string> = {
   created: "Ticket erstellt",
   assigned: "Zugewiesen",
   status_changed: "Status geändert",
   priority_changed: "Priorität geändert",
-  sla_breached: "SLA überschritten",
+  first_response_sla_breached: "Erstantwort-SLA überschritten",
+  resolution_sla_breached: "Lösungs-SLA überschritten",
   ai_drafted: "AI-Draft erstellt",
   ai_auto_sent: "AI-Antwort automatisch gesendet",
   note_added: "Notiz hinzugefügt",
   message_sent: "Antwort gesendet",
   message_received: "Nachricht empfangen",
+  snoozed: "Auf Wiedervorlage gelegt",
+  woken: "Wiedervorlage aufgehoben",
+  order_added: "Bestellung verknüpft",
+  order_removed: "Bestellung entfernt",
 };
 
 function slaColor(dueAt: string, resolved: boolean) {
@@ -164,9 +183,14 @@ export function TicketDetail({
   const [replySubject, setReplySubject] = useState(
     ticket.subject.startsWith("Re: ") ? ticket.subject : `Re: ${ticket.subject}`
   );
+  const [replyStatus, setReplyStatus] = useState("pending");
   const [noteBody, setNoteBody] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [draftIdApplied, setDraftIdApplied] = useState<string | null>(null);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [snoozeUntil, setSnoozeUntil] = useState("");
+  const [snoozeReason, setSnoozeReason] = useState("");
+  const [newOrderRef, setNewOrderRef] = useState("");
   const editorRef = useRef<RichTextEditorHandle>(null);
 
   const substitute = (input: string): string => {
@@ -205,11 +229,53 @@ export function TicketDetail({
     fd.set("ticketId", ticket.id);
     fd.set("subject", replySubject);
     fd.set("bodyHtml", replyHtml);
+    fd.set("statusAfter", replyStatus);
     if (draftIdApplied) fd.set("draftId", draftIdApplied);
     startTransition(async () => {
       await sendReplyAction(fd);
       setReplyHtml("");
       setDraftIdApplied(null);
+      router.refresh();
+    });
+  };
+
+  const submitSnooze = () => {
+    if (!snoozeUntil || pending) return;
+    const fd = new FormData();
+    fd.set("ticketId", ticket.id);
+    fd.set("until", snoozeUntil);
+    if (snoozeReason) fd.set("reason", snoozeReason);
+    startTransition(async () => {
+      await snoozeTicketAction(fd);
+      setSnoozeOpen(false);
+      setSnoozeUntil("");
+      setSnoozeReason("");
+      router.refresh();
+    });
+  };
+
+  const wakeNow = () => {
+    startTransition(async () => {
+      await wakeTicketAction(ticket.id);
+      router.refresh();
+    });
+  };
+
+  const submitAddOrder = () => {
+    if (!newOrderRef.trim() || pending) return;
+    const fd = new FormData();
+    fd.set("ticketId", ticket.id);
+    fd.set("ref", newOrderRef.trim());
+    startTransition(async () => {
+      await addOrderAction(fd);
+      setNewOrderRef("");
+      router.refresh();
+    });
+  };
+
+  const submitRemoveOrder = (orderId: string) => {
+    startTransition(async () => {
+      await removeOrderAction(orderId);
       router.refresh();
     });
   };
@@ -256,7 +322,11 @@ export function TicketDetail({
   };
 
   const overdue =
-    !ticket.resolvedAt && new Date(ticket.slaDueAt).getTime() < Date.now();
+    !ticket.resolvedAt && new Date(ticket.firstResponseDueAt).getTime() < Date.now();
+  const resolutionOverdue =
+    !ticket.resolvedAt && new Date(ticket.resolutionDueAt).getTime() < Date.now();
+  const snoozeActive =
+    ticket.snoozedUntil && new Date(ticket.snoozedUntil).getTime() > Date.now();
 
   return (
     <div>
@@ -274,12 +344,49 @@ export function TicketDetail({
         </div>
         <div className="flex items-center gap-3 flex-wrap text-sm text-text-light">
           <span>Von {ticket.contact.name || ticket.contact.email}</span>
-          <span className={`flex items-center gap-1 ${slaColor(ticket.slaDueAt, !!ticket.resolvedAt)}`}>
-            {overdue ? <AlertCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-            SLA {formatDistanceToNow(new Date(ticket.slaDueAt), { locale: de, addSuffix: true })}
+          <span
+            className={`flex items-center gap-1 ${slaColor(
+              ticket.firstResponseDueAt,
+              !!ticket.firstResponseAt || !!ticket.resolvedAt
+            )}`}
+          >
+            {overdue && !ticket.firstResponseAt ? (
+              <AlertCircle className="w-3.5 h-3.5" />
+            ) : (
+              <Clock className="w-3.5 h-3.5" />
+            )}
+            Erstantw. {formatDistanceToNow(new Date(ticket.firstResponseDueAt), {
+              locale: de,
+              addSuffix: true,
+            })}
+          </span>
+          <span
+            className={`flex items-center gap-1 ${slaColor(
+              ticket.resolutionDueAt,
+              !!ticket.resolvedAt
+            )}`}
+          >
+            {resolutionOverdue ? (
+              <AlertCircle className="w-3.5 h-3.5" />
+            ) : (
+              <Clock className="w-3.5 h-3.5" />
+            )}
+            Lösung {formatDistanceToNow(new Date(ticket.resolutionDueAt), {
+              locale: de,
+              addSuffix: true,
+            })}
           </span>
           {ticket.firstResponseAt && (
             <span className="text-success">✓ Erstantwort</span>
+          )}
+          {snoozeActive && (
+            <span className="inline-flex items-center gap-1 text-warning">
+              <Bell className="w-3.5 h-3.5" /> Wiedervorlage{" "}
+              {formatDistanceToNow(new Date(ticket.snoozedUntil!), {
+                locale: de,
+                addSuffix: true,
+              })}
+            </span>
           )}
         </div>
       </div>
@@ -407,14 +514,27 @@ export function TicketDetail({
                 </div>
               )}
 
-              <div className="flex justify-end">
+              <div className="flex items-center justify-end gap-2 flex-wrap">
+                <label className="text-xs text-text-light">Status nach Senden:</label>
+                <select
+                  value={replyStatus}
+                  onChange={(e) => setReplyStatus(e.target.value)}
+                  className="text-sm border border-border rounded px-2 py-1.5 bg-white"
+                >
+                  <option value="keep">— unverändert —</option>
+                  <option value="pending">Warten auf Kunde</option>
+                  <option value="on_hold">Pausiert</option>
+                  <option value="open">Offen</option>
+                  <option value="resolved">Gelöst</option>
+                  <option value="closed">Geschlossen</option>
+                </select>
                 <button
                   onClick={submitReply}
                   disabled={pending || !replyHtml.trim()}
                   className="flex items-center gap-2 px-5 py-2 bg-accent text-white rounded-lg text-sm font-semibold hover:bg-accent-light transition-colors disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
-                  {pending ? "Sende…" : "Antwort senden"}
+                  {pending ? "Sende…" : "Senden & Status setzen"}
                 </button>
               </div>
             </div>
@@ -470,7 +590,96 @@ export function TicketDetail({
 
         <div className="space-y-6">
           <div className="bg-bg-card border border-border rounded-xl p-5 space-y-3">
-            <h3 className="font-semibold text-text">Ticket</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-text">Ticket</h3>
+              {snoozeActive ? (
+                <button
+                  onClick={wakeNow}
+                  disabled={pending}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs border border-border text-text-light hover:bg-bg-secondary transition-colors"
+                  title="Wiedervorlage aufheben"
+                >
+                  <BellOff className="w-3 h-3" /> Wecken
+                </button>
+              ) : (
+                <button
+                  onClick={() => setSnoozeOpen(!snoozeOpen)}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs border border-border text-text-light hover:bg-bg-secondary transition-colors"
+                >
+                  <Bell className="w-3 h-3" /> Wiedervorlage
+                </button>
+              )}
+            </div>
+
+            {snoozeOpen && !snoozeActive && (
+              <div className="bg-warning/5 border border-warning/30 rounded-lg p-3 space-y-2">
+                <label className="block text-xs font-medium text-text">Wiedervorlage bis</label>
+                <input
+                  type="datetime-local"
+                  value={snoozeUntil}
+                  onChange={(e) => setSnoozeUntil(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-border rounded text-sm"
+                />
+                <div className="grid grid-cols-3 gap-1 text-xs">
+                  {[
+                    { label: "+1h", h: 1 },
+                    { label: "morgen 9", h: null, tomorrow: true },
+                    { label: "+3T", h: 72 },
+                  ].map((q) => (
+                    <button
+                      key={q.label}
+                      type="button"
+                      onClick={() => {
+                        const d = q.tomorrow
+                          ? (() => {
+                              const t = new Date();
+                              t.setDate(t.getDate() + 1);
+                              t.setHours(9, 0, 0, 0);
+                              return t;
+                            })()
+                          : new Date(Date.now() + (q.h as number) * 3600_000);
+                        setSnoozeUntil(
+                          new Date(d.getTime() - d.getTimezoneOffset() * 60_000)
+                            .toISOString()
+                            .slice(0, 16)
+                        );
+                      }}
+                      className="px-2 py-1 border border-border rounded hover:bg-bg-secondary"
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={snoozeReason}
+                  onChange={(e) => setSnoozeReason(e.target.value)}
+                  placeholder="Grund (optional)"
+                  className="w-full px-2 py-1.5 border border-border rounded text-sm"
+                />
+                <div className="flex gap-1">
+                  <button
+                    onClick={submitSnooze}
+                    disabled={!snoozeUntil || pending}
+                    className="flex-1 px-3 py-1.5 bg-warning text-white rounded text-sm font-medium hover:bg-warning/90 transition-colors disabled:opacity-50"
+                  >
+                    Snoozen
+                  </button>
+                  <button
+                    onClick={() => setSnoozeOpen(false)}
+                    className="px-3 py-1.5 border border-border rounded text-sm text-text-light"
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {snoozeActive && ticket.snoozedReason && (
+              <div className="text-xs text-warning bg-warning/5 border border-warning/20 rounded p-2">
+                {ticket.snoozedReason}
+              </div>
+            )}
 
             <div>
               <label className="text-xs font-medium text-text-light block mb-1">Status</label>
@@ -504,7 +713,7 @@ export function TicketDetail({
               </select>
               <span
                 className={`mt-1 inline-block text-xs px-2 py-0.5 rounded-full ${
-                  PRIO_CLASS[ticket.priority]
+                  PRIORITY_CLASSES[ticket.priority]
                 }`}
               >
                 {PRIORITIES.find(([v]) => v === ticket.priority)?.[1]}
@@ -596,6 +805,71 @@ export function TicketDetail({
           </div>
 
           <div className="bg-bg-card border border-border rounded-xl p-5">
+            <h3 className="font-semibold text-text mb-3 flex items-center gap-2">
+              <Package className="w-4 h-4" /> Bestellungen
+              <span className="text-xs text-text-light font-normal">
+                ({ticket.orders.length})
+              </span>
+            </h3>
+            <div className="space-y-1 mb-3">
+              {ticket.orders.length === 0 && !ticket.contact.orderRef && (
+                <div className="text-xs text-text-light italic">
+                  Noch keine Bestellungen verknüpft.
+                </div>
+              )}
+              {ticket.contact.orderRef && ticket.orders.length === 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-mono text-text">{ticket.contact.orderRef}</span>
+                  <span className="text-xs text-text-light">(am Kontakt)</span>
+                </div>
+              )}
+              {ticket.orders.map((o) => (
+                <div
+                  key={o.id}
+                  className="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-bg-secondary text-sm"
+                >
+                  <div className="flex-1">
+                    <span className="font-mono text-text">{o.ref}</span>
+                    {o.note && (
+                      <span className="text-xs text-text-light ml-2">— {o.note}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => submitRemoveOrder(o.id)}
+                    disabled={pending}
+                    className="p-1 text-text-light hover:text-danger hover:bg-danger/10 rounded transition-colors"
+                    title="Entfernen"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={newOrderRef}
+                onChange={(e) => setNewOrderRef(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitAddOrder();
+                  }
+                }}
+                placeholder="Bestellnr."
+                className="flex-1 px-2 py-1.5 border border-border rounded text-sm font-mono"
+              />
+              <button
+                onClick={submitAddOrder}
+                disabled={pending || !newOrderRef.trim()}
+                className="px-3 py-1.5 bg-accent text-white rounded text-sm hover:bg-accent-light transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-bg-card border border-border rounded-xl p-5">
             <h3 className="font-semibold text-text mb-3">Verlauf</h3>
             <ul className="space-y-2 text-xs">
               {ticket.events.map((e) => (
@@ -657,5 +931,3 @@ function MessageItem({ m }: { m: Message }) {
   );
 }
 
-// Suppress unused-icon lint by re-referencing
-void X;

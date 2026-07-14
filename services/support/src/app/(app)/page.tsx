@@ -8,6 +8,7 @@ import {
   TrendingUp,
   AlertCircle,
   Sparkles,
+  Bell,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
@@ -44,12 +45,18 @@ export default async function DashboardPage() {
     resolvedToday,
     firstResponseSample,
     pendingAiDrafts,
+    snoozeDueCount,
+    snoozeUpcoming,
     recentTickets,
   ] = await Promise.all([
-    prisma.ticket.count({ where: { status: { not: "resolved" } } }),
-    prisma.ticket.count({ where: { status: { not: "resolved" }, priority: "urgent" } }),
+    prisma.ticket.count({ where: { status: { notIn: ["resolved", "closed"] } } }),
+    prisma.ticket.count({ where: { status: { notIn: ["resolved", "closed"] }, priority: "urgent" } }),
     prisma.ticket.count({
-      where: { status: { not: "resolved" }, slaDueAt: { lt: new Date(now) } },
+      where: {
+        status: { notIn: ["resolved", "closed"] },
+        firstResponseAt: null,
+        firstResponseDueAt: { lt: new Date(now) },
+      },
     }),
     prisma.ticket.count({ where: { createdAt: { gte: dayAgo } } }),
     prisma.ticket.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
@@ -60,12 +67,30 @@ export default async function DashboardPage() {
         firstResponseAt: { not: null },
         createdAt: { gte: thirtyDaysAgo },
       },
-      select: { createdAt: true, firstResponseAt: true, slaDueAt: true },
+      select: { createdAt: true, firstResponseAt: true, firstResponseDueAt: true },
     }),
     prisma.aiDraft.count({ where: { status: "pending" } }),
+    prisma.ticket.count({
+      where: {
+        snoozedUntil: { lte: new Date(now), not: null },
+        status: { notIn: ["resolved", "closed"] },
+      },
+    }),
     prisma.ticket.findMany({
-      where: { status: { not: "resolved" } },
-      orderBy: [{ priority: "desc" }, { slaDueAt: "asc" }],
+      where: {
+        snoozedUntil: { gt: new Date(now) },
+        status: { notIn: ["resolved", "closed"] },
+      },
+      orderBy: { snoozedUntil: "asc" },
+      take: 5,
+      include: { contact: true },
+    }),
+    prisma.ticket.findMany({
+      where: {
+        status: { notIn: ["resolved", "closed"] },
+        OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: new Date(now) } }],
+      },
+      orderBy: [{ priority: "desc" }, { firstResponseDueAt: "asc" }],
       take: 5,
       include: { contact: true },
     }),
@@ -80,7 +105,7 @@ export default async function DashboardPage() {
       : null;
 
   const withinSla = firstResponseSample.filter(
-    (t) => t.firstResponseAt!.getTime() <= t.slaDueAt.getTime()
+    (t) => t.firstResponseAt!.getTime() <= t.firstResponseDueAt.getTime()
   ).length;
   const slaRate =
     firstResponseSample.length > 0
@@ -136,6 +161,14 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <KpiCard
+          label="Wiedervorlage jetzt fällig"
+          value={snoozeDueCount.toString()}
+          detail={snoozeDueCount > 0 ? "warten auf dich" : "keine offen"}
+          tone={snoozeDueCount > 0 ? "warning" : "info"}
+          icon={<Bell className="w-4 h-4" />}
+          href="/tickets/snoozed"
+        />
+        <KpiCard
           label="⌀ Erstantwortzeit (30 T.)"
           value={fmtDurationMs(avgResponseMs)}
           detail={`Basis: ${firstResponseSample.length} Tickets mit Antwort`}
@@ -162,6 +195,46 @@ export default async function DashboardPage() {
         />
       </div>
 
+      {snoozeUpcoming.length > 0 && (
+        <div className="bg-bg-card border border-border rounded-xl mb-6">
+          <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+            <h2 className="font-semibold text-text flex items-center gap-2">
+              <Bell className="w-4 h-4 text-warning" /> Kommende Wiedervorlagen
+            </h2>
+            <Link href="/tickets/snoozed" className="text-xs text-accent hover:underline">
+              Alle →
+            </Link>
+          </div>
+          <ul className="divide-y divide-border">
+            {snoozeUpcoming.map((t) => {
+              const displayName = fullNameOf(t.contact);
+              return (
+                <li key={t.id}>
+                  <Link
+                    href={`/tickets/${t.id}`}
+                    className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-bg-secondary/50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-mono text-xs text-text-light">#{t.number}</span>
+                        <span className="font-medium text-text truncate">{t.subject}</span>
+                      </div>
+                      <div className="text-xs text-text-light mt-0.5">
+                        {displayName || t.contact.email}
+                        {t.snoozedReason && ` · ${t.snoozedReason}`}
+                      </div>
+                    </div>
+                    <span className="text-xs text-warning shrink-0">
+                      {formatDistanceToNow(t.snoozedUntil!, { locale: de, addSuffix: true })}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <div className="bg-bg-card border border-border rounded-xl">
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
           <h2 className="font-semibold text-text">Nächste 5 nach Priorität + SLA</h2>
@@ -176,7 +249,7 @@ export default async function DashboardPage() {
         ) : (
           <ul className="divide-y divide-border">
             {recentTickets.map((t) => {
-              const overdue = t.slaDueAt.getTime() < now;
+              const overdue = t.firstResponseDueAt.getTime() < now;
               const displayName = fullNameOf(t.contact);
               return (
                 <li key={t.id}>
@@ -210,7 +283,7 @@ export default async function DashboardPage() {
                         {t.priority}
                       </span>
                       <span className={overdue ? "text-danger font-semibold" : "text-text-light"}>
-                        {formatDistanceToNow(t.slaDueAt, { locale: de, addSuffix: true })}
+                        {formatDistanceToNow(t.firstResponseDueAt, { locale: de, addSuffix: true })}
                       </span>
                     </div>
                   </Link>

@@ -3,29 +3,9 @@ import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { Inbox, Plus, Clock, AlertCircle, Search, Archive } from "lucide-react";
+import { Inbox, Plus, Clock, AlertCircle, Search, Archive, Bell } from "lucide-react";
 import { fullNameOf } from "@/lib/name-parse";
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Offen",
-  pending: "Wartend",
-  on_hold: "Pausiert",
-  resolved: "Gelöst",
-};
-
-const PRIORITY_LABEL: Record<string, string> = {
-  low: "Niedrig",
-  normal: "Normal",
-  high: "Hoch",
-  urgent: "Dringend",
-};
-
-const PRIORITY_CLASSES: Record<string, string> = {
-  low: "bg-gray-100 text-gray-700",
-  normal: "bg-info/10 text-info",
-  high: "bg-warning/15 text-warning",
-  urgent: "bg-danger/15 text-danger",
-};
+import { STATUS_LABEL, PRIORITY_LABEL, PRIORITY_CLASSES } from "@/lib/status";
 
 function slaColor(dueAt: Date, resolved: boolean) {
   if (resolved) return "text-text-light";
@@ -37,7 +17,7 @@ function slaColor(dueAt: Date, resolved: boolean) {
 }
 
 type Props = {
-  mode: "active" | "archived";
+  mode: "active" | "archived" | "snoozed";
   title: string;
   subtitle: string;
   query?: string;
@@ -57,13 +37,15 @@ export async function TicketList({
 }: Props) {
   const where: Prisma.TicketWhereInput = {};
 
-  // Base status filter
   if (mode === "archived") {
-    where.status = "resolved";
+    where.status = { in: ["resolved", "closed"] };
+  } else if (mode === "snoozed") {
+    where.snoozedUntil = { not: null };
+    where.status = { notIn: ["resolved", "closed"] };
   } else if (statusFilter && statusFilter !== "all") {
     where.status = statusFilter;
   } else {
-    where.status = { not: "resolved" };
+    where.status = { notIn: ["resolved", "closed"] };
   }
 
   if (priorityFilter && priorityFilter !== "all") {
@@ -75,7 +57,6 @@ export async function TicketList({
     else if (assigneeFilter !== "all") where.assigneeId = assigneeFilter;
   }
 
-  // Search across subject, contact name/email/phone, and message bodies
   const q = query?.trim();
   if (q) {
     const numeric = Number(q);
@@ -88,6 +69,7 @@ export async function TicketList({
       { contact: { lastName: { contains: q, mode: "insensitive" } } },
       { contact: { phone: { contains: q, mode: "insensitive" } } },
       { contact: { orderRef: { contains: q, mode: "insensitive" } } },
+      { orders: { some: { ref: { contains: q, mode: "insensitive" } } } },
       { messages: { some: { bodyText: { contains: q, mode: "insensitive" } } } },
       ...(matchNum ? [{ number: numeric }] : []),
     ];
@@ -98,7 +80,9 @@ export async function TicketList({
     orderBy:
       mode === "archived"
         ? [{ resolvedAt: "desc" }]
-        : [{ priority: "desc" }, { slaDueAt: "asc" }],
+        : mode === "snoozed"
+          ? [{ snoozedUntil: "asc" }]
+          : [{ priority: "desc" }, { firstResponseDueAt: "asc" }],
     take: 200,
     include: {
       contact: true,
@@ -107,14 +91,25 @@ export async function TicketList({
     },
   });
 
-  const basePath = mode === "archived" ? "/tickets/archive" : "/tickets";
+  const basePath =
+    mode === "archived"
+      ? "/tickets/archive"
+      : mode === "snoozed"
+        ? "/tickets/snoozed"
+        : "/tickets";
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-text flex items-center gap-2">
-            {mode === "archived" ? <Archive className="w-5 h-5" /> : <Inbox className="w-5 h-5" />}
+            {mode === "archived" ? (
+              <Archive className="w-5 h-5" />
+            ) : mode === "snoozed" ? (
+              <Bell className="w-5 h-5" />
+            ) : (
+              <Inbox className="w-5 h-5" />
+            )}
             {title}
           </h1>
           <p className="text-sm text-text-light mt-1">{subtitle}</p>
@@ -129,14 +124,14 @@ export async function TicketList({
         )}
       </div>
 
-      <form method="get" action={basePath} className="mb-4 flex items-center gap-2">
-        <div className="relative flex-1 max-w-md">
+      <form method="get" action={basePath} className="mb-4 flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[280px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-light" />
           <input
             type="search"
             name="q"
             defaultValue={q || ""}
-            placeholder="Suche: Betreff, Kunde, Email, Telefon, Bestellnr., #Ticket-Nr., oder Text im Verlauf…"
+            placeholder="Suche: Betreff, Kunde, Bestellnr., #Ticket-Nr., oder Text…"
             className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
@@ -148,7 +143,7 @@ export async function TicketList({
           >
             <option value="">Alle offenen</option>
             <option value="open">Offen</option>
-            <option value="pending">Wartend</option>
+            <option value="pending">Warten auf Kunde</option>
             <option value="on_hold">Pausiert</option>
           </select>
         )}
@@ -181,20 +176,32 @@ export async function TicketList({
 
       {tickets.length === 0 ? (
         <div className="bg-bg-card border border-border rounded-xl p-12 text-center">
-          {mode === "archived" ? (
-            <Archive className="w-12 h-12 text-text-light mx-auto mb-3" />
-          ) : (
-            <Inbox className="w-12 h-12 text-text-light mx-auto mb-3" />
-          )}
+          <div className="mx-auto mb-3">
+            {mode === "archived" ? (
+              <Archive className="w-12 h-12 text-text-light mx-auto" />
+            ) : mode === "snoozed" ? (
+              <Bell className="w-12 h-12 text-text-light mx-auto" />
+            ) : (
+              <Inbox className="w-12 h-12 text-text-light mx-auto" />
+            )}
+          </div>
           <h3 className="text-base font-semibold text-text mb-1">
-            {q ? "Keine Treffer" : mode === "archived" ? "Keine archivierten Tickets" : "Noch keine Tickets"}
+            {q
+              ? "Keine Treffer"
+              : mode === "archived"
+                ? "Keine archivierten Tickets"
+                : mode === "snoozed"
+                  ? "Keine Tickets auf Wiedervorlage"
+                  : "Noch keine Tickets"}
           </h3>
           <p className="text-sm text-text-light max-w-md mx-auto">
             {q
               ? `Für "${q}" wurde nichts gefunden.`
               : mode === "archived"
-                ? "Gelöste Tickets landen hier."
-                : "Sobald der Gmail-Sync eingerichtet ist, erscheinen eingehende E-Mails an service@kfzblitz24.de hier automatisch."}
+                ? "Gelöste und geschlossene Tickets landen hier."
+                : mode === "snoozed"
+                  ? "Setze Tickets auf Wiedervorlage im Ticket-Detail."
+                  : "Sobald der Gmail-Sync eingerichtet ist, erscheinen eingehende E-Mails hier automatisch."}
           </p>
         </div>
       ) : (
@@ -209,15 +216,21 @@ export async function TicketList({
                 <th className="px-4 py-3 font-medium">Priorität</th>
                 <th className="px-4 py-3 font-medium">Zugewiesen</th>
                 <th className="px-4 py-3 font-medium">
-                  {mode === "archived" ? "Gelöst" : "SLA"}
+                  {mode === "archived"
+                    ? "Gelöst"
+                    : mode === "snoozed"
+                      ? "Wiedervorlage"
+                      : "1. Antwort SLA"}
                 </th>
                 <th className="px-4 py-3 font-medium">Erstellt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {tickets.map((t) => {
-                const overdue = !t.resolvedAt && t.slaDueAt.getTime() < Date.now();
+                const overdue =
+                  !t.resolvedAt && t.firstResponseDueAt.getTime() < Date.now();
                 const displayName = fullNameOf(t.contact);
+                const snoozeDue = t.snoozedUntil && t.snoozedUntil.getTime() <= Date.now();
                 return (
                   <tr key={t.id} className="hover:bg-bg-secondary/50 transition-colors">
                     <td className="px-4 py-3 font-mono text-text-light">
@@ -231,7 +244,16 @@ export async function TicketList({
                         {t.subject}
                       </Link>
                       <div className="text-xs text-text-light mt-0.5">
-                        {t._count.messages} Nachricht(en), {t._count.notes} Notiz(en)
+                        {t._count.messages} Nachricht(en){t._count.notes > 0 && `, ${t._count.notes} Notiz(en)`}
+                        {t.snoozedUntil && !snoozeDue && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-warning">
+                            <Bell className="w-3 h-3" /> Snooze bis{" "}
+                            {formatDistanceToNow(t.snoozedUntil, {
+                              locale: de,
+                              addSuffix: true,
+                            })}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -253,9 +275,22 @@ export async function TicketList({
                     <td className="px-4 py-3 text-text-light">
                       {t.assignee?.name || "—"}
                     </td>
-                    <td className={`px-4 py-3 ${slaColor(t.slaDueAt, !!t.resolvedAt)}`}>
+                    <td className={`px-4 py-3 ${
+                      mode === "archived"
+                        ? "text-text-light"
+                        : mode === "snoozed" && t.snoozedUntil
+                          ? snoozeDue
+                            ? "text-danger font-semibold"
+                            : "text-warning"
+                          : slaColor(t.firstResponseDueAt, !!t.resolvedAt)
+                    }`}>
                       {mode === "archived" && t.resolvedAt ? (
                         formatDistanceToNow(t.resolvedAt, { locale: de, addSuffix: true })
+                      ) : mode === "snoozed" && t.snoozedUntil ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Bell className="w-3.5 h-3.5" />
+                          {formatDistanceToNow(t.snoozedUntil, { locale: de, addSuffix: true })}
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1">
                           {overdue ? (
@@ -263,7 +298,7 @@ export async function TicketList({
                           ) : (
                             <Clock className="w-3.5 h-3.5" />
                           )}
-                          {formatDistanceToNow(t.slaDueAt, { locale: de, addSuffix: true })}
+                          {formatDistanceToNow(t.firstResponseDueAt, { locale: de, addSuffix: true })}
                         </span>
                       )}
                     </td>

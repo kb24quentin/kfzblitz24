@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db";
 import { gmail, isGmailConfigured, getGmailUserEmail } from "@/lib/gmail";
 import { generateDraftForTicket } from "@/lib/ticket-ai";
 import { splitName } from "@/lib/name-parse";
+import { computeSlaDeadlines } from "@/lib/settings";
+import { shouldReopenOnCustomerReply } from "@/lib/status";
 
 const INGEST_LABEL_NAME = "kb24-support-ingested";
 let cachedLabelId: string | null = null;
@@ -140,11 +142,17 @@ async function findOrCreateTicket(p: Parsed): Promise<{ ticketId: string; isNew:
     where: { gmailThreadId: p.gmailThreadId },
   });
   if (byThread) {
-    // Reopen if resolved/closed
-    if (["resolved", "closed"].includes(byThread.status)) {
+    // Reopen ONLY if resolved. "closed" stays closed. Also clear snooze.
+    const shouldReopen = shouldReopenOnCustomerReply(byThread.status);
+    if (shouldReopen || byThread.snoozedUntil || byThread.status === "pending") {
       await prisma.ticket.update({
         where: { id: byThread.id },
-        data: { status: "open", resolvedAt: null },
+        data: {
+          status: shouldReopen || byThread.status === "pending" ? "open" : byThread.status,
+          resolvedAt: shouldReopen ? null : byThread.resolvedAt,
+          snoozedUntil: null,
+          snoozedReason: null,
+        },
       });
     }
     return { ticketId: byThread.id, isNew: false };
@@ -184,8 +192,7 @@ async function findOrCreateTicket(p: Parsed): Promise<{ ticketId: string; isNew:
     });
   }
 
-  const slaHours = Number(process.env.SLA_HOURS || "24");
-  const slaDueAt = new Date(p.receivedAt.getTime() + slaHours * 3600_000);
+  const { firstResponseDueAt, resolutionDueAt } = await computeSlaDeadlines(p.receivedAt);
 
   const cleanSubject = p.subject.replace(/^(Re|Aw|Fwd|Wg):\s*/gi, "");
 
@@ -193,7 +200,8 @@ async function findOrCreateTicket(p: Parsed): Promise<{ ticketId: string; isNew:
     data: {
       subject: cleanSubject,
       contactId: contact.id,
-      slaDueAt,
+      firstResponseDueAt,
+      resolutionDueAt,
       gmailThreadId: p.gmailThreadId,
     },
   });

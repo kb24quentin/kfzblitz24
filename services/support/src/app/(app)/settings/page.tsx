@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { Settings, CheckCircle2, XCircle, Link2, Unlink, FileText, ArrowRight } from "lucide-react";
+import { Settings, CheckCircle2, XCircle, Link2, Unlink, FileText, ArrowRight, Clock } from "lucide-react";
 import { isGmailConfigured, getGmailUserEmail, hasOAuthApp, getRedirectUri } from "@/lib/gmail";
 import { auth } from "@/lib/auth";
 import { SignatureEditor } from "./signature-editor";
+import { getSlaFirstResponseHours, getSlaResolutionHours } from "@/lib/settings";
+import { saveSlaSettingsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +23,14 @@ export default async function SettingsPage({
       })
     : null;
 
-  const [users, cursor, gmailOk, gmailUserEmail, templateCount] = await Promise.all([
+  const [users, cursor, gmailOk, gmailUserEmail, templateCount, slaFirst, slaRes] = await Promise.all([
     prisma.user.findMany({ orderBy: { name: "asc" } }),
     prisma.gmailCursor.findFirst({ where: { id: "singleton" } }),
     isGmailConfigured(),
     getGmailUserEmail(),
     prisma.template.count(),
+    getSlaFirstResponseHours(),
+    getSlaResolutionHours(),
   ]);
   const openAiOk = !!process.env.OPENAI_API_KEY;
   const oauthAppReady = hasOAuthApp();
@@ -130,6 +134,56 @@ export default async function SettingsPage({
           <SignatureEditor signature={currentUser.signature} />
         </div>
       )}
+
+      <div className="bg-bg-card border border-border rounded-xl p-6 mb-6">
+        <h2 className="font-semibold text-text flex items-center gap-2 mb-1">
+          <Clock className="w-4 h-4 text-accent" /> SLAs
+        </h2>
+        <p className="text-xs text-text-light mb-4">
+          Wird auf neu erstellte Tickets angewendet. Bestehende Tickets behalten
+          ihre alten Deadlines.
+        </p>
+        <form action={saveSlaSettingsAction} className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">
+              Erstantwort (Stunden)
+            </label>
+            <input
+              type="number"
+              name="firstResponseHours"
+              min={1}
+              max={720}
+              defaultValue={slaFirst}
+              required
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            />
+            <p className="text-xs text-text-light mt-1">Standard: 24 h</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">
+              Lösung (Stunden)
+            </label>
+            <input
+              type="number"
+              name="resolutionHours"
+              min={1}
+              max={2160}
+              defaultValue={slaRes}
+              required
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            />
+            <p className="text-xs text-text-light mt-1">Standard: 72 h</p>
+          </div>
+          <div className="col-span-2 flex justify-end">
+            <button
+              type="submit"
+              className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-light transition-colors"
+            >
+              SLAs speichern
+            </button>
+          </div>
+        </form>
+      </div>
 
       <Link
         href="/templates"

@@ -25,6 +25,7 @@ export default async function TicketDetailPage({
       include: {
         contact: true,
         assignee: true,
+        orders: { orderBy: { createdAt: "asc" } },
         messages: {
           orderBy: { createdAt: "asc" },
           include: {
@@ -63,11 +64,17 @@ export default async function TicketDetailPage({
     <TicketDetail
       ticket={{
         ...ticket,
-        slaDueAt: ticket.slaDueAt.toISOString(),
+        firstResponseDueAt: ticket.firstResponseDueAt.toISOString(),
+        resolutionDueAt: ticket.resolutionDueAt.toISOString(),
         firstResponseAt: ticket.firstResponseAt?.toISOString() || null,
         resolvedAt: ticket.resolvedAt?.toISOString() || null,
+        snoozedUntil: ticket.snoozedUntil?.toISOString() || null,
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
+        orders: ticket.orders.map((o) => ({
+          ...o,
+          createdAt: o.createdAt.toISOString(),
+        })),
         messages: ticket.messages.map((m) => ({
           ...m,
           sentAt: m.sentAt?.toISOString() || null,

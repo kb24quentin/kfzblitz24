@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { saveSlaHours } from "@/lib/settings";
 
 async function requireUser() {
   const session = await auth();
@@ -30,5 +31,13 @@ export async function saveMySignatureAction(formData: FormData) {
 export async function deleteMySignatureAction() {
   const user = await requireUser();
   await prisma.signature.deleteMany({ where: { userId: user.id } });
+  revalidatePath("/settings");
+}
+
+export async function saveSlaSettingsAction(formData: FormData) {
+  await requireUser();
+  const first = Number(formData.get("firstResponseHours") || 24);
+  const res = Number(formData.get("resolutionHours") || 72);
+  await saveSlaHours({ firstResponseHours: first, resolutionHours: res });
   revalidatePath("/settings");
 }

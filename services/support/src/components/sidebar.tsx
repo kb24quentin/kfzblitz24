@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Inbox,
   Archive,
+  Bell,
   Users,
   Settings,
   LogOut,
@@ -15,6 +16,7 @@ import {
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Tickets", href: "/tickets", icon: Inbox, matchExact: false },
+  { name: "Wiedervorlage", href: "/tickets/snoozed", icon: Bell, matchExact: true },
   { name: "Archiv", href: "/tickets/archive", icon: Archive, matchExact: true },
   { name: "Kontakte", href: "/contacts", icon: Users },
 ];
@@ -44,7 +46,9 @@ export function Sidebar() {
               : "matchExact" in item && item.matchExact
                 ? pathname === item.href
                 : item.href === "/tickets"
-                  ? pathname.startsWith("/tickets") && !pathname.startsWith("/tickets/archive")
+                  ? pathname.startsWith("/tickets") &&
+                    !pathname.startsWith("/tickets/archive") &&
+                    !pathname.startsWith("/tickets/snoozed")
                   : pathname.startsWith(item.href);
           return (
             <Link

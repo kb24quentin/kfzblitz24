@@ -1,24 +1,9 @@
 import { prisma } from "@/lib/db";
 import { classifyAndDraft, isAiConfigured, aiModel } from "@/lib/ai";
 import { sendMailAndPersist } from "@/lib/resend-send";
+import { getAutoSendCategories } from "@/lib/settings";
 
 const AUTO_SEND_MIN_CONFIDENCE = 0.9;
-
-/**
- * Categories where auto-send is allowed IF a rule was explicitly enabled in
- * the Setting store under key "autoSendCategories" (JSON array of strings).
- * By default nothing is auto-sent — humans review everything.
- */
-async function getAutoSendCategories(): Promise<Set<string>> {
-  const s = await prisma.setting.findUnique({ where: { key: "autoSendCategories" } });
-  if (!s?.value) return new Set();
-  try {
-    const arr = JSON.parse(s.value);
-    return Array.isArray(arr) ? new Set(arr as string[]) : new Set();
-  } catch {
-    return new Set();
-  }
-}
 
 /**
  * Generates an AI draft for the newest inbound message on a ticket.
