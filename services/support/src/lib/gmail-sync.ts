@@ -281,7 +281,11 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
     },
   });
 
-  // Label the Gmail message as ingested + mark read
+  // Label the Gmail message as ingested + mark read + force back into INBOX.
+  // Reason for the INBOX + CATEGORY-cleanup: Google Groups delivery marks mails as
+  // CATEGORY_FORUMS and often removes the INBOX label, which makes them vanish
+  // from the member's Primary tab. Re-inboxing keeps Gmail as a visible backup
+  // view of everything the support system has ingested.
   try {
     const labelId = await getIngestLabelId();
     const g = await gmail();
@@ -289,8 +293,14 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
       userId: "me",
       id: parsed.gmailMessageId,
       requestBody: {
-        addLabelIds: [labelId],
-        removeLabelIds: ["UNREAD"],
+        addLabelIds: [labelId, "INBOX"],
+        removeLabelIds: [
+          "UNREAD",
+          "CATEGORY_FORUMS",
+          "CATEGORY_UPDATES",
+          "CATEGORY_PROMOTIONS",
+          "CATEGORY_SOCIAL",
+        ],
       },
     });
   } catch (err) {
@@ -325,9 +335,21 @@ export async function syncGmailInbox(): Promise<{
   const g = await gmail();
   const labelId = await getIngestLabelId();
 
-  // Query for unread inbox messages that we haven't already ingested.
-  // Excluding by label id via -label:kb24-support-ingested keeps re-processing off.
-  const q = `in:inbox is:unread -label:${INGEST_LABEL_NAME}`;
+  // Query semantics: everything addressed to our service address (alias/group),
+  // not yet processed, within a 14-day rolling window.
+  //
+  // - NOT `in:inbox`: Google Groups delivery drops the INBOX label + shoves the
+  //   mail into CATEGORY_FORUMS. `in:inbox` would miss all group-delivered mail.
+  // - NOT `is:unread`: group delivery frequently marks messages as read on
+  //   delivery.
+  // - Dedupe is done via `-label:` (our own idempotency marker).
+  // - `newer_than:14d` bounds historical churn if the label somehow disappears.
+  const serviceAddr = (
+    process.env.GMAIL_INGEST_QUERY_ADDRESS ||
+    process.env.FROM_EMAIL ||
+    "service@kfzblitz24.de"
+  ).trim();
+  const q = `to:${serviceAddr} -label:${INGEST_LABEL_NAME} newer_than:14d`;
   const list = await g.users.messages.list({ userId: "me", q, maxResults: 50 });
   const items = list.data.messages || [];
 
