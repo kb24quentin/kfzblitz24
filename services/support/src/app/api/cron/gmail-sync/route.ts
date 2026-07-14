@@ -9,6 +9,13 @@ export async function POST(req: Request) {
   const auth = checkBearer(req);
   if (!auth.ok) return new Response("Unauthorized", { status: auth.status });
 
+  if (process.env.DISABLE_GMAIL_SYNC === "true") {
+    return Response.json(
+      { ok: false, skipped: true, reason: "sync disabled via DISABLE_GMAIL_SYNC" },
+      { status: 200 }
+    );
+  }
+
   if (!(await isGmailConfigured())) {
     return Response.json(
       { ok: false, skipped: true, reason: "gmail not configured" },
