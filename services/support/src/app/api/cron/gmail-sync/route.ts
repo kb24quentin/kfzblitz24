@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const auth = checkBearer(req);
   if (!auth.ok) return new Response("Unauthorized", { status: auth.status });
 
-  if (!isGmailConfigured()) {
+  if (!(await isGmailConfigured())) {
     return Response.json(
       { ok: false, skipped: true, reason: "gmail not configured" },
       { status: 200 }

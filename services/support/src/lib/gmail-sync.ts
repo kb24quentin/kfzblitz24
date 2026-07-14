@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { gmail, isGmailConfigured } from "@/lib/gmail";
+import { gmail, isGmailConfigured, getGmailUserEmail } from "@/lib/gmail";
 import { generateDraftForTicket } from "@/lib/ticket-ai";
 
 const INGEST_LABEL_NAME = "kb24-support-ingested";
@@ -7,7 +7,7 @@ let cachedLabelId: string | null = null;
 
 async function getIngestLabelId(): Promise<string> {
   if (cachedLabelId) return cachedLabelId;
-  const g = gmail();
+  const g = await gmail();
   const labels = await g.users.labels.list({ userId: "me" });
   const found = labels.data.labels?.find((l) => l.name === INGEST_LABEL_NAME);
   if (found?.id) {
@@ -96,7 +96,7 @@ function parseFrom(fromHeader: string): { email: string; name: string | null } {
 }
 
 async function parseMessage(id: string): Promise<Parsed | null> {
-  const g = gmail();
+  const g = await gmail();
   const msg = await g.users.messages.get({ userId: "me", id, format: "full" });
   const payload = msg.data.payload;
   if (!payload || !msg.data.id || !msg.data.threadId) return null;
@@ -201,7 +201,7 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
   if (!parsed) return null;
 
   // Skip messages from ourselves (avoid ingesting our own outbound as inbound)
-  const ourEmail = process.env.GMAIL_USER_EMAIL?.toLowerCase();
+  const ourEmail = (await getGmailUserEmail())?.toLowerCase();
   if (ourEmail && parsed.fromEmail === ourEmail) return null;
 
   // Deduplicate by gmailMessageId
@@ -240,7 +240,8 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
   // Label the Gmail message as ingested + mark read
   try {
     const labelId = await getIngestLabelId();
-    await gmail().users.messages.modify({
+    const g = await gmail();
+    await g.users.messages.modify({
       userId: "me",
       id: parsed.gmailMessageId,
       requestBody: {
@@ -266,11 +267,11 @@ export async function syncGmailInbox(): Promise<{
   errors: number;
   newTickets: number;
 }> {
-  if (!isGmailConfigured()) {
+  if (!(await isGmailConfigured())) {
     throw new Error("Gmail not configured");
   }
 
-  const g = gmail();
+  const g = await gmail();
   const labelId = await getIngestLabelId();
 
   // Query for unread inbox messages that we haven't already ingested.
