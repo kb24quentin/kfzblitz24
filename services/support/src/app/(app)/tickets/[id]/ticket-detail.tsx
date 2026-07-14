@@ -142,10 +142,12 @@ export function TicketDetail({
   ticket,
   users,
   templates,
+  signatureHtml,
 }: {
   ticket: Ticket;
   users: UserLite[];
   templates: TemplateLite[];
+  signatureHtml: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -358,6 +360,27 @@ export function TicketDetail({
                 placeholder="Antwort verfassen…"
                 minHeight={180}
               />
+
+              {signatureHtml ? (
+                <details className="border border-border rounded-lg bg-bg-secondary/40">
+                  <summary className="cursor-pointer px-3 py-2 text-xs text-text-light hover:text-text select-none">
+                    Signatur wird angehängt ▾
+                  </summary>
+                  <div
+                    className="px-4 py-3 border-t border-border bg-white text-sm"
+                    dangerouslySetInnerHTML={{ __html: signatureHtml }}
+                  />
+                </details>
+              ) : (
+                <div className="text-xs text-warning">
+                  Keine Signatur hinterlegt —{" "}
+                  <a href="/settings" className="underline hover:text-warning/80">
+                    in Einstellungen anlegen
+                  </a>
+                  .
+                </div>
+              )}
+
               <div className="flex justify-end">
                 <button
                   onClick={submitReply}

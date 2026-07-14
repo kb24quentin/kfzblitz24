@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { TicketDetail } from "./ticket-detail";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,13 @@ export default async function TicketDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const session = await auth();
+  const currentUserSignature = session?.user?.email
+    ? await prisma.signature.findFirst({
+        where: { user: { email: session.user.email } },
+        select: { html: true },
+      })
+    : null;
 
   const [ticket, users, templates] = await Promise.all([
     prisma.ticket.findUnique({
@@ -81,6 +89,7 @@ export default async function TicketDetailPage({
       }}
       users={users}
       templates={templates}
+      signatureHtml={currentUserSignature?.html || null}
     />
   );
 }

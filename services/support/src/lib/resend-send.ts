@@ -19,7 +19,22 @@ type SendArgs = {
   authorUserId?: string | null;
   aiGenerated?: boolean;
   approvedDraftId?: string | null;
+  /** When false, skip auto-appending the author's signature. Default true. */
+  appendSignature?: boolean;
 };
+
+async function loadSignatureHtml(userId: string | null | undefined): Promise<string | null> {
+  if (!userId) return null;
+  const sig = await prisma.signature.findUnique({ where: { userId } });
+  return sig?.html?.trim() || null;
+}
+
+function joinBodyWithSignature(bodyHtml: string, signatureHtml: string | null): string {
+  if (!signatureHtml) return bodyHtml;
+  // Skip if signature is already present verbatim (idempotent for AI-approved drafts)
+  if (bodyHtml.includes(signatureHtml)) return bodyHtml;
+  return `${bodyHtml}\n<br><br>\n${signatureHtml}`;
+}
 
 /**
  * Sends a reply via Resend, persists it as an outbound Message on the ticket,
@@ -33,6 +48,7 @@ export async function sendMailAndPersist({
   authorUserId,
   aiGenerated = false,
   approvedDraftId = null,
+  appendSignature = true,
 }: SendArgs) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -48,8 +64,10 @@ export async function sendMailAndPersist({
   const finalSubject =
     subject?.trim() || (ticket.subject.startsWith("Re: ") ? ticket.subject : `Re: ${ticket.subject}`);
 
-  const wrappedHtml = wrapEmailHtml(bodyHtml);
-  const plainText = htmlToPlainText(bodyHtml);
+  const signatureHtml = appendSignature ? await loadSignatureHtml(authorUserId) : null;
+  const finalBodyHtml = joinBodyWithSignature(bodyHtml, signatureHtml);
+  const wrappedHtml = wrapEmailHtml(finalBodyHtml);
+  const plainText = htmlToPlainText(finalBodyHtml);
 
   // Build In-Reply-To / References to preserve threading
   const inReplyTo = lastMsg?.messageIdHeader || undefined;

@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { Settings, CheckCircle2, XCircle, Link2, Unlink } from "lucide-react";
 import { isGmailConfigured, getGmailUserEmail, hasOAuthApp, getRedirectUri } from "@/lib/gmail";
+import { auth } from "@/lib/auth";
+import { SignatureEditor } from "./signature-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,14 @@ export default async function SettingsPage({
   searchParams: Promise<{ gmail?: string; detail?: string }>;
 }) {
   const params = await searchParams;
+  const session = await auth();
+  const currentUser = session?.user?.email
+    ? await prisma.user.findUnique({
+        where: { email: session.user.email },
+        include: { signature: true },
+      })
+    : null;
+
   const [users, cursor, gmailOk, gmailUserEmail] = await Promise.all([
     prisma.user.findMany({ orderBy: { name: "asc" } }),
     prisma.gmailCursor.findFirst({ where: { id: "singleton" } }),
@@ -112,6 +122,12 @@ export default async function SettingsPage({
           </div>
         )}
       </div>
+
+      {currentUser && (
+        <div className="mb-6">
+          <SignatureEditor signature={currentUser.signature} />
+        </div>
+      )}
 
       <div className="bg-bg-card border border-border rounded-xl p-6">
         <h2 className="font-semibold text-text mb-3">Team ({users.length})</h2>
