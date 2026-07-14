@@ -28,7 +28,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # im Container-Label-Endpoint (services/retoure/src/lib/pdf-to-tspl.ts) —
 # damit das pixel-perfekte Dashboard-Design auf dem Xprinter XP-420B
 # im Warehouse landet, statt einfaches Text-TSPL.
-RUN apk add --no-cache openssl poppler-utils \
+#
+# ttf-freefont + fontconfig sind ZWINGEND — poppler auf nacktem Alpine
+# hat KEINE Base-14-Fonts (Helvetica/Times/Courier). Ohne Font-Substitution
+# rendert pdftoppm alle Text-Runs als leere Boxen: Layout kommt raus,
+# aber alle Beschriftungen fehlen (empirisch bestätigt in Prod-Test).
+# ttf-freefont bringt FreeSans/FreeSerif/FreeMono die 1:1-metrisch als
+# Helvetica/Times/Courier-Ersatz einspringen.
+RUN apk add --no-cache openssl poppler-utils ttf-freefont fontconfig \
+ && fc-cache -f \
  && npm install -g prisma@6.19.3
 
 RUN addgroup --system --gid 1001 nodejs \
