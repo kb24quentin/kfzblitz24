@@ -8,6 +8,7 @@ import { sendMailAndPersist } from "@/lib/resend-send";
 import { computeSlaDeadlines } from "@/lib/settings";
 import { TICKET_STATUSES } from "@/lib/status";
 import { generateTicketCode } from "@/lib/ticket-code";
+import { generateDraftForTicket } from "@/lib/ticket-ai";
 
 async function requireUser() {
   const session = await auth();
@@ -308,6 +309,12 @@ export async function updateContactAction(formData: FormData) {
 
   if (ticketId) revalidatePath(`/tickets/${ticketId}`);
   revalidatePath("/contacts");
+}
+
+export async function regenerateDraftAction(ticketId: string) {
+  await requireUser();
+  await generateDraftForTicket(ticketId, { force: true });
+  revalidatePath(`/tickets/${ticketId}`);
 }
 
 export async function rejectDraftAction(draftId: string, reason?: string) {

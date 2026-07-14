@@ -36,6 +36,7 @@ import {
   addOrderAction,
   removeOrderAction,
   resendMessageAction,
+  regenerateDraftAction,
 } from "./actions";
 import { STATUS_LABEL, PRIORITY_LABEL, PRIORITY_CLASSES } from "@/lib/status";
 
@@ -328,6 +329,13 @@ export function TicketDetail({
     });
   };
 
+  const submitRegenerateDraft = () => {
+    startTransition(async () => {
+      await regenerateDraftAction(ticket.id);
+      router.refresh();
+    });
+  };
+
   const submitNote = () => {
     if (!noteBody.trim() || pending) return;
     const fd = new FormData();
@@ -494,6 +502,14 @@ export function TicketDetail({
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-light transition-colors disabled:opacity-50"
                   >
                     <ArrowRight className="w-4 h-4" /> In Antwort übernehmen
+                  </button>
+                  <button
+                    onClick={submitRegenerateDraft}
+                    disabled={pending}
+                    title="AI-Draft neu erzeugen (überschreibt aktuellen)"
+                    className="px-4 py-2 border border-border rounded-lg text-sm text-text-light hover:bg-bg-secondary transition-colors disabled:opacity-50 flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" /> Neu
                   </button>
                   <button
                     onClick={() => rejectDraft(ticket.drafts[0].id)}

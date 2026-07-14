@@ -8,8 +8,15 @@ import { getAutoSendCategories, getAutoSendMinConfidence } from "@/lib/settings"
  * If confidence is high enough AND the category is auto-send-whitelisted,
  * the draft is sent immediately (skipping human review). Otherwise it lands
  * as a pending draft on the ticket for a human to approve.
+ *
+ * @param options.force  If true, marks any existing pending draft as
+ *                       'superseded' before generating a fresh one. Used by
+ *                       the manual "Neu erzeugen"-button in the UI.
  */
-export async function generateDraftForTicket(ticketId: string): Promise<void> {
+export async function generateDraftForTicket(
+  ticketId: string,
+  options?: { force?: boolean }
+): Promise<void> {
   if (!isAiConfigured()) return;
 
   const ticket = await prisma.ticket.findUnique({
@@ -24,7 +31,8 @@ export async function generateDraftForTicket(ticketId: string): Promise<void> {
   const lastInbound = [...ticket.messages].reverse().find((m) => m.direction === "inbound");
   if (!lastInbound) return;
 
-  // Skip if we already have a pending draft newer than the last inbound
+  const force = options?.force === true;
+
   const existingPending = await prisma.aiDraft.findFirst({
     where: {
       ticketId,
@@ -32,7 +40,24 @@ export async function generateDraftForTicket(ticketId: string): Promise<void> {
       createdAt: { gt: lastInbound.createdAt },
     },
   });
-  if (existingPending) return;
+  if (existingPending && !force) return;
+  if (existingPending && force) {
+    await prisma.aiDraft.update({
+      where: { id: existingPending.id },
+      data: { status: "superseded" },
+    });
+  }
+
+  const templates = await prisma.template.findMany({
+    orderBy: [{ category: "asc" }, { name: "asc" }],
+    select: {
+      shortcode: true,
+      name: true,
+      category: true,
+      subject: true,
+      bodyHtml: true,
+    },
+  });
 
   const result = await classifyAndDraft({
     subject: ticket.subject,
@@ -42,6 +67,7 @@ export async function generateDraftForTicket(ticketId: string): Promise<void> {
     customerLastName: ticket.contact.lastName,
     bodyText: lastInbound.bodyText || lastInbound.bodyHtml.replace(/<[^>]+>/g, ""),
     ticketCode: ticket.code,
+    templates,
     previousMessages: ticket.messages.map((m) => ({
       direction: m.direction,
       bodyText: m.bodyText || m.bodyHtml.replace(/<[^>]+>/g, ""),
@@ -69,7 +95,7 @@ export async function generateDraftForTicket(ticketId: string): Promise<void> {
     },
   });
 
-  // Also update ticket category + priority (only sharpen priority, never soften)
+  // Only sharpen priority — never soften. AI can escalate but not de-escalate.
   const priorityRank: Record<string, number> = { low: 1, normal: 2, high: 3, urgent: 4 };
   const currentPri = priorityRank[ticket.priority] ?? 2;
   const suggestedPri = priorityRank[result.priority] ?? 2;
@@ -89,7 +115,10 @@ export async function generateDraftForTicket(ticketId: string): Promise<void> {
           category: result.category,
           priority: result.priority,
           confidence: result.confidence,
+          templateUsed: result.templateUsed,
           autoSendEligible: eligible,
+          reasoning: result.reasoning,
+          forced: force,
         }),
       },
     }),

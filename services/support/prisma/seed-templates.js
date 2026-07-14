@@ -101,8 +101,9 @@ Bomhardstraße 7<br>
     category: "shipping",
     subject: "Sendungsverfolgung zu Ihrer Bestellung",
     bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
-<p>wir haben Ihre Anfrage zur Sendung erhalten und prüfen den aktuellen Status. Sie erhalten in Kürze eine Rückmeldung mit den Sendungsdaten.</p>
-<p>Falls die Sendung bereits an Sie übergeben wurde, sollten Sie zusätzlich eine automatische Benachrichtigung vom Versanddienstleister (DHL / DPD) erhalten haben — bitte prüfen Sie ggf. Ihren Spam-Ordner.</p>`,
+<p>wir prüfen den Status Ihrer Bestellung und melden uns umgehend zurück.</p>
+<p>Zur Orientierung: Bestellungen die uns bis <strong>14 Uhr</strong> erreichen, versenden wir in der Regel am <strong>selben Werktag</strong> — spätere Bestellungen gehen am nächsten Werktag raus. In seltenen Fällen kann es mal etwas länger dauern, wir arbeiten dann aber mit Hochdruck daran.</p>
+<p>Sobald die Sendung an DHL/DPD übergeben wurde, erhalten Sie automatisch eine Tracking-Nummer per E-Mail (bitte ggf. auch den Spam-Ordner prüfen).</p>`,
   },
   {
     name: "Bestellung stornieren (noch nicht versandt)",
