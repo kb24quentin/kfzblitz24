@@ -158,6 +158,7 @@ const EVENT_LABEL: Record<string, string> = {
   message_received: "Nachricht empfangen",
   snoozed: "Auf Wiedervorlage gelegt",
   woken: "Wiedervorlage aufgehoben",
+  reopened_by_customer: "Auto-reopen (Kundenantwort)",
   order_added: "Bestellung verknüpft",
   order_removed: "Bestellung entfernt",
 };

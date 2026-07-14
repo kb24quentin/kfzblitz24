@@ -164,24 +164,30 @@ async function applyReopenLogic(
   ticket: { id: string; status: string; snoozedUntil: Date | null; resolvedAt: Date | null },
   gmailThreadId: string
 ) {
-  const shouldReopen = shouldReopenOnCustomerReply(ticket.status);
-  const shouldClearSnooze = ticket.snoozedUntil !== null;
-  const shouldWakeFromPending = ticket.status === "pending";
-  const shouldPatchThread = true; // always sync gmailThreadId in case it wasn't set
+  const reopens = shouldReopenOnCustomerReply(ticket.status);
+  const nextStatus = reopens ? "open" : ticket.status;
+  const statusChanged = nextStatus !== ticket.status;
 
-  if (!shouldReopen && !shouldClearSnooze && !shouldWakeFromPending && !shouldPatchThread) {
-    return;
-  }
   await prisma.ticket.update({
     where: { id: ticket.id },
     data: {
-      status: shouldReopen || shouldWakeFromPending ? "open" : ticket.status,
-      resolvedAt: shouldReopen ? null : ticket.resolvedAt,
+      status: nextStatus,
+      resolvedAt: statusChanged ? null : ticket.resolvedAt,
       snoozedUntil: null,
       snoozedReason: null,
       gmailThreadId,
     },
   });
+
+  if (statusChanged) {
+    await prisma.ticketEvent.create({
+      data: {
+        ticketId: ticket.id,
+        type: "reopened_by_customer",
+        meta: JSON.stringify({ from: ticket.status, to: nextStatus }),
+      },
+    });
+  }
 }
 
 async function findOrCreateTicket(p: Parsed): Promise<{ ticketId: string; isNew: boolean }> {
