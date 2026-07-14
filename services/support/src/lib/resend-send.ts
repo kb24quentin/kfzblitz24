@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import { prisma } from "@/lib/db";
 import { getFromAddress, getReplyToAddress, wrapEmailHtml, htmlToPlainText } from "@/lib/email";
 import { insertToGmailSent } from "@/lib/gmail";
+import { isFullHtmlDocument } from "@/lib/mail-template";
 import {
   getAutoAckEnabled,
   getAutoAckSubject,
@@ -126,10 +127,16 @@ export async function sendMailAndPersist({
   const finalSubject =
     subject?.trim() || (ticket.subject.startsWith("Re: ") ? ticket.subject : `Re: ${ticket.subject}`);
 
+  // `bodyHtml` may be a bare inner-content fragment (typical, from the
+  // TipTap composer or from the ack template) OR a pre-wrapped full HTML
+  // document (rare — legacy resend of pre-refactor messages). The double-
+  // wrap check below keeps both cases correct.
   const signatureHtml = appendSignature ? await loadSignatureHtml(authorUserId) : null;
-  const finalBodyHtml = joinBodyWithSignature(bodyHtml, signatureHtml);
-  const wrappedHtml = wrapEmailHtml(finalBodyHtml);
-  const plainText = htmlToPlainText(finalBodyHtml);
+  const innerContent = joinBodyWithSignature(bodyHtml, signatureHtml);
+  const wrappedHtml = isFullHtmlDocument(innerContent)
+    ? innerContent
+    : wrapEmailHtml(innerContent);
+  const plainText = htmlToPlainText(innerContent);
 
   // Build In-Reply-To / References to preserve threading
   const inReplyTo = lastMsg?.messageIdHeader || undefined;
@@ -157,7 +164,8 @@ export async function sendMailAndPersist({
   }
   const resendId = res.data?.id;
 
-  // Persist as outbound Message
+  // Persist the INNER content (not the branded wrap) — display in the ticket
+  // thread renders it as a fragment, and a future resend applies a fresh wrap.
   const message = await prisma.message.create({
     data: {
       ticketId,
@@ -168,7 +176,7 @@ export async function sendMailAndPersist({
       fromEmail: from,
       toEmail: to,
       subject: finalSubject,
-      bodyHtml: wrappedHtml,
+      bodyHtml: innerContent,
       bodyText: plainText,
       resendMessageId: resendId,
       inReplyTo,
