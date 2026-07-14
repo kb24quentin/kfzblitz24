@@ -74,7 +74,7 @@ export default async function SettingsPage({
   const redirectUri = getRedirectUri();
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       <h1 className="text-xl font-bold text-text flex items-center gap-2 mb-6">
         <Settings className="w-5 h-5" /> Einstellungen
       </h1>

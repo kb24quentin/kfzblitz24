@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  googleId     String?      @unique
+  imageUrl     String?
+  role         String       @default("user") // 'user' | 'admin' — intranet-scope
+  active       Boolean      @default(false) // pending until admin approves
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  appAccesses  AppAccess[]
+  newsPosts    NewsPost[]   @relation("NewsAuthor")
+}
+
+/**
+ * Per-app access record. `appKey` is a string identifier that matches the
+ * apps registry in lib/apps.ts (support, retoure_admin, crm, opensign, ...).
+ * `role` is app-specific (e.g. "admin" or "agent" for support). The individual
+ * apps still own their user tables — this is the central grant list.
+ */
+model AppAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  appKey    String
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, appKey])
+  @@index([appKey])
+}
+
+model NewsPost {
+  id           String   @id @default(cuid())
+  authorUserId String
+  title        String
+  bodyHtml     String
+  pinned       Boolean  @default(false)
+  publishedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  author User @relation("NewsAuthor", fields: [authorUserId], references: [id])
+
+  @@index([publishedAt])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

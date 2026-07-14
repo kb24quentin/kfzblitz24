@@ -1,0 +1,57 @@
+services:
+  intranet-db:
+    image: postgres:16-alpine
+    container_name: intranet_db_staging
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: intranet
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: intranet
+    volumes:
+      - /opt/kfzblitz24/data/staging/intranet-postgres:/var/lib/postgresql/data
+    networks:
+      - staging_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intranet -d intranet"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  intranet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kfzblitz24/intranet:staging
+    container_name: intranet_staging
+    restart: unless-stopped
+    depends_on:
+      intranet-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://intranet:${DB_PASSWORD}@intranet-db:5432/intranet
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: https://intranet.staging.kfzblitz24-group.com
+      NEXTAUTH_URL: https://intranet.staging.kfzblitz24-group.com
+      GOOGLE_SSO_CLIENT_ID: ${GOOGLE_SSO_CLIENT_ID}
+      GOOGLE_SSO_CLIENT_SECRET: ${GOOGLE_SSO_CLIENT_SECRET}
+      SSO_ALLOWED_DOMAIN: ${SSO_ALLOWED_DOMAIN:-kfzblitz24.de}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+    networks:
+      - staging_internal
+      - traefik_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_net
+      - traefik.http.routers.intranet-staging.rule=Host(`intranet.staging.kfzblitz24-group.com`)
+      - traefik.http.routers.intranet-staging.entrypoints=websecure
+      - traefik.http.routers.intranet-staging.tls=true
+      - traefik.http.routers.intranet-staging.tls.certresolver=letsencrypt
+      - traefik.http.services.intranet-staging.loadbalancer.server.port=3000
+
+networks:
+  staging_internal:
+    external: true
+  traefik_net:
+    external: true

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Shield, User, Edit2, Save, X } from "lucide-react";
+import { Plus, Shield, User, Edit2, Save, X, Check, Ban } from "lucide-react";
 import {
   createUserAction,
   updateUserAction,
@@ -280,17 +280,17 @@ export function UserManagement({
                       <td className="p-3 text-text-light text-xs">
                         {new Date(user.createdAt).toLocaleDateString("de-DE")}
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 whitespace-nowrap">
                         <div className="flex items-center gap-1 justify-end">
                           <button
                             onClick={() => {
                               setEditingId(user.id);
                               setShowForm(false);
                             }}
-                            className="p-1.5 text-text-light hover:text-text hover:bg-bg-secondary rounded"
+                            className="p-2 text-text-light hover:text-text hover:bg-bg-secondary rounded"
                             title="Bearbeiten / Passwort ändern"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-4 h-4" />
                           </button>
                           <form action={toggleUserActiveAction}>
                             <input type="hidden" name="id" value={user.id} />
@@ -302,14 +302,24 @@ export function UserManagement({
                             <button
                               type="submit"
                               disabled={isSelf && user.active}
-                              className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                              className={`p-2 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                                 user.active
-                                  ? "text-danger hover:bg-danger/10"
-                                  : "text-success hover:bg-success/10"
+                                  ? "text-text-light hover:text-danger hover:bg-danger/10"
+                                  : "text-text-light hover:text-success hover:bg-success/10"
                               }`}
-                              title={isSelf && user.active ? "Selbst-Deaktivierung nicht möglich" : ""}
+                              title={
+                                isSelf && user.active
+                                  ? "Selbst-Deaktivierung nicht möglich"
+                                  : user.active
+                                    ? "Deaktivieren"
+                                    : "Aktivieren"
+                              }
                             >
-                              {user.active ? "Deaktivieren" : "Aktivieren"}
+                              {user.active ? (
+                                <Ban className="w-4 h-4" />
+                              ) : (
+                                <Check className="w-4 h-4" />
+                              )}
                             </button>
                           </form>
                         </div>
