@@ -4,6 +4,7 @@ import { generateDraftForTicket } from "@/lib/ticket-ai";
 import { splitName } from "@/lib/name-parse";
 import { computeSlaDeadlines } from "@/lib/settings";
 import { shouldReopenOnCustomerReply } from "@/lib/status";
+import { sendAcknowledgement } from "@/lib/resend-send";
 
 const INGEST_LABEL_NAME = "kb24-support-ingested";
 let cachedLabelId: string | null = null;
@@ -278,6 +279,13 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
   generateDraftForTicket(ticketId).catch((err) =>
     console.warn("[gmail-sync] AI draft failed:", err instanceof Error ? err.message : err)
   );
+
+  // Fire and forget: auto-acknowledgement (only for NEW tickets, idempotent)
+  if (isNew) {
+    sendAcknowledgement(ticketId).catch((err) =>
+      console.warn("[gmail-sync] acknowledgement failed:", err instanceof Error ? err.message : err)
+    );
+  }
 
   return { ticketId, isNew };
 }

@@ -34,6 +34,7 @@ import {
   wakeTicketAction,
   addOrderAction,
   removeOrderAction,
+  resendMessageAction,
 } from "./actions";
 import { STATUS_LABEL, PRIORITY_LABEL, PRIORITY_CLASSES } from "@/lib/status";
 
@@ -43,11 +44,14 @@ type TemplateLite = { id: string; name: string; subject: string; bodyHtml: strin
 type Message = {
   id: string;
   direction: string;
+  kind: string;
   fromEmail: string;
   toEmail: string;
   subject: string | null;
   bodyHtml: string;
   aiGenerated: boolean;
+  resentFromId: string | null;
+  resendMessageId: string | null;
   authorUser: UserLite | null;
   createdAt: string;
   sentAt: string | null;
@@ -280,6 +284,13 @@ export function TicketDetail({
     });
   };
 
+  const submitResendMessage = (messageId: string) => {
+    startTransition(async () => {
+      await resendMessageAction(messageId);
+      router.refresh();
+    });
+  };
+
   const submitNote = () => {
     if (!noteBody.trim() || pending) return;
     const fd = new FormData();
@@ -409,7 +420,12 @@ export function TicketDetail({
                 </div>
               )}
               {ticket.messages.map((m) => (
-                <MessageItem key={m.id} m={m} />
+                <MessageItem
+                  key={m.id}
+                  m={m}
+                  onResend={submitResendMessage}
+                  pending={pending}
+                />
               ))}
             </div>
           </div>
@@ -893,12 +909,29 @@ export function TicketDetail({
   );
 }
 
-function MessageItem({ m }: { m: Message }) {
+function MessageItem({
+  m,
+  onResend,
+  pending,
+}: {
+  m: Message;
+  onResend: (id: string) => void;
+  pending: boolean;
+}) {
   const isOutbound = m.direction === "outbound";
+  const kindBadge =
+    m.kind === "acknowledgement"
+      ? { label: "Eingangsbestätigung (auto)", cls: "bg-success/15 text-success" }
+      : m.kind === "resend"
+        ? { label: "Erneut gesendet", cls: "bg-warning/15 text-warning" }
+        : null;
+
+  const bg = m.kind === "acknowledgement" ? "bg-success/5" : isOutbound ? "bg-info/5" : "";
+
   return (
-    <div className={`px-5 py-4 ${isOutbound ? "bg-info/5" : ""}`}>
-      <div className="flex items-center justify-between text-xs text-text-light mb-2">
-        <div className="flex items-center gap-2">
+    <div className={`px-5 py-4 ${bg}`}>
+      <div className="flex items-center justify-between text-xs text-text-light mb-2 gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <span
             className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
               isOutbound ? "bg-info/15 text-info" : "bg-gray-100 text-gray-700"
@@ -906,19 +939,52 @@ function MessageItem({ m }: { m: Message }) {
           >
             {isOutbound ? "Ausgehend" : "Eingehend"}
           </span>
+          {kindBadge && (
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${kindBadge.cls}`}
+            >
+              {kindBadge.label}
+            </span>
+          )}
           {m.aiGenerated && (
             <span className="inline-flex items-center gap-1 text-xs text-accent">
               <Sparkles className="w-3 h-3" /> AI
             </span>
           )}
           <span className="text-text font-medium">
-            {isOutbound ? m.authorUser?.name || m.fromEmail : m.fromEmail}
+            {isOutbound
+              ? m.authorUser?.name || (m.kind === "acknowledgement" ? "System" : m.fromEmail)
+              : m.fromEmail}
           </span>
           <span>→ {m.toEmail}</span>
         </div>
-        <span>
-          {format(new Date(m.sentAt || m.createdAt), "dd.MM.yyyy HH:mm", { locale: de })}
-        </span>
+        <div className="flex items-center gap-2 text-xs">
+          <span>
+            {format(new Date(m.sentAt || m.createdAt), "dd.MM.yyyy HH:mm", { locale: de })}
+          </span>
+          {isOutbound && m.sentAt && (
+            <span
+              className="text-success"
+              title={m.resendMessageId ? `Resend-ID: ${m.resendMessageId}` : "Erfolgreich an Resend übergeben"}
+            >
+              ✓ gesendet
+            </span>
+          )}
+          {isOutbound && (
+            <button
+              onClick={() => {
+                if (confirm("Diese Nachricht erneut an den Kunden senden?")) {
+                  onResend(m.id);
+                }
+              }}
+              disabled={pending}
+              className="inline-flex items-center gap-1 px-2 py-0.5 border border-border rounded text-text-light hover:bg-bg-secondary hover:text-text transition-colors disabled:opacity-50"
+              title="Genau diese Nachricht nochmal an den Kunden senden"
+            >
+              <Send className="w-3 h-3" /> Erneut senden
+            </button>
+          )}
+        </div>
       </div>
       {m.subject && (
         <div className="text-sm font-medium text-text mb-2">{m.subject}</div>

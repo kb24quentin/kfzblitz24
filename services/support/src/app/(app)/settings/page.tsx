@@ -4,7 +4,14 @@ import { Settings, CheckCircle2, XCircle, Link2, Unlink, FileText, ArrowRight, C
 import { isGmailConfigured, getGmailUserEmail, hasOAuthApp, getRedirectUri } from "@/lib/gmail";
 import { auth } from "@/lib/auth";
 import { SignatureEditor } from "./signature-editor";
-import { getSlaFirstResponseHours, getSlaResolutionHours } from "@/lib/settings";
+import { AutoAckEditor } from "./auto-ack-editor";
+import {
+  getSlaFirstResponseHours,
+  getSlaResolutionHours,
+  getAutoAckEnabled,
+  getAutoAckSubject,
+  getAutoAckBody,
+} from "@/lib/settings";
 import { saveSlaSettingsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +30,18 @@ export default async function SettingsPage({
       })
     : null;
 
-  const [users, cursor, gmailOk, gmailUserEmail, templateCount, slaFirst, slaRes] = await Promise.all([
+  const [
+    users,
+    cursor,
+    gmailOk,
+    gmailUserEmail,
+    templateCount,
+    slaFirst,
+    slaRes,
+    ackEnabled,
+    ackSubject,
+    ackBody,
+  ] = await Promise.all([
     prisma.user.findMany({ orderBy: { name: "asc" } }),
     prisma.gmailCursor.findFirst({ where: { id: "singleton" } }),
     isGmailConfigured(),
@@ -31,6 +49,9 @@ export default async function SettingsPage({
     prisma.template.count(),
     getSlaFirstResponseHours(),
     getSlaResolutionHours(),
+    getAutoAckEnabled(),
+    getAutoAckSubject(),
+    getAutoAckBody(),
   ]);
   const openAiOk = !!process.env.OPENAI_API_KEY;
   const oauthAppReady = hasOAuthApp();
@@ -134,6 +155,10 @@ export default async function SettingsPage({
           <SignatureEditor signature={currentUser.signature} />
         </div>
       )}
+
+      <div className="mb-6">
+        <AutoAckEditor enabled={ackEnabled} subject={ackSubject} body={ackBody} />
+      </div>
 
       <div className="bg-bg-card border border-border rounded-xl p-6 mb-6">
         <h2 className="font-semibold text-text flex items-center gap-2 mb-1">

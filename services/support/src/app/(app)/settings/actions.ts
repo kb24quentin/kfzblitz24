@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { saveSlaHours } from "@/lib/settings";
+import { saveSlaHours, saveAutoAckSettings } from "@/lib/settings";
 
 async function requireUser() {
   const session = await auth();
@@ -39,5 +39,15 @@ export async function saveSlaSettingsAction(formData: FormData) {
   const first = Number(formData.get("firstResponseHours") || 24);
   const res = Number(formData.get("resolutionHours") || 72);
   await saveSlaHours({ firstResponseHours: first, resolutionHours: res });
+  revalidatePath("/settings");
+}
+
+export async function saveAutoAckSettingsAction(formData: FormData) {
+  await requireUser();
+  const enabled = formData.get("enabled") === "on";
+  const subject = String(formData.get("subject") || "").trim();
+  const body = String(formData.get("body") || "").trim();
+  if (!subject || !body) throw new Error("Betreff + Text erforderlich");
+  await saveAutoAckSettings({ enabled, subject, body });
   revalidatePath("/settings");
 }

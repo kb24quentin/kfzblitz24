@@ -79,6 +79,9 @@ export default async function TicketDetailPage({
           ...m,
           sentAt: m.sentAt?.toISOString() || null,
           createdAt: m.createdAt.toISOString(),
+          kind: m.kind,
+          resentFromId: m.resentFromId,
+          resendMessageId: m.resendMessageId,
         })),
         notes: ticket.notes.map((n) => ({
           ...n,

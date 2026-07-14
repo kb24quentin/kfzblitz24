@@ -2,6 +2,13 @@ import { Resend } from "resend";
 import { prisma } from "@/lib/db";
 import { getFromAddress, getReplyToAddress, wrapEmailHtml, htmlToPlainText } from "@/lib/email";
 import { insertToGmailSent } from "@/lib/gmail";
+import {
+  getAutoAckEnabled,
+  getAutoAckSubject,
+  getAutoAckBody,
+  getSlaFirstResponseHours,
+  substituteAckVariables,
+} from "@/lib/settings";
 
 let _resend: Resend | null = null;
 function client(): Resend {
@@ -21,7 +28,59 @@ type SendArgs = {
   approvedDraftId?: string | null;
   /** When false, skip auto-appending the author's signature. Default true. */
   appendSignature?: boolean;
+  /** reply | acknowledgement | resend — default 'reply' */
+  kind?: "reply" | "acknowledgement" | "resend";
+  /** For resends: FK to the original message we're resending */
+  resentFromId?: string | null;
+  /** For acknowledgements: don't set firstResponseAt (ack is not a real response) */
+  countsAsFirstResponse?: boolean;
 };
+
+/**
+ * Sends the auto-acknowledgement to the customer on new inbound tickets.
+ * Idempotent: does nothing if the ticket already has an acknowledgement message.
+ * Does NOT count as first-response (SLA metric stays honest).
+ */
+export async function sendAcknowledgement(ticketId: string): Promise<void> {
+  if (!(await getAutoAckEnabled())) return;
+
+  const [ticket, existingAck] = await Promise.all([
+    prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: { contact: true },
+    }),
+    prisma.message.findFirst({
+      where: { ticketId, kind: "acknowledgement" },
+      select: { id: true },
+    }),
+  ]);
+  if (!ticket || existingAck) return;
+
+  const [subjectTpl, bodyTpl, slaHours] = await Promise.all([
+    getAutoAckSubject(),
+    getAutoAckBody(),
+    getSlaFirstResponseHours(),
+  ]);
+
+  const ctx = {
+    ticketNumber: ticket.number,
+    ticketSubject: ticket.subject,
+    contact: ticket.contact,
+    slaFirstResponseHours: slaHours,
+  };
+  const subject = substituteAckVariables(subjectTpl, ctx);
+  const bodyHtml = substituteAckVariables(bodyTpl, ctx);
+
+  await sendMailAndPersist({
+    ticketId,
+    subject,
+    bodyHtml,
+    authorUserId: null,
+    kind: "acknowledgement",
+    appendSignature: false,
+    countsAsFirstResponse: false,
+  });
+}
 
 async function loadSignatureHtml(userId: string | null | undefined): Promise<string | null> {
   if (!userId) return null;
@@ -49,6 +108,9 @@ export async function sendMailAndPersist({
   aiGenerated = false,
   approvedDraftId = null,
   appendSignature = true,
+  kind = "reply",
+  resentFromId = null,
+  countsAsFirstResponse = true,
 }: SendArgs) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -101,6 +163,8 @@ export async function sendMailAndPersist({
       ticketId,
       authorUserId: authorUserId ?? null,
       direction: "outbound",
+      kind,
+      resentFromId,
       fromEmail: from,
       toEmail: to,
       subject: finalSubject,
@@ -114,18 +178,27 @@ export async function sendMailAndPersist({
   });
 
   // Post-processing in one transaction: event + firstResponseAt + draft-approve
+  const eventType =
+    kind === "acknowledgement"
+      ? "acknowledgement_sent"
+      : kind === "resend"
+        ? "message_resent"
+        : aiGenerated
+          ? "ai_auto_sent"
+          : "message_sent";
+
   const updates: Promise<unknown>[] = [
     prisma.ticketEvent.create({
       data: {
         ticketId,
         userId: authorUserId ?? null,
-        type: aiGenerated ? "ai_auto_sent" : "message_sent",
-        meta: JSON.stringify({ messageId: message.id, resendId }),
+        type: eventType,
+        meta: JSON.stringify({ messageId: message.id, resendId, resentFromId }),
       },
     }),
   ];
 
-  if (!ticket.firstResponseAt) {
+  if (!ticket.firstResponseAt && countsAsFirstResponse) {
     updates.push(
       prisma.ticket.update({
         where: { id: ticketId },

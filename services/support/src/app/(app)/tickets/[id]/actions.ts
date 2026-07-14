@@ -261,6 +261,26 @@ export async function removeOrderAction(orderId: string) {
   revalidatePath(`/tickets/${existing.ticketId}`);
 }
 
+export async function resendMessageAction(messageId: string) {
+  const user = await requireUser();
+  const msg = await prisma.message.findUnique({ where: { id: messageId } });
+  if (!msg) throw new Error("Nachricht nicht gefunden");
+  if (msg.direction !== "outbound") throw new Error("Nur ausgehende Nachrichten können erneut gesendet werden");
+
+  await sendMailAndPersist({
+    ticketId: msg.ticketId,
+    subject: msg.subject || undefined,
+    bodyHtml: msg.bodyHtml,
+    authorUserId: user.id,
+    appendSignature: false, // original already has signature
+    kind: "resend",
+    resentFromId: msg.id,
+    countsAsFirstResponse: false, // resend of an existing message is not a NEW first response
+  });
+
+  revalidatePath(`/tickets/${msg.ticketId}`);
+}
+
 export async function updateContactAction(formData: FormData) {
   await requireUser();
   const contactId = String(formData.get("contactId") || "");

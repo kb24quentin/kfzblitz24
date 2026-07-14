@@ -101,6 +101,7 @@ model Message {
   ticketId        String
   authorUserId    String? // set for outbound messages authored by an agent
   direction       String // inbound, outbound
+  kind            String    @default("reply") // reply, acknowledgement, resend
   fromEmail       String
   toEmail         String // may be a JSON array for multiple recipients
   ccEmail         String?
@@ -112,12 +113,15 @@ model Message {
   messageIdHeader String? // Message-Id header value we emitted or received
   inReplyTo       String?
   aiGenerated     Boolean   @default(false)
+  resentFromId    String? // FK to a prior Message that this is a resend of
   sentAt          DateTime?
   createdAt       DateTime  @default(now())
 
   ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   authorUser  User?        @relation(fields: [authorUserId], references: [id])
   attachments Attachment[]
+  resentFrom  Message?     @relation("MessageResends", fields: [resentFromId], references: [id])
+  resends     Message[]    @relation("MessageResends")
 
   @@index([ticketId])
 }
