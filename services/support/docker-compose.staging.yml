@@ -43,6 +43,7 @@ services:
       GMAIL_USER_EMAIL: ${GMAIL_USER_EMAIL}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      API_TOKEN: ${API_TOKEN}
       SLA_HOURS: ${SLA_HOURS:-24}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
@@ -58,6 +59,46 @@ services:
       - traefik.http.routers.support-staging.tls=true
       - traefik.http.routers.support-staging.tls.certresolver=letsencrypt
       - traefik.http.services.support-staging.loadbalancer.server.port=3000
+
+  support-cron:
+    image: curlimages/curl:8.10.1
+    container_name: support_cron_staging
+    restart: unless-stopped
+    depends_on:
+      - support
+    environment:
+      API_TOKEN: ${API_TOKEN}
+      GMAIL_POLL_SECONDS: ${GMAIL_POLL_SECONDS:-60}
+      SLA_POLL_SECONDS: ${SLA_POLL_SECONDS:-300}
+      TZ: Europe/Berlin
+    networks:
+      - staging_internal
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 30
+        LAST_SLA=/tmp/last-sla-run
+        while true; do
+          NOW=$$(date -Iseconds)
+          echo "[cron] gmail-sync @ $$NOW"
+          curl -sS -o /dev/null -w "  gmail-sync HTTP %{http_code} in %{time_total}s\n" \
+            -X POST \
+            -H "Authorization: Bearer $$API_TOKEN" \
+            http://support:3000/api/cron/gmail-sync || echo "[cron] gmail-sync failed"
+
+          # Run SLA check every SLA_POLL_SECONDS
+          NOW_TS=$$(date +%s)
+          LAST_TS=$$(cat $$LAST_SLA 2>/dev/null || echo 0)
+          if [ $$((NOW_TS - LAST_TS)) -ge $$SLA_POLL_SECONDS ]; then
+            echo "[cron] sla-check @ $$NOW"
+            curl -sS -o /dev/null -w "  sla-check HTTP %{http_code} in %{time_total}s\n" \
+              -X POST \
+              -H "Authorization: Bearer $$API_TOKEN" \
+              http://support:3000/api/cron/sla-check && echo $$NOW_TS > $$LAST_SLA || echo "[cron] sla failed"
+          fi
+
+          sleep $$GMAIL_POLL_SECONDS
+        done
 
 networks:
   staging_internal:

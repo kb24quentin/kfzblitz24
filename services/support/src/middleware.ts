@@ -5,9 +5,10 @@ export default auth((req) => {
   const isLoginPage = req.nextUrl.pathname === "/login";
   const isApiAuth = req.nextUrl.pathname.startsWith("/api/auth");
   const isWebhook = req.nextUrl.pathname.startsWith("/api/webhook");
+  const isCron = req.nextUrl.pathname.startsWith("/api/cron");
   const isHealth = req.nextUrl.pathname === "/api/health";
 
-  if (isApiAuth || isWebhook || isHealth) return;
+  if (isApiAuth || isWebhook || isCron || isHealth) return;
 
   if (isLoginPage && isLoggedIn) {
     return Response.redirect(new URL("/", req.nextUrl));
