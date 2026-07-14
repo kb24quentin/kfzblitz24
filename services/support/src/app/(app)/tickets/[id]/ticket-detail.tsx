@@ -21,7 +21,8 @@ import {
   Plus,
   BellOff,
 } from "lucide-react";
-import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor";
+import { RichTextEditor, type RichTextEditorHandle, type ShortcodeChoice } from "@/components/rich-text-editor";
+import { useMemo } from "react";
 import {
   sendReplyAction,
   addNoteAction,
@@ -136,6 +137,16 @@ type Ticket = {
   events: Event[];
 };
 
+const CATEGORY_LABEL: Record<string, string> = {
+  returns: "Retoure & Widerruf",
+  shipping: "Versand & Bestellung",
+  invoice: "Rechnung & Zahlung",
+  advisory: "Beratung",
+  complaint: "Reklamation",
+  general: "Allgemein",
+  other: "Sonstiges",
+};
+
 const STATUSES: [string, string][] = [
   ["open", STATUS_LABEL.open],
   ["pending", STATUS_LABEL.pending],
@@ -231,10 +242,21 @@ export function TicketDetail({
     setReplySubject(substitute(t.subject || replySubject));
   };
 
-  const shortcodeToHtml = (code: string): string | null => {
-    const t = templates.find((x) => x.shortcode && x.shortcode === code);
-    return t ? substitute(t.bodyHtml) : null;
-  };
+  const shortcodeChoices: ShortcodeChoice[] = useMemo(
+    () =>
+      templates
+        .filter((t) => !!t.shortcode)
+        .map((t) => ({
+          shortcode: t.shortcode!,
+          label: t.name,
+          category: t.category
+            ? CATEGORY_LABEL[t.category] || t.category
+            : null,
+          html: substitute(t.bodyHtml),
+        })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [templates, ticket.id, ticket.contact.id]
+  );
 
   const applyDraft = (d: Draft) => {
     setReplyHtml(d.bodyHtml);
@@ -523,8 +545,8 @@ export function TicketDetail({
                 ref={editorRef}
                 value={replyHtml}
                 onChange={setReplyHtml}
-                onShortcode={shortcodeToHtml}
-                placeholder="Antwort verfassen… (Tipp: ::kürzel + Enter fügt Template ein)"
+                shortcodes={shortcodeChoices}
+                placeholder="Antwort verfassen… (Tipp: :: für Template-Auswahl)"
                 minHeight={180}
               />
 
