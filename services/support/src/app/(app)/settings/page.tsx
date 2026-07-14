@@ -6,12 +6,19 @@ import { auth } from "@/lib/auth";
 import { SignatureEditor } from "./signature-editor";
 import { AutoAckEditor } from "./auto-ack-editor";
 import { UserManagement } from "./user-management";
+import { AiAutopilotSection } from "./ai-autopilot";
+import { CategoriesManager } from "./categories-manager";
+import { BusinessHoursEditor } from "./business-hours";
 import {
   getSlaFirstResponseHours,
   getSlaResolutionHours,
   getAutoAckEnabled,
   getAutoAckSubject,
   getAutoAckBody,
+  getAutoSendCategories,
+  getAutoSendMinConfidence,
+  getTicketCategories,
+  getBusinessHours,
 } from "@/lib/settings";
 import { saveSlaSettingsAction } from "./actions";
 
@@ -42,6 +49,10 @@ export default async function SettingsPage({
     ackEnabled,
     ackSubject,
     ackBody,
+    autoSendCats,
+    autoSendMinConf,
+    ticketCategories,
+    businessHours,
   ] = await Promise.all([
     prisma.user.findMany({ orderBy: [{ active: "asc" }, { name: "asc" }] }),
     prisma.gmailCursor.findFirst({ where: { id: "singleton" } }),
@@ -53,6 +64,10 @@ export default async function SettingsPage({
     getAutoAckEnabled(),
     getAutoAckSubject(),
     getAutoAckBody(),
+    getAutoSendCategories(),
+    getAutoSendMinConfidence(),
+    getTicketCategories(),
+    getBusinessHours(),
   ]);
   const openAiOk = !!process.env.OPENAI_API_KEY;
   const oauthAppReady = hasOAuthApp();
@@ -78,6 +93,8 @@ export default async function SettingsPage({
       {params.gmail === "disconnected" && (
         <FlashBanner ok>Gmail-Verbindung getrennt.</FlashBanner>
       )}
+
+      <SectionHeader title="Integrationen" />
 
       <div className="bg-bg-card border border-border rounded-xl p-6 mb-6">
         <h2 className="font-semibold text-text mb-3">Integrationen</h2>
@@ -151,15 +168,25 @@ export default async function SettingsPage({
         )}
       </div>
 
-      {currentUser && (
-        <div className="mb-6">
-          <SignatureEditor signature={currentUser.signature} />
-        </div>
-      )}
+      <SectionHeader title="Automatisierung" />
 
       <div className="mb-6">
         <AutoAckEditor enabled={ackEnabled} subject={ackSubject} body={ackBody} />
       </div>
+
+      <div className="mb-6">
+        <AiAutopilotSection
+          categories={ticketCategories}
+          allowedCategories={Array.from(autoSendCats)}
+          minConfidence={autoSendMinConf}
+        />
+      </div>
+
+      <div className="mb-6">
+        <CategoriesManager initial={ticketCategories} />
+      </div>
+
+      <SectionHeader title="Zeiten & SLAs" />
 
       <div className="bg-bg-card border border-border rounded-xl p-6 mb-6">
         <h2 className="font-semibold text-text flex items-center gap-2 mb-1">
@@ -211,6 +238,18 @@ export default async function SettingsPage({
         </form>
       </div>
 
+      <div className="mb-6">
+        <BusinessHoursEditor initial={businessHours} />
+      </div>
+
+      <SectionHeader title="Persönlich & Vorlagen" />
+
+      {currentUser && (
+        <div className="mb-6">
+          <SignatureEditor signature={currentUser.signature} />
+        </div>
+      )}
+
       <Link
         href="/templates"
         className="mb-6 flex items-center justify-between bg-bg-card border border-border rounded-xl p-5 hover:border-accent/30 transition-colors group"
@@ -230,6 +269,8 @@ export default async function SettingsPage({
         </div>
         <ArrowRight className="w-5 h-5 text-text-light group-hover:text-accent transition-colors" />
       </Link>
+
+      <SectionHeader title="Team & Zugriff" />
 
       <div className="bg-bg-card border border-border rounded-xl p-6">
         <div className="flex items-baseline justify-between mb-1">
@@ -276,6 +317,14 @@ function StatusRow({ label, detail, ok }: { label: string; detail: string; ok: b
         </span>
       )}
     </div>
+  );
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-light mt-8 mb-3 pl-1">
+      {title}
+    </h3>
   );
 }
 

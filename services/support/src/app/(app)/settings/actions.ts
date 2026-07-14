@@ -4,7 +4,15 @@ import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { saveSlaHours, saveAutoAckSettings } from "@/lib/settings";
+import {
+  saveSlaHours,
+  saveAutoAckSettings,
+  saveAutoSendCategories,
+  saveAutoSendMinConfidence,
+  saveTicketCategories,
+  saveBusinessHours,
+  type BusinessHours,
+} from "@/lib/settings";
 
 async function requireUser() {
   const session = await auth();
@@ -106,6 +114,57 @@ export async function updateUserAction(formData: FormData) {
   }
 
   await prisma.user.update({ where: { id }, data });
+  revalidatePath("/settings");
+}
+
+export async function saveAiAutopilotAction(formData: FormData) {
+  await requireAdmin();
+  const cats: string[] = [];
+  for (const [k, v] of formData.entries()) {
+    if (k.startsWith("cat_") && v === "on") cats.push(k.slice(4));
+  }
+  const rawConf = Number(formData.get("minConfidence") || 90);
+  const conf = Math.max(50, Math.min(100, rawConf)) / 100;
+  await saveAutoSendCategories(cats);
+  await saveAutoSendMinConfidence(conf);
+  revalidatePath("/settings");
+}
+
+export async function saveCategoriesAction(formData: FormData) {
+  await requireAdmin();
+  const raw = String(formData.get("categories") || "[]");
+  let parsed: { key: string; label: string }[] = [];
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) parsed = arr;
+  } catch {
+    throw new Error("Ungültige Kategorien-Daten");
+  }
+  await saveTicketCategories(parsed);
+  revalidatePath("/settings");
+}
+
+export async function saveBusinessHoursAction(formData: FormData) {
+  await requireAdmin();
+  const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+  const bh: BusinessHours = {
+    mon: { active: false, from: "08:00", to: "18:00" },
+    tue: { active: false, from: "08:00", to: "18:00" },
+    wed: { active: false, from: "08:00", to: "18:00" },
+    thu: { active: false, from: "08:00", to: "18:00" },
+    fri: { active: false, from: "08:00", to: "18:00" },
+    sat: { active: false, from: "10:00", to: "14:00" },
+    sun: { active: false, from: "10:00", to: "14:00" },
+    timezone: String(formData.get("timezone") || "Europe/Berlin"),
+  };
+  for (const d of days) {
+    bh[d] = {
+      active: formData.get(`${d}_active`) === "on",
+      from: String(formData.get(`${d}_from`) || "08:00"),
+      to: String(formData.get(`${d}_to`) || "18:00"),
+    };
+  }
+  await saveBusinessHours(bh);
   revalidatePath("/settings");
 }
 

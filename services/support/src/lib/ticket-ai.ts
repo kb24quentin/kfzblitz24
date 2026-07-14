@@ -1,9 +1,7 @@
 import { prisma } from "@/lib/db";
 import { classifyAndDraft, isAiConfigured, aiModel } from "@/lib/ai";
 import { sendMailAndPersist } from "@/lib/resend-send";
-import { getAutoSendCategories } from "@/lib/settings";
-
-const AUTO_SEND_MIN_CONFIDENCE = 0.9;
+import { getAutoSendCategories, getAutoSendMinConfidence } from "@/lib/settings";
 
 /**
  * Generates an AI draft for the newest inbound message on a ticket.
@@ -51,10 +49,12 @@ export async function generateDraftForTicket(ticketId: string): Promise<void> {
     })),
   });
 
-  const autoSendCats = await getAutoSendCategories();
+  const [autoSendCats, minConf] = await Promise.all([
+    getAutoSendCategories(),
+    getAutoSendMinConfidence(),
+  ]);
   const eligible =
-    result.confidence >= AUTO_SEND_MIN_CONFIDENCE &&
-    autoSendCats.has(result.category);
+    result.confidence >= minConf && autoSendCats.has(result.category);
 
   const draft = await prisma.aiDraft.create({
     data: {
