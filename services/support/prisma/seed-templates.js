@@ -174,6 +174,167 @@ Bomhardstraße 7<br>
 </ol>
 <p>Optional zusätzlich: Fabrikat, Modell, Baujahr und Motorleistung — dann können wir die Zuordnung noch schneller vornehmen. Mit diesen Angaben erhalten Sie eine verbindliche Rückmeldung, ob der Artikel passt.</p>`,
   },
+  {
+    name: "HSN/TSN im Fahrzeugschein finden",
+    shortcode: "hsn_tsn_hilfe",
+    category: "advisory",
+    subject: "So finden Sie HSN und TSN",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>bei einer <strong>Zulassungsbescheinigung Teil I</strong> (der übliche „Fahrzeugschein" seit 2005) finden Sie die Angaben hier:</p>
+<ul>
+<li><strong>HSN</strong> (Herstellerschlüsselnummer): Feld <strong>2.1</strong> — 4 Ziffern</li>
+<li><strong>TSN</strong> (Typschlüsselnummer): Feld <strong>2.2</strong> — 3 Ziffern und Buchstaben</li>
+</ul>
+<p>Bei einem alten Kfz-Schein (vor 2005): HSN steht in Zeile <strong>2</strong>, TSN in Zeile <strong>3</strong>.</p>
+<p>Alternativ funktioniert auch die Fahrgestellnummer (VIN, 17-stellig) — mit der können wir Ihr Fahrzeug ebenfalls eindeutig zuordnen. Senden Sie uns einfach die Daten und wir prüfen die Passform des Artikels für Sie.</p>`,
+  },
+  {
+    name: "Passgenauigkeits-Garantie",
+    shortcode: "passgarantie",
+    category: "complaint",
+    subject: "Zu Ihrer Passgenauigkeits-Garantie",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>wir haben Ihre Nachricht zur Passgenauigkeit erhalten. Unsere Passform-Garantie greift genau in solchen Fällen — sollte der Artikel nicht zu Ihrem Fahrzeug passen, senden wir Ihnen kostenfrei den richtigen zu.</p>
+<p>Damit wir Ihnen schnell weiterhelfen können, benötigen wir kurz:</p>
+<ol>
+<li>Ihre HSN + TSN (Feld 2.1 und 2.2 im Fahrzeugschein) oder alternativ die Fahrgestellnummer (VIN)</li>
+<li>Die Artikelbezeichnung / Artikelnummer des bestellten Teils</li>
+<li>Kurz: was passt konkret nicht (Foto hilfreich)?</li>
+</ol>
+<p>Nach Rückmeldung klären wir den kostenfreien Rücktausch und ermitteln das passende Teil für Ihr Fahrzeug.</p>`,
+  },
+  {
+    name: "Umtausch statt Retoure",
+    shortcode: "umtausch",
+    category: "returns",
+    subject: "Umtausch Ihrer Bestellung",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>gerne tauschen wir Ihren Artikel gegen ein passendes Modell. Der Ablauf ist einfach:</p>
+<ol>
+<li>Bestellen Sie das gewünschte Ersatz-Modell neu in unserem Shop</li>
+<li>Senden Sie den ersten Artikel innerhalb von 30 Tagen mit einem Retouren-Label zurück: <a href="https://retoure.kfzblitz24-group.com">retoure.kfzblitz24-group.com</a></li>
+<li>Nach Eingang der Rücksendung erstatten wir den Kaufpreis auf Ihr ursprüngliches Zahlungsmittel</li>
+</ol>
+<p>Falls Sie sich beim Ersatz-Artikel unsicher sind, prüfen wir vorab gerne die Passform für Ihr Fahrzeug — Fahrzeugschein-Daten (HSN/TSN) genügen.</p>`,
+  },
+  {
+    name: "Gewährleistung / Garantie",
+    shortcode: "gewaehrleistung",
+    category: "complaint",
+    subject: "Zu Ihrer Garantie-/Gewährleistungs-Anfrage",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>wir bearbeiten Ihre Anfrage im Rahmen der gesetzlichen Gewährleistung (2 Jahre) bzw. der Herstellergarantie. Für eine Prüfung benötigen wir kurz:</p>
+<ol>
+<li>Ihre Bestellnummer <strong>{{order.id}}</strong> (bereits bekannt) und das genaue Datum, wann der Mangel aufgetreten ist</li>
+<li>Beschreibung des Defekts: Was funktioniert nicht (mehr)?</li>
+<li>Fotos, die den Mangel dokumentieren</li>
+<li>Bei Verschleißteilen: aktueller Kilometerstand seit Einbau</li>
+</ol>
+<p>Nach Prüfung melden wir uns mit den nächsten Schritten. Bei berechtigten Garantiefällen ist der Rückversand für Sie kostenfrei.</p>`,
+  },
+  {
+    name: "Original-Hersteller-Teil",
+    shortcode: "original_teil",
+    category: "advisory",
+    subject: "Zu Ihrer Frage: Original-Teil?",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>bei uns finden Sie ausschließlich Erstausrüster- und Marken-Ersatzteile von führenden Herstellern wie <strong>Bosch, Mahle, ZF, Sachs, Continental, Febi Bilstein</strong> und über 200 weiteren Premium-Marken.</p>
+<p>Diese Teile werden in vielen Fällen sogar direkt für die Fahrzeughersteller (BMW, VW, Mercedes etc.) produziert — nur ohne Hersteller-Logo. Qualitativ sind sie identisch mit den „Originalen" aus der Vertragswerkstatt, aber deutlich günstiger.</p>
+<p>Falls Sie ein spezifisches OEM-Teil (mit Fahrzeughersteller-Logo) benötigen: sagen Sie uns die OE-Nummer und wir prüfen die Verfügbarkeit.</p>`,
+  },
+  {
+    name: "Werkstatt-/B2B-Konditionen",
+    shortcode: "b2b_konditionen",
+    category: "advisory",
+    subject: "Werkstatt- und Firmenkonditionen",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>vielen Dank für Ihr Interesse an unseren B2B-Konditionen für Werkstätten, Autohäuser und Flottenbetreiber. Wir bieten:</p>
+<ul>
+<li>Sonderpreise gestaffelt nach Bestellvolumen</li>
+<li>Firmenrechnung mit Zahlungsziel (nach Bonitätsprüfung)</li>
+<li>Persönlicher Ansprechpartner</li>
+<li>Bevorzugte Bearbeitung + Priority-Versand</li>
+</ul>
+<p>Damit wir Ihnen ein passendes Angebot machen können, teilen Sie uns bitte kurz mit:</p>
+<ol>
+<li>Firmenname + Umsatzsteuer-ID</li>
+<li>Anzahl Fahrzeuge / Werkstatt-Plätze</li>
+<li>Geschätztes monatliches Ersatzteil-Volumen</li>
+</ol>
+<p>Wir melden uns danach zeitnah mit konkreten Konditionen zurück.</p>`,
+  },
+  {
+    name: "Ratenkauf (Klarna/Riverty)",
+    shortcode: "ratenkauf",
+    category: "invoice",
+    subject: "Zu Ihrer Frage zum Ratenkauf",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>bei uns können Sie über <strong>Klarna</strong> und <strong>Riverty</strong> in bequemen Raten zahlen. Die Konditionen (Laufzeit, monatliche Rate, Bonitätsprüfung) laufen direkt beim jeweiligen Anbieter — wir haben leider keinen Einfluss auf die Entscheidung.</p>
+<p>Fragen zu einer bestehenden Ratenzahlung, Zahlungsplan-Änderungen oder Verzögerungen richten Sie bitte direkt an:</p>
+<ul>
+<li><strong>Klarna:</strong> <a href="https://www.klarna.com/de/kundenservice/">klarna.com/de/kundenservice</a></li>
+<li><strong>Riverty:</strong> <a href="https://www.riverty.com/de/">riverty.com/de</a></li>
+</ul>
+<p>Bei Fragen zu Ihrer Bestellung selbst (Versand, Artikel, Retoure) sind wir natürlich weiterhin für Sie da.</p>`,
+  },
+  {
+    name: "Rechnung an Firma / andere Rechnungsadresse",
+    shortcode: "rechnung_firma",
+    category: "invoice",
+    subject: "Ihre Rechnung mit Firmen-Adresse",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>gerne stellen wir die Rechnung zu Ihrer Bestellung <strong>{{order.id}}</strong> auf Ihre Firma aus. Bitte senden Sie uns folgende Angaben:</p>
+<ol>
+<li>Firmenname (exakt wie im Handelsregister)</li>
+<li>Anschrift der Firma</li>
+<li>Umsatzsteuer-ID (falls vorhanden — reduziert bei EU-B2B-Lieferungen ggf. die USt.)</li>
+</ol>
+<p>Wir stellen die Rechnung dann kurzfristig neu aus und senden Ihnen die aktualisierte Version per E-Mail zu. Die ursprüngliche Rechnung wird storniert.</p>`,
+  },
+  {
+    name: "Sendung verschollen / nicht angekommen",
+    shortcode: "sendung_verschollen",
+    category: "shipping",
+    subject: "Ihre Sendung ist nicht angekommen",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>es tut uns leid, dass Ihre Sendung noch nicht angekommen ist. Wir starten sofort eine Nachforschung beim Versanddienstleister.</p>
+<p>Damit das schnell geht, benötigen wir kurz:</p>
+<ol>
+<li>Ihre Bestellnummer <strong>{{order.id}}</strong> (bereits bekannt)</li>
+<li>Ihre vollständige Lieferadresse zur Verifikation</li>
+<li>Bereits verfügbare Sendungsverfolgungs-Nummer (aus Ihrer Versandbestätigung)</li>
+<li>Ob eine Nachbarschaftsstelle, Filiale oder Packstation üblich für Sie ist</li>
+</ol>
+<p>Wir setzen uns direkt mit DHL/DPD in Verbindung und melden uns spätestens innerhalb von 48 Stunden mit einem Zwischenstand. Bei bestätigtem Verlust senden wir Ihnen die Ware selbstverständlich kostenfrei erneut oder erstatten den Kaufpreis.</p>`,
+  },
+  {
+    name: "Versand nach Österreich / Schweiz",
+    shortcode: "ausland",
+    category: "shipping",
+    subject: "Versand ins Ausland",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>gerne liefern wir auch nach <strong>Österreich</strong> und in die <strong>Schweiz</strong>. Bitte beachten Sie:</p>
+<ul>
+<li><strong>Österreich:</strong> Versandkosten je nach Gewicht ab ca. 9,90 € · Lieferzeit 2-4 Werktage · Zoll entfällt (EU)</li>
+<li><strong>Schweiz:</strong> Versandkosten ab ca. 24,90 € · Lieferzeit 3-6 Werktage · Zoll- und Einfuhrgebühren durch den Empfänger zu tragen (üblicherweise 2-3 % + MWSt.)</li>
+</ul>
+<p>Genaue Konditionen sehen Sie im Checkout nach Eingabe der Lieferadresse. Falls Sie eine spezifische Bestellung planen, kalkulieren wir Ihnen die Kosten gerne vorab — senden Sie uns kurz die Artikel-Liste und das Ziel-Land.</p>`,
+  },
+  {
+    name: "Verfügbarkeit / Sonderbestellung",
+    shortcode: "verfuegbarkeit",
+    category: "advisory",
+    subject: "Zu Ihrer Anfrage zur Verfügbarkeit",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>wir prüfen die Verfügbarkeit des von Ihnen angefragten Artikels und melden uns umgehend mit einem konkreten Liefertermin.</p>
+<p>Falls der Artikel aktuell nicht im Sortiment ist, können wir ihn in vielen Fällen über unsere Hersteller-Netzwerke innerhalb von 3-10 Werktagen beschaffen. Damit wir schnell die richtige Zuordnung finden, senden Sie uns bitte:</p>
+<ol>
+<li>Artikelbezeichnung, Hersteller und ggf. OE-/Referenz-Nummer</li>
+<li>Ihre HSN + TSN (Fahrzeugschein Feld 2.1/2.2) oder Fahrgestellnummer</li>
+<li>Gewünschte Liefermenge</li>
+</ol>
+<p>Mit diesen Angaben können wir Ihnen ein verbindliches Angebot inkl. Lieferzeit machen.</p>`,
+  },
 ];
 
 async function main() {
