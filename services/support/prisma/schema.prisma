@@ -11,9 +11,11 @@ model User {
   id        String   @id @default(cuid())
   name      String
   email     String   @unique
-  password  String
+  password  String? // nullable — google-sso-only users have no password
   role      String   @default("agent") // admin, agent
   active    Boolean  @default(true)
+  googleId  String?  @unique // google 'sub' claim, set on first google-sso login
+  imageUrl  String? // google profile picture
   createdAt DateTime @default(now())
 
   assignedTickets Ticket[]      @relation("Assignee")
