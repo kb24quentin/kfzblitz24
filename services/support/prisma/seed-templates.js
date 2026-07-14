@@ -106,6 +106,16 @@ Bomhardstraße 7<br>
 <p>Sobald die Sendung an DHL/DPD übergeben wurde, erhalten Sie automatisch eine Tracking-Nummer per E-Mail (bitte ggf. auch den Spam-Ordner prüfen).</p>`,
   },
   {
+    name: "Versanddauer bei neuer Bestellung",
+    shortcode: "versand_vorab",
+    category: "shipping",
+    subject: "Zu Ihrer Frage zur Versanddauer",
+    bodyHtml: `<p>Guten Tag {{customer.first_name}},</p>
+<p>gerne! Bestellungen die uns bis <strong>14 Uhr</strong> erreichen, versenden wir in der Regel am <strong>selben Werktag</strong> — spätere Bestellungen gehen am nächsten Werktag raus. Die Zustellung durch DHL/DPD dauert danach üblicherweise <strong>1–3 Werktage</strong>.</p>
+<p>Wenn Sie sich unsicher sind, ob der Artikel zu Ihrem Fahrzeug passt: senden Sie uns kurz Ihre HSN + TSN (Fahrzeugschein Feld 2.1 und 2.2) oder Ihre Fahrgestellnummer, wir prüfen die Kompatibilität gerne vorab für Sie.</p>
+<p>Falls Sie noch Fragen zum Artikel, zu Zahlungsarten oder zur Bestellung haben, melden Sie sich einfach — wir helfen gerne weiter.</p>`,
+  },
+  {
     name: "Bestellung stornieren (noch nicht versandt)",
     shortcode: "storno_ok",
     category: "shipping",
