@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { APPS } from "@/lib/apps";
 import { TeamMatrix } from "./team-matrix";
+import { PendingAccessRequests } from "./access-requests";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +13,19 @@ export default async function SettingsPage() {
     ? await prisma.user.findUnique({ where: { email: session.user.email } })
     : null;
 
-  const users = await prisma.user.findMany({
-    orderBy: [{ active: "asc" }, { name: "asc" }],
-    include: { appAccesses: true },
-  });
+  const [users, pendingRequests] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: [{ active: "asc" }, { name: "asc" }],
+      include: { appAccesses: true },
+    }),
+    prisma.accessRequest.findMany({
+      where: { status: "pending" },
+      orderBy: { createdAt: "asc" },
+      include: {
+        user: { select: { id: true, name: true, email: true, imageUrl: true } },
+      },
+    }),
+  ]);
 
   const rows = users.map((u) => ({
     id: u.id,
@@ -36,6 +46,10 @@ export default async function SettingsPage() {
       <h1 className="text-xl font-bold text-text flex items-center gap-2 mb-6">
         <Settings className="w-5 h-5" /> Einstellungen
       </h1>
+
+      {isAdmin && (
+        <PendingAccessRequests requests={pendingRequests} apps={APPS} />
+      )}
 
       <div className="bg-bg-card border border-border rounded-xl p-6">
         <div className="flex items-baseline justify-between mb-1">

@@ -3,7 +3,7 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
-import { useEffect, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useImperativeHandle, forwardRef, useRef } from "react";
 import {
   Bold,
   Italic,
@@ -23,10 +23,27 @@ type Props = {
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
+  /**
+   * Called when the user types `::code<Enter>` or `::code<Space>` in the
+   * editor. Return the HTML to insert in place of the trigger (already with
+   * variables substituted), or null if the shortcode is unknown.
+   */
+  onShortcode?: (code: string) => string | null;
 };
 
 export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(
-  function RichTextEditor({ value, onChange, placeholder, minHeight = 200 }, ref) {
+  function RichTextEditor(
+    { value, onChange, placeholder, minHeight = 200, onShortcode },
+    ref
+  ) {
+    // Keep latest onShortcode + editor in refs so the editorProps closure
+    // (created once on useEditor init) can always reach current values.
+    const onShortcodeRef = useRef(onShortcode);
+    const editorRef = useRef<Editor | null>(null);
+    useEffect(() => {
+      onShortcodeRef.current = onShortcode;
+    }, [onShortcode]);
+
     const editor = useEditor({
       extensions: [
         StarterKit,
@@ -49,8 +66,36 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(
           class: "prose prose-sm max-w-none focus:outline-none px-4 py-3",
           style: `min-height: ${minHeight}px;`,
         },
+        handleKeyDown(view, event) {
+          if (event.key !== "Enter" && event.key !== " ") return false;
+          const cb = onShortcodeRef.current;
+          const e = editorRef.current;
+          if (!cb || !e) return false;
+          const { from } = view.state.selection;
+          const before = view.state.doc.textBetween(
+            Math.max(0, from - 60),
+            from,
+            "\n",
+            "\n"
+          );
+          const match = before.match(/::([a-zA-Z0-9_]+)$/);
+          if (!match) return false;
+          const bodyHtml = cb(match[1].toLowerCase());
+          if (!bodyHtml) return false;
+          event.preventDefault();
+          e.chain()
+            .focus()
+            .deleteRange({ from: from - match[0].length, to: from })
+            .insertContent(bodyHtml)
+            .run();
+          return true;
+        },
       },
     });
+
+    useEffect(() => {
+      editorRef.current = editor;
+    }, [editor]);
 
     useImperativeHandle(
       ref,

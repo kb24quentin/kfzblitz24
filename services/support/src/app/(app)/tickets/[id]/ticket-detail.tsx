@@ -39,7 +39,14 @@ import {
 import { STATUS_LABEL, PRIORITY_LABEL, PRIORITY_CLASSES } from "@/lib/status";
 
 type UserLite = { id: string; name: string; email: string };
-type TemplateLite = { id: string; name: string; subject: string; bodyHtml: string; category: string | null };
+type TemplateLite = {
+  id: string;
+  name: string;
+  shortcode: string | null;
+  subject: string;
+  bodyHtml: string;
+  category: string | null;
+};
 
 type Message = {
   id: string;
@@ -222,6 +229,11 @@ export function TicketDetail({
     if (!t) return;
     setReplyHtml(substitute(t.bodyHtml));
     setReplySubject(substitute(t.subject || replySubject));
+  };
+
+  const shortcodeToHtml = (code: string): string | null => {
+    const t = templates.find((x) => x.shortcode && x.shortcode === code);
+    return t ? substitute(t.bodyHtml) : null;
   };
 
   const applyDraft = (d: Draft) => {
@@ -487,11 +499,13 @@ export function TicketDetail({
                   }}
                   className="text-xs border border-border rounded px-2 py-1 bg-white"
                   disabled={templates.length === 0}
+                  title="Templates auswählen — oder via ::kürzel im Editor"
                 >
                   <option value="">Template …</option>
                   {templates.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
+                      {t.shortcode ? ` (::${t.shortcode})` : ""}
                     </option>
                   ))}
                 </select>
@@ -509,7 +523,8 @@ export function TicketDetail({
                 ref={editorRef}
                 value={replyHtml}
                 onChange={setReplyHtml}
-                placeholder="Antwort verfassen…"
+                onShortcode={shortcodeToHtml}
+                placeholder="Antwort verfassen… (Tipp: ::kürzel + Enter fügt Template ein)"
                 minHeight={180}
               />
 

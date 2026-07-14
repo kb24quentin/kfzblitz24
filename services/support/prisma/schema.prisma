@@ -145,9 +145,10 @@ model TicketNote {
 model Template {
   id        String   @id @default(cuid())
   name      String   @unique
+  shortcode String?  @unique // typed as `::code` in composer to auto-insert
   subject   String
   bodyHtml  String
-  category  String? // used for AI auto-suggest matching
+  category  String? // used for grouping in templates page + ai matching
   variables String   @default("[]") // JSON array of variable names
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -7,6 +7,7 @@ import { RichTextEditor } from "@/components/rich-text-editor";
 
 type Values = {
   name: string;
+  shortcode: string;
   subject: string;
   bodyHtml: string;
   category: string;
@@ -41,23 +42,45 @@ export function TemplateForm({
               required
               defaultValue={initial?.name}
               className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              placeholder="z.B. Retoure-Label anfordern"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text mb-1">Kategorie</label>
-            <select
-              name="category"
-              defaultValue={initial?.category || ""}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white"
-            >
-              <option value="">— keine —</option>
-              <option value="shipping">Versand</option>
-              <option value="returns">Retoure</option>
-              <option value="invoice">Rechnung</option>
-              <option value="general">Allgemein</option>
-              <option value="other">Sonstiges</option>
-            </select>
+            <label className="block text-sm font-medium text-text mb-1">
+              Kürzel{" "}
+              <span className="text-xs text-text-light font-normal">
+                (im Composer via <span className="font-mono">::code</span>)
+              </span>
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-text-light font-mono text-sm">::</span>
+              <input
+                name="shortcode"
+                defaultValue={initial?.shortcode}
+                pattern="[a-zA-Z0-9_]*"
+                className="w-full pl-8 pr-3 py-2 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                placeholder="re_label"
+              />
+            </div>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Kategorie</label>
+          <select
+            name="category"
+            defaultValue={initial?.category || ""}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white"
+          >
+            <option value="">— keine —</option>
+            <option value="returns">Retoure &amp; Widerruf</option>
+            <option value="shipping">Versand &amp; Bestellung</option>
+            <option value="invoice">Rechnung &amp; Zahlung</option>
+            <option value="advisory">Beratung</option>
+            <option value="complaint">Reklamation</option>
+            <option value="general">Allgemein</option>
+            <option value="other">Sonstiges</option>
+          </select>
         </div>
 
         <div>

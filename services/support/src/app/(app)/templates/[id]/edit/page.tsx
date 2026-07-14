@@ -25,6 +25,7 @@ export default async function EditTemplatePage({
       <TemplateForm
         initial={{
           name: template.name,
+          shortcode: template.shortcode || "",
           subject: template.subject,
           bodyHtml: template.bodyHtml,
           category: template.category || "",

@@ -4,6 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
+import { notifyAdmins } from "./notify-admins";
 
 const ALLOWED_DOMAIN = process.env.SSO_ALLOWED_DOMAIN?.trim() || "kfzblitz24.de";
 
@@ -106,6 +107,15 @@ const config: NextAuthConfig = {
           active: false,
         },
       });
+
+      // Fire-and-forget notification to admins
+      notifyAdmins(
+        `Neuer Support-Zugriff angefragt: ${displayName}`,
+        `<p><strong>${displayName}</strong> (${email}) hat sich zum ersten Mal per Google-SSO in Support eingeloggt und wartet auf Freigabe.</p>
+<p>Die Verwaltung erfolgt zentral im Intranet:<br>
+<a href="https://kfzblitz24-group.com/settings">https://kfzblitz24-group.com/settings</a></p>`
+      ).catch(() => {});
+
       return "/pending";
     },
     async jwt({ token, user }) {

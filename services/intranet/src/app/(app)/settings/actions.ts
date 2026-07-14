@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { APPS } from "@/lib/apps";
 import { syncGrantToApp, syncRevokeFromApp } from "@/lib/app-sync";
+import { notifyAdmins, notifyUser } from "@/lib/notify";
 
 async function requireUser() {
   const session = await auth();
@@ -118,5 +119,129 @@ export async function revokeAccessAction(formData: FormData) {
 
   if (user) await syncRevokeFromApp(appKey, user.email);
 
+  revalidatePath("/settings");
+}
+
+/**
+ * User-initiated: request access to an app. Creates AccessRequest + notifies
+ * admins. Idempotent — if a pending request for same user+app already exists,
+ * just updates the requestedRole.
+ */
+export async function requestAccessAction(formData: FormData) {
+  const me = await requireUser();
+  const appKey = String(formData.get("appKey") || "");
+  const requestedRole = String(formData.get("requestedRole") || "").trim();
+  const message = String(formData.get("message") || "").trim() || null;
+  const app = APPS.find((a) => a.key === appKey);
+  if (!app) throw new Error("Ungültige App");
+  if (!requestedRole || !app.roles.some((r) => r.key === requestedRole)) {
+    throw new Error("Ungültige Rolle");
+  }
+
+  // Already has access? Then nothing to request
+  const existingGrant = await prisma.appAccess.findUnique({
+    where: { userId_appKey: { userId: me.id, appKey } },
+  });
+  if (existingGrant) return;
+
+  const existingPending = await prisma.accessRequest.findFirst({
+    where: { userId: me.id, appKey, status: "pending" },
+  });
+  if (existingPending) {
+    await prisma.accessRequest.update({
+      where: { id: existingPending.id },
+      data: { requestedRole, message },
+    });
+  } else {
+    await prisma.accessRequest.create({
+      data: { userId: me.id, appKey, requestedRole, message },
+    });
+  }
+
+  const roleLabel =
+    app.roles.find((r) => r.key === requestedRole)?.label || requestedRole;
+  notifyAdmins(
+    `Zugriffs-Anfrage: ${me.name} → ${app.label} (${roleLabel})`,
+    `<p><strong>${me.name}</strong> (${me.email}) beantragt Zugriff auf <strong>${app.label}</strong> als <strong>${roleLabel}</strong>.</p>
+${message ? `<p style="background:#f4f5f7;padding:12px;border-left:3px solid #ff6600;border-radius:4px;color:#3d4654;"><em>${message}</em></p>` : ""}
+<p style="margin-top:20px;">
+  <a href="https://kfzblitz24-group.com/settings" style="display:inline-block;background:#ff6600;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;">
+    Anfrage bearbeiten →
+  </a>
+</p>`
+  ).catch(() => {});
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+}
+
+export async function approveRequestAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") || "");
+  const req = await prisma.accessRequest.findUnique({
+    where: { id },
+    include: { user: true },
+  });
+  if (!req || req.status !== "pending") return;
+
+  const app = APPS.find((a) => a.key === req.appKey);
+  if (!app) throw new Error("App unbekannt");
+
+  await prisma.$transaction([
+    prisma.appAccess.upsert({
+      where: { userId_appKey: { userId: req.userId, appKey: req.appKey } },
+      create: { userId: req.userId, appKey: req.appKey, role: req.requestedRole },
+      update: { role: req.requestedRole },
+    }),
+    prisma.accessRequest.update({
+      where: { id: req.id },
+      data: {
+        status: "granted",
+        respondedAt: new Date(),
+        respondedById: admin.id,
+      },
+    }),
+  ]);
+
+  // Sync to the target app if it supports it (and user active)
+  if (req.user.active) {
+    await syncGrantToApp(req.appKey, {
+      email: req.user.email,
+      name: req.user.name,
+      role: req.requestedRole,
+      googleId: req.user.googleId,
+      imageUrl: req.user.imageUrl,
+    });
+  }
+
+  const roleLabel =
+    app.roles.find((r) => r.key === req.requestedRole)?.label || req.requestedRole;
+  notifyUser(
+    req.user.email,
+    `Freigabe erteilt: ${app.label}`,
+    `<p>Guten Tag ${req.user.name},</p>
+<p>dein Zugriff auf <strong>${app.label}</strong> (${roleLabel}) wurde freigegeben.</p>
+<p style="margin-top:20px;">
+  <a href="${app.url}" style="display:inline-block;background:#ff6600;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;">
+    ${app.label} öffnen →
+  </a>
+</p>`
+  ).catch(() => {});
+
+  revalidatePath("/settings");
+  revalidatePath("/");
+}
+
+export async function denyRequestAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") || "");
+  await prisma.accessRequest.update({
+    where: { id },
+    data: {
+      status: "denied",
+      respondedAt: new Date(),
+      respondedById: admin.id,
+    },
+  });
   revalidatePath("/settings");
 }

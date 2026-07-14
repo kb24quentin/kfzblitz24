@@ -18,8 +18,10 @@ model User {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  appAccesses  AppAccess[]
-  newsPosts    NewsPost[]   @relation("NewsAuthor")
+  appAccesses     AppAccess[]
+  newsPosts       NewsPost[]      @relation("NewsAuthor")
+  accessRequests  AccessRequest[] @relation("AccessRequests")
+  respondedRequests AccessRequest[] @relation("AccessResponder")
 }
 
 /**
@@ -40,6 +42,28 @@ model AppAccess {
 
   @@unique([userId, appKey])
   @@index([appKey])
+}
+
+/**
+ * Access request: user asks admin for a specific app + role. Admin approves
+ * → creates AppAccess row + user gets access via cross-service sync.
+ */
+model AccessRequest {
+  id            String    @id @default(cuid())
+  userId        String
+  appKey        String
+  requestedRole String
+  message       String?
+  status        String    @default("pending") // pending, granted, denied
+  respondedAt   DateTime?
+  respondedById String?
+  createdAt     DateTime  @default(now())
+
+  user      User  @relation("AccessRequests", fields: [userId], references: [id], onDelete: Cascade)
+  responder User? @relation("AccessResponder", fields: [respondedById], references: [id])
+
+  @@index([status])
+  @@index([userId, appKey])
 }
 
 model NewsPost {

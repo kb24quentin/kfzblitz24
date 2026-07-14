@@ -38,6 +38,9 @@ services:
       SSO_ALLOWED_DOMAIN: ${SSO_ALLOWED_DOMAIN:-kfzblitz24.de}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
       SUPPORT_INTERNAL_URL: ${SUPPORT_INTERNAL_URL:-http://support_staging:3000}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      FROM_EMAIL: ${FROM_EMAIL:-service@kfzblitz24.de}
+      FROM_NAME: ${FROM_NAME:-kfzBlitz24 Intranet}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_NAME: ${ADMIN_NAME:-Admin}
     networks:

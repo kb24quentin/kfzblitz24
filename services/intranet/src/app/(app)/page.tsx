@@ -15,6 +15,7 @@ import {
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { APPS } from "@/lib/apps";
+import { RequestAccessButton } from "./request-access-button";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +37,13 @@ export default async function IntranetLanding() {
 
   const me = await prisma.user.findUnique({
     where: { email },
-    include: { appAccesses: true },
+    include: { appAccesses: true, accessRequests: { where: { status: "pending" } } },
   });
   const isAdmin = me?.role === "admin";
   const grantedAppKeys = new Set(me?.appAccesses.map((a) => a.appKey) || []);
+  const pendingByApp = new Map(
+    (me?.accessRequests || []).map((r) => [r.appKey, r.requestedRole])
+  );
 
   const [newsLatest, teamCount] = await Promise.all([
     prisma.newsPost.findMany({
@@ -91,21 +95,23 @@ export default async function IntranetLanding() {
           ) : (
             <div
               key={app.key}
-              className="bg-bg-card border border-border rounded-2xl p-5 opacity-50 cursor-not-allowed relative"
-              title="Kein Zugriff — frag einen Admin"
+              className="bg-bg-card border border-border rounded-2xl p-5 relative"
             >
               <div className="absolute top-3 right-3 text-text-light">
                 <Lock className="w-4 h-4" />
               </div>
               <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center text-white mb-3 grayscale"
+                className="w-11 h-11 rounded-xl flex items-center justify-center text-white mb-3 grayscale opacity-70"
                 style={{ background: app.color }}
               >
                 <IconComp className="w-5 h-5" />
               </div>
               <h3 className="font-semibold text-text mb-1">{app.label}</h3>
               <p className="text-xs text-text-light">{app.description}</p>
-              <p className="text-xs text-warning mt-2">Freischaltung erforderlich</p>
+              <RequestAccessButton
+                app={app}
+                pendingRole={pendingByApp.get(app.key) || null}
+              />
             </div>
           );
         })}

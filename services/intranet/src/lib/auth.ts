@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import { prisma } from "./db";
+import { notifyAdmins } from "./notify";
 
 const ALLOWED_DOMAIN = process.env.SSO_ALLOWED_DOMAIN?.trim() || "kfzblitz24.de";
 
@@ -67,6 +68,18 @@ const config: NextAuthConfig = {
           active: false,
         },
       });
+
+      // Notify admins
+      notifyAdmins(
+        `Neuer Intranet-Zugriff: ${displayName}`,
+        `<p><strong>${displayName}</strong> (${email}) hat sich zum ersten Mal ins Intranet eingeloggt und wartet auf Freigabe.</p>
+<p style="margin-top:20px;">
+  <a href="https://kfzblitz24-group.com/settings" style="display:inline-block;background:#ff6600;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;">
+    Zu den Einstellungen →
+  </a>
+</p>`
+      ).catch(() => {});
+
       return "/pending";
     },
     async jwt({ token, user }) {

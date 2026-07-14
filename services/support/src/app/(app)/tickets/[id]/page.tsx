@@ -54,7 +54,14 @@ export default async function TicketDetailPage({
     }),
     prisma.template.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, subject: true, bodyHtml: true, category: true },
+      select: {
+        id: true,
+        name: true,
+        shortcode: true,
+        subject: true,
+        bodyHtml: true,
+        category: true,
+      },
     }),
   ]);
 
