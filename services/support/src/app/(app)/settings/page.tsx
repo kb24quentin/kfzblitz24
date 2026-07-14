@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { Settings, CheckCircle2, XCircle, Link2, Unlink, FileText, ArrowRight, Clock } from "lucide-react";
+import { Settings, CheckCircle2, XCircle, Link2, Unlink, FileText, ArrowRight, Clock, Users } from "lucide-react";
 import { isGmailConfigured, getGmailUserEmail, hasOAuthApp, getRedirectUri } from "@/lib/gmail";
 import { auth } from "@/lib/auth";
 import { SignatureEditor } from "./signature-editor";
 import { AutoAckEditor } from "./auto-ack-editor";
-import { UserManagement } from "./user-management";
 import { AiAutopilotSection } from "./ai-autopilot";
 import { CategoriesManager } from "./categories-manager";
 import { BusinessHoursEditor } from "./business-hours";
@@ -272,30 +271,34 @@ export default async function SettingsPage({
 
       <SectionHeader title="Team & Zugriff" />
 
-      <div className="bg-bg-card border border-border rounded-xl p-6">
-        <div className="flex items-baseline justify-between mb-1">
-          <h2 className="font-semibold text-text">Team</h2>
-          {users.filter((u) => !u.active).length > 0 && (
-            <span className="text-xs text-warning font-medium">
-              {users.filter((u) => !u.active).length} Konto/Konten wartet auf Freigabe
-            </span>
-          )}
+      <a
+        href="https://kfzblitz24-group.com/settings"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-between bg-bg-card border border-border rounded-xl p-5 hover:border-accent/30 transition-colors group"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-text">
+              Team-Verwaltung im Intranet
+            </h2>
+            <p className="text-xs text-text-light mt-0.5">
+              User anlegen, aktivieren, Support-Rolle zuweisen — zentral im
+              Intranet. Änderungen wirken sofort im Support.
+              {" "}
+              {users.filter((u) => !u.active).length > 0 && (
+                <span className="text-warning font-medium">
+                  · Aktuell {users.filter((u) => !u.active).length} pending
+                </span>
+              )}
+            </p>
+          </div>
         </div>
-        <p className="text-xs text-text-light mb-4">
-          Neue Google-SSO-Logins landen automatisch als deaktivierte Konten hier
-          und brauchen eine Freigabe. Kollegen sehen bis dahin eine
-          &quot;warten auf Freigabe&quot;-Seite.
-        </p>
-        {currentUser ? (
-          <UserManagement
-            users={users}
-            currentUserId={currentUser.id}
-            isAdmin={currentUser.role === "admin"}
-          />
-        ) : (
-          <p className="text-sm text-text-light">Bitte neu einloggen.</p>
-        )}
-      </div>
+        <ArrowRight className="w-5 h-5 text-text-light group-hover:text-accent transition-colors" />
+      </a>
     </div>
   );
 }

@@ -166,6 +166,9 @@ export function TeamMatrix({
                     </td>
                     {apps.map((app) => {
                       const current = accessMap.get(app.key);
+                      const currentRoleDef = current
+                        ? app.roles.find((r) => r.key === current)
+                        : null;
                       return (
                         <td key={app.key} className="p-2 text-center whitespace-nowrap">
                           {current ? (
@@ -175,11 +178,15 @@ export function TeamMatrix({
                               <button
                                 type="submit"
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-success/15 text-success hover:bg-danger/15 hover:text-danger transition-colors group"
-                                title={`Zugriff als '${current}' entziehen`}
+                                title={
+                                  currentRoleDef
+                                    ? `${currentRoleDef.label}: ${currentRoleDef.description}\n\n(Klick zum Entziehen)`
+                                    : `Zugriff als '${current}' entziehen`
+                                }
                               >
                                 <Check className="w-3 h-3 group-hover:hidden" />
                                 <X className="w-3 h-3 hidden group-hover:block" />
-                                {current}
+                                {currentRoleDef?.label || current}
                               </button>
                             </form>
                           ) : (
@@ -191,10 +198,17 @@ export function TeamMatrix({
                                 onChange={(e) => e.currentTarget.form?.requestSubmit()}
                                 defaultValue=""
                                 className="px-2 py-0.5 text-xs border border-border rounded bg-white text-text-light"
+                                title={app.roles
+                                  .map((r) => `${r.label}: ${r.description}`)
+                                  .join("\n\n")}
                               >
-                                <option value="" disabled>+</option>
+                                <option value="" disabled>
+                                  + Rolle
+                                </option>
                                 {app.roles.map((r) => (
-                                  <option key={r} value={r}>{r}</option>
+                                  <option key={r.key} value={r.key} title={r.description}>
+                                    {r.label}
+                                  </option>
                                 ))}
                               </select>
                             </form>

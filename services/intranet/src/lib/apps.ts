@@ -1,11 +1,31 @@
 /**
  * Registry of internal apps. Each entry becomes a tile on the intranet
- * landing page and a row in the app-access matrix in team management.
+ * landing page and a column in the app-access matrix in team management.
  *
- * `roles`: allowed role values when granting access. Individual apps may
- * enforce these however they want — the intranet just persists them.
+ * `syncApi`: if set, the intranet calls this app's user-provisioning API
+ * when an admin grants or revokes access. The app must expose:
+ *   POST   {syncApi}/api/internal/users  (Bearer INTERNAL_API_TOKEN)
+ *   DELETE {syncApi}/api/internal/users/:email
  */
-export const APPS = [
+export type AppRole = {
+  key: string;
+  label: string;
+  description: string;
+};
+
+export type AppDef = {
+  key: string;
+  label: string;
+  description: string;
+  url: string;
+  icon: string;
+  color: string;
+  roles: AppRole[];
+  /** Container-network base URL for cross-service calls (docker service name) */
+  syncApi?: string;
+};
+
+export const APPS: AppDef[] = [
   {
     key: "support",
     label: "Support",
@@ -13,7 +33,21 @@ export const APPS = [
     url: "https://support.kfzblitz24-group.com",
     icon: "Inbox",
     color: "#ff6600",
-    roles: ["agent", "admin"],
+    syncApi: process.env.SUPPORT_INTERNAL_URL || "http://support:3000",
+    roles: [
+      {
+        key: "agent",
+        label: "Agent",
+        description:
+          "Tickets zugewiesen bekommen, beantworten, Status/Priorität ändern, Notizen schreiben, Templates nutzen. Kann keine Team-Verwaltung oder Systemeinstellungen.",
+      },
+      {
+        key: "admin",
+        label: "Admin",
+        description:
+          "Wie Agent + verwaltet Templates, SLAs, AI-Autopilot, Ticket-Kategorien, Geschäftszeiten. Alles außer Team-Verwaltung (bleibt im Intranet).",
+      },
+    ],
   },
   {
     key: "retoure_admin",
@@ -22,7 +56,20 @@ export const APPS = [
     url: "https://rma.kfzblitz24-group.com",
     icon: "PackageOpen",
     color: "#0b3756",
-    roles: ["agent", "admin"],
+    roles: [
+      {
+        key: "agent",
+        label: "Agent",
+        description:
+          "RMA-Cases bearbeiten, Retouren zuordnen, Labels erzeugen, Kunden-Kommunikation im Retouren-Fluss. Auto-Provisioning noch nicht angebunden.",
+      },
+      {
+        key: "admin",
+        label: "Admin",
+        description:
+          "Wie Agent + Systemeinstellungen, Anbindung zu Webisco, Cron-Jobs. Auto-Provisioning noch nicht angebunden.",
+      },
+    ],
   },
   {
     key: "crm",
@@ -31,7 +78,20 @@ export const APPS = [
     url: "https://crm.staging.kfzblitz24-group.com",
     icon: "Users",
     color: "#0e2742",
-    roles: ["user", "admin"],
+    roles: [
+      {
+        key: "user",
+        label: "User",
+        description:
+          "Kontakte anlegen, Kampagnen fahren, Templates nutzen. Auto-Provisioning noch nicht angebunden.",
+      },
+      {
+        key: "admin",
+        label: "Admin",
+        description:
+          "Wie User + Team-Verwaltung, Signaturen, Systemeinstellungen. Auto-Provisioning noch nicht angebunden.",
+      },
+    ],
   },
   {
     key: "grantingb2b",
@@ -40,7 +100,19 @@ export const APPS = [
     url: "https://grantingb2b.staging.kfzblitz24-group.com",
     icon: "ShieldCheck",
     color: "#3d4654",
-    roles: ["user", "admin"],
+    roles: [
+      {
+        key: "user",
+        label: "User",
+        description: "Bonitätsanfragen einreichen und Ergebnisse einsehen.",
+      },
+      {
+        key: "admin",
+        label: "Admin",
+        description:
+          "Wie User + Systemeinstellungen, Anbieter-Konfiguration.",
+      },
+    ],
   },
   {
     key: "opensign",
@@ -49,7 +121,18 @@ export const APPS = [
     url: "https://opensign.staging.kfzblitz24-group.com",
     icon: "FileSignature",
     color: "#8a93a0",
-    roles: ["user", "admin"],
+    roles: [
+      {
+        key: "user",
+        label: "User",
+        description: "Dokumente hochladen, senden, signieren lassen.",
+      },
+      {
+        key: "admin",
+        label: "Admin",
+        description: "Wie User + Team + Template-Verwaltung.",
+      },
+    ],
   },
   {
     key: "shopware",
@@ -58,9 +141,21 @@ export const APPS = [
     url: "https://kfzblitz24.de/admin",
     icon: "Store",
     color: "#189eff",
-    roles: ["user", "admin"],
+    roles: [
+      {
+        key: "user",
+        label: "User",
+        description:
+          "Bestellungen einsehen, Kunden anlegen. Rolle wird nur intern getrackt, Shopware hat eigene Nutzer-Verwaltung.",
+      },
+      {
+        key: "admin",
+        label: "Admin",
+        description:
+          "Voller Backend-Zugriff. Rolle wird nur intern getrackt.",
+      },
+    ],
   },
-] as const;
+];
 
-export type AppKey = (typeof APPS)[number]["key"];
-export type AppDef = (typeof APPS)[number];
+export type AppKey = string;
