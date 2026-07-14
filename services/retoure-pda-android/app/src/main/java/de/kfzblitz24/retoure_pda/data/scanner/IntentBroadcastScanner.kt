@@ -110,6 +110,18 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
             addAction(ACTION_GENERIC)
             addAction(ACTION_HS_BARCODE_SEND)
             addAction(ACTION_HS_DCS)
+            // Dawn/Nlscan CM60 (Package "com.dawn.java" — chinesische
+            // Kamera-Scan-Module). Verschiedene Firmware-Rebuilds nutzen
+            // unterschiedliche Actions; wir registrieren alle bekannten
+            // Varianten und picken im extractBarcode() das erste passende
+            // String-Extra.
+            addAction(ACTION_DAWN_SCAN)
+            addAction(ACTION_DAWN_SCANNER)
+            addAction(ACTION_DAWN_AIDC)
+            addAction(ACTION_DAWN_BARCODE)
+            addAction(ACTION_KTE)
+            // Rscja/Chainway — noch ein häufiger CN-OEM
+            addAction(ACTION_RSCJA)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -164,8 +176,43 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
                     ?: intent.getStringExtra("barocode")
                     ?: intent.getStringExtra("data")
             }
+            ACTION_DAWN_SCAN,
+            ACTION_DAWN_SCANNER,
+            ACTION_DAWN_AIDC,
+            ACTION_DAWN_BARCODE,
+            ACTION_KTE,
+            ACTION_RSCJA -> pickAnyStringExtra(intent)
             else -> null
         }
+    }
+
+    /**
+     * Fallback für Dawn/Nlscan/Rscja/unbekannte OEM-Firmware: nimm den
+     * ersten String-Extra der wie ein Barcode aussieht (nicht-leer,
+     * länger als 3 Zeichen). Wir kennen die genauen Key-Namen nicht
+     * (verschiedene Firmware-Builds nutzen "data", "scannerdata",
+     * "BARCODE", "SCAN_DATA", "value", …) — daher grasen wir das
+     * gesamte Bundle nach dem plausibelsten String-Kandidaten ab.
+     */
+    private fun pickAnyStringExtra(intent: Intent): String? {
+        val extras = intent.extras ?: return null
+        // Bekannte Prioritäts-Keys zuerst probieren — falls einer trifft,
+        // sparen wir uns die Heuristik.
+        val priorityKeys = listOf(
+            "SCAN_BARCODE1", "barcode", "barocode", "data",
+            "SCAN_DATA", "scannerdata", "BARCODE", "value",
+            "scanResult", "scan_result", "result", "SCAN_RESULT"
+        )
+        for (key in priorityKeys) {
+            val v = extras.getString(key)
+            if (!v.isNullOrBlank()) return v
+        }
+        // Sonst: erstes String-Extra > 3 Zeichen
+        for (key in extras.keySet()) {
+            val v = extras.get(key)
+            if (v is String && v.length > 3) return v
+        }
+        return null
     }
 
     companion object {
@@ -179,6 +226,22 @@ class IntentBroadcastScanner(private val context: Context) : BarcodeScanner {
         // Netum Q900 (Honeywell HS7 + "hs"-Wrapper-Firmware):
         const val ACTION_HS_BARCODE_SEND  = "com.android.hs.action.BARCODE_SEND"
         const val ACTION_HS_DCS           = "com.hs.dcsservice.action"
+
+        // Dawn/Nlscan CM60 Kamera-Scan-Module (package "com.dawn.java").
+        // Chinesische OEM-Firmware, Action-Namen variieren zwischen
+        // Firmware-Rebuilds — daher registrieren wir mehrere Varianten:
+        const val ACTION_DAWN_SCAN        = "com.dawn.scan.action.SCAN_RESULT"
+        const val ACTION_DAWN_SCANNER     = "com.dawn.scanner.action.SCAN_RESULT"
+        const val ACTION_DAWN_AIDC        = "com.dawn.aidc.SCAN_RESULT"
+        const val ACTION_DAWN_BARCODE     = "com.dawn.scanner.BARCODE_RESULT"
+
+        // KTE — der OEM-Vendor-Kürzel unseres Dawn/Nlscan CM60 PDAs.
+        // Aus Logcat: "Sending non-protected broadcast com.kte.scan.result
+        // from system 16774:com.dawn.java/1000 pkg com.dawn.java"
+        const val ACTION_KTE              = "com.kte.scan.result"
+
+        // Rscja/Chainway — noch ein häufiger CN-OEM
+        const val ACTION_RSCJA            = "com.rscja.scanner.action.SCAN_ACTION"
 
         // Extra-Keys
         const val EXTRA_NEWLAND          = "SCAN_BARCODE1"
