@@ -15,6 +15,28 @@ async function getIngestLabelId(): Promise<string> {
   const labels = await g.users.labels.list({ userId: "me" });
   const found = labels.data.labels?.find((l) => l.name === INGEST_LABEL_NAME);
   if (found?.id) {
+    // Self-heal: earlier versions created the label with messageListVisibility='hide'
+    // which made ingested mails disappear from the mailbox. Force it to 'show'.
+    if (
+      found.messageListVisibility !== "show" ||
+      found.labelListVisibility !== "labelShow"
+    ) {
+      try {
+        await g.users.labels.patch({
+          userId: "me",
+          id: found.id,
+          requestBody: {
+            messageListVisibility: "show",
+            labelListVisibility: "labelShow",
+          },
+        });
+      } catch (err) {
+        console.warn(
+          "[gmail-sync] label visibility patch failed:",
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
     cachedLabelId = found.id;
     return found.id;
   }
@@ -22,8 +44,8 @@ async function getIngestLabelId(): Promise<string> {
     userId: "me",
     requestBody: {
       name: INGEST_LABEL_NAME,
-      labelListVisibility: "labelHide",
-      messageListVisibility: "hide",
+      labelListVisibility: "labelShow",
+      messageListVisibility: "show",
     },
   });
   cachedLabelId = created.data.id!;
