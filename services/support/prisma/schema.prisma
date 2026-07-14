@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("agent") // admin, agent
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  assignedTickets Ticket[]      @relation("Assignee")
+  notes           TicketNote[]
+  messages        Message[]
+  reviewedDrafts  AiDraft[]     @relation("ReviewedBy")
+  events          TicketEvent[]
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  phone     String?
+  orderRef  String? // link to Retoure/Webisco order if known
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tickets Ticket[]
+}
+
+model Ticket {
+  id              String    @id @default(cuid())
+  number          Int       @unique @default(autoincrement())
+  subject         String
+  status          String    @default("open") // open, pending, on_hold, resolved, closed
+  priority        String    @default("normal") // low, normal, high, urgent
+  category        String? // shipping, returns, invoice, general, other
+  contactId       String
+  assigneeId      String?
+  slaDueAt        DateTime // creation + SLA offset (24h default)
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  gmailThreadId   String?   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  contact  Contact       @relation(fields: [contactId], references: [id])
+  assignee User?         @relation("Assignee", fields: [assigneeId], references: [id])
+  messages Message[]
+  notes    TicketNote[]
+  drafts   AiDraft[]
+  events   TicketEvent[]
+
+  @@index([status])
+  @@index([assigneeId])
+  @@index([slaDueAt])
+  @@index([contactId])
+}
+
+model Message {
+  id              String    @id @default(cuid())
+  ticketId        String
+  authorUserId    String? // set for outbound messages authored by an agent
+  direction       String // inbound, outbound
+  fromEmail       String
+  toEmail         String // may be a JSON array for multiple recipients
+  ccEmail         String?
+  subject         String?
+  bodyHtml        String
+  bodyText        String?
+  gmailMessageId  String?   @unique
+  resendMessageId String?
+  messageIdHeader String? // Message-Id header value we emitted or received
+  inReplyTo       String?
+  aiGenerated     Boolean   @default(false)
+  sentAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorUser  User?        @relation(fields: [authorUserId], references: [id])
+  attachments Attachment[]
+
+  @@index([ticketId])
+}
+
+model TicketNote {
+  id        String   @id @default(cuid())
+  ticketId  String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([ticketId])
+}
+
+model Template {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  subject   String
+  bodyHtml  String
+  category  String? // used for AI auto-suggest matching
+  variables String   @default("[]") // JSON array of variable names
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AiDraft {
+  id               String    @id @default(cuid())
+  ticketId         String
+  model            String // e.g. "gpt-4o-2024-11-20"
+  subject          String
+  bodyHtml         String
+  confidence       Float // 0..1 self-reported
+  category         String?
+  status           String    @default("pending") // pending, approved, rejected, sent, superseded
+  autoSendEligible Boolean   @default(false)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  rejectedReason   String?
+  createdAt        DateTime  @default(now())
+
+  ticket     Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  reviewedBy User?  @relation("ReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([ticketId])
+  @@index([status])
+}
+
+model Attachment {
+  id          String   @id @default(cuid())
+  messageId   String
+  filename    String
+  contentType String
+  size        Int
+  storageKey  String
+  createdAt   DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model TicketEvent {
+  id        String   @id @default(cuid())
+  ticketId  String
+  userId    String?
+  type      String // created, assigned, status_changed, priority_changed, sla_breached, ai_drafted, ai_auto_sent, note_added, message_sent, message_received
+  meta      String? // JSON blob
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([ticketId])
+}
+
+model GmailCursor {
+  id           String    @id @default("singleton")
+  historyId    String?
+  lastPolledAt DateTime?
+  updatedAt    DateTime  @updatedAt
+}
+
+model Setting {
+  key       String   @id
+  value     String // JSON encoded
+  updatedAt DateTime @updatedAt
+}

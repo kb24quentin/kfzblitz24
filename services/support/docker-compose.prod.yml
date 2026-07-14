@@ -1,0 +1,66 @@
+services:
+  support-db:
+    image: postgres:16-alpine
+    container_name: support_db_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: support
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: support
+    volumes:
+      - /opt/kfzblitz24/data/prod/support-postgres:/var/lib/postgresql/data
+    networks:
+      - prod_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U support -d support"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  support:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kfzblitz24/support:prod
+    container_name: support_prod
+    restart: unless-stopped
+    depends_on:
+      support-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://support:${DB_PASSWORD}@support-db:5432/support
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: https://support.kfzblitz24-group.com
+      NEXTAUTH_URL: https://support.kfzblitz24-group.com
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      FROM_EMAIL: ${FROM_EMAIL}
+      FROM_NAME: ${FROM_NAME}
+      REPLY_TO_EMAIL: ${REPLY_TO_EMAIL}
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET}
+      GMAIL_REFRESH_TOKEN: ${GMAIL_REFRESH_TOKEN}
+      GMAIL_USER_EMAIL: ${GMAIL_USER_EMAIL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      SLA_HOURS: ${SLA_HOURS:-24}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+    networks:
+      - prod_internal
+      - traefik_net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik_net
+      - traefik.http.routers.support-prod.rule=Host(`support.kfzblitz24-group.com`)
+      - traefik.http.routers.support-prod.entrypoints=websecure
+      - traefik.http.routers.support-prod.tls=true
+      - traefik.http.routers.support-prod.tls.certresolver=letsencrypt
+      - traefik.http.services.support-prod.loadbalancer.server.port=3000
+
+networks:
+  prod_internal:
+    external: true
+  traefik_net:
+    external: true
