@@ -263,7 +263,10 @@ export function substituteAckVariables(
     "customer.email": ctx.contact.email,
     "customer.phone": ctx.contact.phone || "",
     "ticket.code": ctx.ticketCode,
-    "ticket.number": String(ctx.ticketNumber), // legacy support
+    // Legacy alias: old templates referenced {{ticket.number}} back when we
+    // used sequential integers. Redirect to the code so customer-facing text
+    // stays consistent no matter which variable a template ended up using.
+    "ticket.number": ctx.ticketCode,
     "ticket.subject": ctx.ticketSubject,
     "sla.first_response_hours": String(ctx.slaFirstResponseHours),
   };

@@ -230,7 +230,7 @@ export function TicketDetail({
       "customer.phone": c.phone || "",
       "order.id": c.orderRef || "",
       "ticket.code": ticket.code,
-      "ticket.number": String(ticket.number),
+      "ticket.number": ticket.code, // legacy alias — always show the code, never the internal number
       "ticket.subject": ticket.subject,
     };
     return input.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => map[key] ?? `{{${key}}}`);
