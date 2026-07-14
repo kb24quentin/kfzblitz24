@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { Settings, CheckCircle2, XCircle, Link2, Unlink } from "lucide-react";
+import { Settings, CheckCircle2, XCircle, Link2, Unlink, FileText, ArrowRight } from "lucide-react";
 import { isGmailConfigured, getGmailUserEmail, hasOAuthApp, getRedirectUri } from "@/lib/gmail";
 import { auth } from "@/lib/auth";
 import { SignatureEditor } from "./signature-editor";
@@ -20,11 +21,12 @@ export default async function SettingsPage({
       })
     : null;
 
-  const [users, cursor, gmailOk, gmailUserEmail] = await Promise.all([
+  const [users, cursor, gmailOk, gmailUserEmail, templateCount] = await Promise.all([
     prisma.user.findMany({ orderBy: { name: "asc" } }),
     prisma.gmailCursor.findFirst({ where: { id: "singleton" } }),
     isGmailConfigured(),
     getGmailUserEmail(),
+    prisma.template.count(),
   ]);
   const openAiOk = !!process.env.OPENAI_API_KEY;
   const oauthAppReady = hasOAuthApp();
@@ -128,6 +130,26 @@ export default async function SettingsPage({
           <SignatureEditor signature={currentUser.signature} />
         </div>
       )}
+
+      <Link
+        href="/templates"
+        className="mb-6 flex items-center justify-between bg-bg-card border border-border rounded-xl p-5 hover:border-accent/30 transition-colors group"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center text-accent">
+            <FileText className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-text">Antwort-Templates</h2>
+            <p className="text-xs text-text-light">
+              {templateCount} Templates · Variablen wie{" "}
+              <span className="font-mono">{"{{customer.first_name}}"}</span> werden im
+              Composer eingesetzt
+            </p>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-text-light group-hover:text-accent transition-colors" />
+      </Link>
 
       <div className="bg-bg-card border border-border rounded-xl p-6">
         <h2 className="font-semibold text-text mb-3">Team ({users.length})</h2>

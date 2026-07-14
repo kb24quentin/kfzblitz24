@@ -3,6 +3,7 @@ import { Users } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
+import { fullNameOf } from "@/lib/name-parse";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +44,13 @@ export default async function ContactsPage() {
               {contacts.map((c) => (
                 <tr key={c.id} className="hover:bg-bg-secondary/50">
                   <td className="px-4 py-3">
-                    <div className="text-text font-medium">{c.name || "—"}</div>
+                    <div className="text-text font-medium">
+                      {fullNameOf(c) || "—"}
+                    </div>
                     <div className="text-xs text-text-light">{c.email}</div>
+                    {c.phone && (
+                      <div className="text-xs text-text-light">☎ {c.phone}</div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-text-light font-mono text-xs">
                     {c.orderRef || "—"}

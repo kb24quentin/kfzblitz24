@@ -2,19 +2,18 @@ import { TicketList } from "@/components/ticket-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function TicketsPage({
+export default async function TicketArchivePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; priority?: string; assignee?: string }>;
+  searchParams: Promise<{ q?: string; priority?: string; assignee?: string }>;
 }) {
   const sp = await searchParams;
   return (
     <TicketList
-      mode="active"
-      title="Tickets"
-      subtitle="Offene Anfragen sortiert nach Priorität und SLA"
+      mode="archived"
+      title="Archiv"
+      subtitle="Gelöste Tickets, älteste unten"
       query={sp.q}
-      statusFilter={sp.status}
       priorityFilter={sp.priority}
       assigneeFilter={sp.assignee}
     />

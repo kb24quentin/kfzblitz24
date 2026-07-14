@@ -38,7 +38,9 @@ model Signature {
 model Contact {
   id        String   @id @default(cuid())
   email     String   @unique
-  name      String?
+  firstName String?
+  lastName  String?
+  name      String? // legacy full name, kept for backward compat & display fallback
   phone     String?
   orderRef  String? // link to Retoure/Webisco order if known
   notes     String?

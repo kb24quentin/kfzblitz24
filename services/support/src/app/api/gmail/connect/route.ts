@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { buildAuthUrl, hasOAuthApp, getRedirectUri } from "@/lib/gmail";
 import { randomBytes } from "crypto";
@@ -20,10 +21,13 @@ export async function GET() {
   const state = randomBytes(16).toString("hex");
   const url = buildAuthUrl(state);
 
-  const res = Response.redirect(url);
-  res.headers.set(
-    "Set-Cookie",
-    `gmail_oauth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`
-  );
+  const res = NextResponse.redirect(url);
+  res.cookies.set("gmail_oauth_state", state, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 600,
+  });
   return res;
 }

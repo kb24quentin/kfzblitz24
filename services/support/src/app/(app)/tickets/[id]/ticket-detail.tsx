@@ -25,6 +25,7 @@ import {
   setPriorityAction,
   setAssigneeAction,
   rejectDraftAction,
+  updateContactAction,
 } from "./actions";
 
 type UserLite = { id: string; name: string; email: string };
@@ -86,7 +87,16 @@ type Ticket = {
   gmailThreadId: string | null;
   createdAt: string;
   updatedAt: string;
-  contact: { id: string; email: string; name: string | null; phone: string | null; orderRef: string | null; notes: string | null };
+  contact: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    name: string | null;
+    phone: string | null;
+    orderRef: string | null;
+    notes: string | null;
+  };
   assignee: UserLite | null;
   messages: Message[];
   notes: Note[];
@@ -99,7 +109,6 @@ const STATUSES: [string, string][] = [
   ["pending", "Wartend"],
   ["on_hold", "Pausiert"],
   ["resolved", "Gelöst"],
-  ["closed", "Geschlossen"],
 ];
 
 const PRIORITIES: [string, string][] = [
@@ -160,11 +169,28 @@ export function TicketDetail({
   const [draftIdApplied, setDraftIdApplied] = useState<string | null>(null);
   const editorRef = useRef<RichTextEditorHandle>(null);
 
+  const substitute = (input: string): string => {
+    const c = ticket.contact;
+    const first = c.firstName || c.name?.split(" ")[0] || "";
+    const last = c.lastName || (c.name ? c.name.split(" ").slice(1).join(" ") : "") || "";
+    const map: Record<string, string> = {
+      "customer.first_name": first,
+      "customer.last_name": last,
+      "customer.name": [first, last].filter(Boolean).join(" ") || c.name || "",
+      "customer.email": c.email,
+      "customer.phone": c.phone || "",
+      "order.id": c.orderRef || "",
+      "ticket.number": String(ticket.number),
+      "ticket.subject": ticket.subject,
+    };
+    return input.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => map[key] ?? `{{${key}}}`);
+  };
+
   const applyTemplate = (id: string) => {
     const t = templates.find((x) => x.id === id);
     if (!t) return;
-    setReplyHtml(t.bodyHtml);
-    setReplySubject(t.subject || replySubject);
+    setReplyHtml(substitute(t.bodyHtml));
+    setReplySubject(substitute(t.subject || replySubject));
   };
 
   const applyDraft = (d: Draft) => {
@@ -505,20 +531,68 @@ export function TicketDetail({
 
           <div className="bg-bg-card border border-border rounded-xl p-5">
             <h3 className="font-semibold text-text mb-3">Kunde</h3>
-            <div className="space-y-1 text-sm">
-              <div className="text-text font-medium">
-                {ticket.contact.name || "—"}
-              </div>
-              <div className="text-text-light">{ticket.contact.email}</div>
-              {ticket.contact.phone && (
-                <div className="text-text-light">{ticket.contact.phone}</div>
-              )}
-              {ticket.contact.orderRef && (
-                <div className="text-text-light">
-                  Bestellung: <span className="font-mono">{ticket.contact.orderRef}</span>
+            <details>
+              <summary className="cursor-pointer list-none">
+                <div className="space-y-1 text-sm">
+                  <div className="text-text font-medium">
+                    {[ticket.contact.firstName, ticket.contact.lastName]
+                      .filter(Boolean)
+                      .join(" ") ||
+                      ticket.contact.name ||
+                      "—"}
+                  </div>
+                  <div className="text-text-light">{ticket.contact.email}</div>
+                  {ticket.contact.phone && (
+                    <div className="text-text-light">☎ {ticket.contact.phone}</div>
+                  )}
+                  {ticket.contact.orderRef && (
+                    <div className="text-text-light">
+                      Best.: <span className="font-mono">{ticket.contact.orderRef}</span>
+                    </div>
+                  )}
+                  <div className="text-xs text-accent hover:underline mt-2">
+                    Bearbeiten ▾
+                  </div>
                 </div>
-              )}
-            </div>
+              </summary>
+              <form action={updateContactAction} className="mt-3 space-y-2">
+                <input type="hidden" name="contactId" value={ticket.contact.id} />
+                <input type="hidden" name="ticketId" value={ticket.id} />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    name="firstName"
+                    defaultValue={ticket.contact.firstName || ""}
+                    placeholder="Vorname"
+                    className="w-full px-2 py-1.5 border border-border rounded text-sm"
+                  />
+                  <input
+                    name="lastName"
+                    defaultValue={ticket.contact.lastName || ""}
+                    placeholder="Nachname"
+                    className="w-full px-2 py-1.5 border border-border rounded text-sm"
+                  />
+                </div>
+                <input
+                  name="phone"
+                  type="tel"
+                  defaultValue={ticket.contact.phone || ""}
+                  placeholder="Telefon"
+                  className="w-full px-2 py-1.5 border border-border rounded text-sm"
+                />
+                <input
+                  name="orderRef"
+                  defaultValue={ticket.contact.orderRef || ""}
+                  placeholder="Bestellnr."
+                  className="w-full px-2 py-1.5 border border-border rounded text-sm font-mono"
+                />
+                <button
+                  type="submit"
+                  className="w-full px-3 py-1.5 bg-accent text-white rounded text-sm font-medium hover:bg-accent-light transition-colors"
+                >
+                  Speichern
+                </button>
+              </form>
+            </details>
           </div>
 
           <div className="bg-bg-card border border-border rounded-xl p-5">

@@ -61,9 +61,7 @@ export async function setStatusAction(ticketId: string, status: string) {
   if (!existing) throw new Error("Ticket nicht gefunden");
 
   const resolvedAt =
-    status === "resolved" || status === "closed"
-      ? existing.resolvedAt ?? new Date()
-      : null;
+    status === "resolved" ? existing.resolvedAt ?? new Date() : null;
 
   await prisma.$transaction([
     prisma.ticket.update({
@@ -132,6 +130,34 @@ export async function setAssigneeAction(
   revalidatePath("/tickets");
 }
 
+export async function updateContactAction(formData: FormData) {
+  await requireUser();
+  const contactId = String(formData.get("contactId") || "");
+  const firstName = String(formData.get("firstName") || "").trim() || null;
+  const lastName = String(formData.get("lastName") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
+  const orderRef = String(formData.get("orderRef") || "").trim() || null;
+  const ticketId = String(formData.get("ticketId") || "");
+
+  if (!contactId) throw new Error("Kontakt-ID erforderlich");
+
+  const composedName = [firstName, lastName].filter(Boolean).join(" ") || null;
+
+  await prisma.contact.update({
+    where: { id: contactId },
+    data: {
+      firstName,
+      lastName,
+      name: composedName,
+      phone,
+      orderRef,
+    },
+  });
+
+  if (ticketId) revalidatePath(`/tickets/${ticketId}`);
+  revalidatePath("/contacts");
+}
+
 export async function rejectDraftAction(draftId: string, reason?: string) {
   const user = await requireUser();
   await prisma.aiDraft.update({
@@ -154,15 +180,30 @@ export async function createTicketAction(formData: FormData) {
   const contactEmail = String(formData.get("contactEmail") || "")
     .trim()
     .toLowerCase();
-  const contactName = String(formData.get("contactName") || "").trim() || null;
+  const firstName = String(formData.get("firstName") || "").trim() || null;
+  const lastName = String(formData.get("lastName") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
   const priority = String(formData.get("priority") || "normal");
 
   if (!subject || !contactEmail) throw new Error("Betreff + Kunden-Email erforderlich");
 
+  const composedName = [firstName, lastName].filter(Boolean).join(" ") || null;
+
   const contact = await prisma.contact.upsert({
     where: { email: contactEmail },
-    create: { email: contactEmail, name: contactName },
-    update: contactName ? { name: contactName } : {},
+    create: {
+      email: contactEmail,
+      firstName,
+      lastName,
+      name: composedName,
+      phone,
+    },
+    update: {
+      ...(firstName ? { firstName } : {}),
+      ...(lastName ? { lastName } : {}),
+      ...(composedName ? { name: composedName } : {}),
+      ...(phone ? { phone } : {}),
+    },
   });
 
   const slaHours = Number(process.env.SLA_HOURS || "24");

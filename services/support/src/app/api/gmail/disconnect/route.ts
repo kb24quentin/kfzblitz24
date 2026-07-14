@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { disconnectGmail } from "@/lib/gmail";
 
@@ -9,6 +10,8 @@ export async function POST() {
     return new Response("Not authenticated", { status: 401 });
   }
   await disconnectGmail();
-  const url = (process.env.AUTH_URL || process.env.NEXTAUTH_URL || "").replace(/\/$/, "") + "/settings?gmail=disconnected";
-  return Response.redirect(url, 303);
+  const url =
+    (process.env.AUTH_URL || process.env.NEXTAUTH_URL || "").replace(/\/$/, "") +
+    "/settings?gmail=disconnected";
+  return NextResponse.redirect(url, 303);
 }

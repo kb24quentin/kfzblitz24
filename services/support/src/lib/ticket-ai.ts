@@ -55,6 +55,8 @@ export async function generateDraftForTicket(ticketId: string): Promise<void> {
     subject: ticket.subject,
     fromEmail: ticket.contact.email,
     fromName: ticket.contact.name,
+    customerFirstName: ticket.contact.firstName,
+    customerLastName: ticket.contact.lastName,
     bodyText: lastInbound.bodyText || lastInbound.bodyHtml.replace(/<[^>]+>/g, ""),
     ticketNumber: ticket.number,
     previousMessages: ticket.messages.map((m) => ({

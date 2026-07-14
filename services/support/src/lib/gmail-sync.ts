@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { gmail, isGmailConfigured, getGmailUserEmail } from "@/lib/gmail";
 import { generateDraftForTicket } from "@/lib/ticket-ai";
+import { splitName } from "@/lib/name-parse";
 
 const INGEST_LABEL_NAME = "kb24-support-ingested";
 let cachedLabelId: string | null = null;
@@ -165,11 +166,23 @@ async function findOrCreateTicket(p: Parsed): Promise<{ ticketId: string; isNew:
   }
 
   // 3. New ticket
+  const { firstName, lastName } = splitName(p.fromName);
   const contact = await prisma.contact.upsert({
     where: { email: p.fromEmail },
-    create: { email: p.fromEmail, name: p.fromName },
+    create: { email: p.fromEmail, name: p.fromName, firstName, lastName },
     update: p.fromName ? { name: p.fromName } : {},
   });
+
+  // Backfill first/last if the contact doesn't have them yet (never overwrite)
+  if ((firstName || lastName) && (!contact.firstName || !contact.lastName)) {
+    await prisma.contact.update({
+      where: { id: contact.id },
+      data: {
+        firstName: contact.firstName || firstName,
+        lastName: contact.lastName || lastName,
+      },
+    });
+  }
 
   const slaHours = Number(process.env.SLA_HOURS || "24");
   const slaDueAt = new Date(p.receivedAt.getTime() + slaHours * 3600_000);

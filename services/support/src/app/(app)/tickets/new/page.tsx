@@ -14,33 +14,54 @@ export default function NewTicketPage() {
 
       <h1 className="text-xl font-bold text-text mb-1">Neues Ticket manuell erstellen</h1>
       <p className="text-sm text-text-light mb-6">
-        Für Fälle die per Telefon oder anderweitig reinkommen. Bei Gmail-Sync
-        werden Tickets automatisch angelegt.
+        Für Fälle die per Telefon reinkommen. Bei Gmail-Sync werden Tickets
+        automatisch angelegt.
       </p>
 
       <form action={createTicketAction} className="bg-bg-card border border-border rounded-xl p-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">
+            Kunden-Email *
+          </label>
+          <input
+            type="email"
+            name="contactEmail"
+            required
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-text mb-1">
-              Kunden-Email *
-            </label>
-            <input
-              type="email"
-              name="contactEmail"
-              required
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">
-              Kunden-Name
+              Vorname
             </label>
             <input
               type="text"
-              name="contactName"
+              name="firstName"
               className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">
+              Nachname
+            </label>
+            <input
+              type="text"
+              name="lastName"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Telefon</label>
+          <input
+            type="tel"
+            name="phone"
+            placeholder="+49 …"
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+          />
         </div>
 
         <div>
@@ -69,17 +90,13 @@ export default function NewTicketPage() {
 
         <div>
           <label className="block text-sm font-medium text-text mb-1">
-            Erste Nachricht (optional)
+            Erste Nachricht (optional, wird noch nicht per Mail versendet)
           </label>
           <textarea
             name="bodyHtml"
             rows={5}
-            placeholder="Optionale erste ausgehende Nachricht (wird noch nicht per Mail versendet)"
             className="w-full px-3 py-2 border border-border rounded-lg text-sm resize-y focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
-          <p className="text-xs text-text-light mt-1">
-            Wird nur als Verlaufseintrag angelegt, nicht automatisch versendet.
-          </p>
         </div>
 
         <div className="flex justify-end gap-2">

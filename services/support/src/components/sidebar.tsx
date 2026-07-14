@@ -6,7 +6,7 @@ import { signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   Inbox,
-  FileText,
+  Archive,
   Users,
   Settings,
   LogOut,
@@ -14,8 +14,8 @@ import {
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Tickets", href: "/tickets", icon: Inbox },
-  { name: "Templates", href: "/templates", icon: FileText },
+  { name: "Tickets", href: "/tickets", icon: Inbox, matchExact: false },
+  { name: "Archiv", href: "/tickets/archive", icon: Archive, matchExact: true },
   { name: "Kontakte", href: "/contacts", icon: Users },
 ];
 
@@ -41,7 +41,11 @@ export function Sidebar() {
           const isActive =
             item.href === "/"
               ? pathname === "/"
-              : pathname.startsWith(item.href);
+              : "matchExact" in item && item.matchExact
+                ? pathname === item.href
+                : item.href === "/tickets"
+                  ? pathname.startsWith("/tickets") && !pathname.startsWith("/tickets/archive")
+                  : pathname.startsWith(item.href);
           return (
             <Link
               key={item.name}

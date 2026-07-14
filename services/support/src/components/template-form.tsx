@@ -74,7 +74,8 @@ export function TemplateForm({
           <label className="block text-sm font-medium text-text mb-1">
             Body *{" "}
             <span className="text-xs text-text-light font-normal">
-              — Variablen: {"{{customer.name}}, {{customer.email}}, {{ticket.number}}, {{order.id}}"}
+              — Variablen:{" "}
+              {"{{customer.first_name}}, {{customer.last_name}}, {{customer.email}}, {{customer.phone}}, {{ticket.number}}, {{order.id}}"}
             </span>
           </label>
           <input type="hidden" name="bodyHtml" value={bodyHtml} />

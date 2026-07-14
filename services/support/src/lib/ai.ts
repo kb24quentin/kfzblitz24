@@ -62,6 +62,8 @@ export async function classifyAndDraft(input: {
   subject: string;
   fromEmail: string;
   fromName: string | null;
+  customerFirstName?: string | null;
+  customerLastName?: string | null;
   bodyText: string;
   ticketNumber: number;
   previousMessages?: Array<{ direction: string; bodyText: string; createdAt: Date }>;
@@ -75,9 +77,20 @@ export async function classifyAndDraft(input: {
     )
     .join("\n---\n");
 
+  const composedName = [input.customerFirstName, input.customerLastName]
+    .filter(Boolean)
+    .join(" ");
+  const displayName = composedName || input.fromName || input.fromEmail;
+  const salutation = input.customerLastName
+    ? `Sehr geehrte(r) Frau/Herr ${input.customerLastName}`
+    : input.customerFirstName
+      ? `Hallo ${input.customerFirstName}`
+      : "Sehr geehrte Damen und Herren";
+
   const userMsg = [
     `Ticket #${input.ticketNumber}`,
-    `Kunde: ${input.fromName || input.fromEmail} <${input.fromEmail}>`,
+    `Kunde: ${displayName} <${input.fromEmail}>`,
+    `Empfohlene Anrede: ${salutation}`,
     `Betreff: ${input.subject}`,
     ``,
     history ? `--- Bisheriger Verlauf ---\n${history}\n---\n` : "",
