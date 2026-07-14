@@ -5,6 +5,7 @@ import { isGmailConfigured, getGmailUserEmail, hasOAuthApp, getRedirectUri } fro
 import { auth } from "@/lib/auth";
 import { SignatureEditor } from "./signature-editor";
 import { AutoAckEditor } from "./auto-ack-editor";
+import { UserManagement } from "./user-management";
 import {
   getSlaFirstResponseHours,
   getSlaResolutionHours,
@@ -231,43 +232,16 @@ export default async function SettingsPage({
       </Link>
 
       <div className="bg-bg-card border border-border rounded-xl p-6">
-        <h2 className="font-semibold text-text mb-3">Team ({users.length})</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase text-text-light border-b border-border">
-              <th className="py-2 font-medium">Name</th>
-              <th className="py-2 font-medium">Email</th>
-              <th className="py-2 font-medium">Rolle</th>
-              <th className="py-2 font-medium">Aktiv</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td className="py-2 text-text">{u.name}</td>
-                <td className="py-2 text-text-light">{u.email}</td>
-                <td className="py-2">
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full ${
-                      u.role === "admin"
-                        ? "bg-accent/15 text-accent"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    {u.role}
-                  </span>
-                </td>
-                <td className="py-2">
-                  {u.active ? (
-                    <CheckCircle2 className="w-4 h-4 text-success" />
-                  ) : (
-                    <XCircle className="w-4 h-4 text-danger" />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <h2 className="font-semibold text-text mb-4">Team</h2>
+        {currentUser ? (
+          <UserManagement
+            users={users}
+            currentUserId={currentUser.id}
+            isAdmin={currentUser.role === "admin"}
+          />
+        ) : (
+          <p className="text-sm text-text-light">Bitte neu einloggen.</p>
+        )}
       </div>
     </div>
   );
