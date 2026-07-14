@@ -144,8 +144,10 @@ export async function sendMailAndPersist({
   const innerContent = `<!-- TICKET-REF:${ticket.code} -->\n${innerContentRaw}`;
   const wrappedHtml = isFullHtmlDocument(innerContent)
     ? innerContent
-    : wrapEmailHtml(innerContent);
-  const plainText = htmlToPlainText(innerContent);
+    : wrapEmailHtml(innerContent, { ticketCode: ticket.code });
+  const plainText =
+    htmlToPlainText(innerContent) +
+    `\n\n---\nReferenznummer: #${ticket.code}\nBitte bei Antwort im Betreff belassen.`;
 
   // Build In-Reply-To / References to preserve threading
   const inReplyTo = lastMsg?.messageIdHeader || undefined;

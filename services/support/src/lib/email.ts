@@ -12,8 +12,8 @@ export function getReplyToAddress(): string {
 
 import { renderBrandedMail } from "./mail-template";
 
-export function wrapEmailHtml(html: string): string {
-  return renderBrandedMail(html);
+export function wrapEmailHtml(html: string, opts?: { ticketCode?: string | null }): string {
+  return renderBrandedMail(html, opts);
 }
 
 export function htmlToPlainText(html: string): string {

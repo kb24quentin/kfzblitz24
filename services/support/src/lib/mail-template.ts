@@ -19,7 +19,18 @@ const LOGO_URL =
 const SUPPORT_EMAIL =
   process.env.FROM_EMAIL?.trim() || "service@kfzblitz24.de";
 
-export function renderBrandedMail(innerContent: string): string {
+export function renderBrandedMail(
+  innerContent: string,
+  opts?: { ticketCode?: string | null }
+): string {
+  const ticketRefBlock = opts?.ticketCode
+    ? `
+      <div style="margin-bottom:18px;padding:12px 14px;background:rgba(255,255,255,0.06);border-left:3px solid #ff8533;border-radius:4px;font-size:12px;line-height:1.6;color:#ffffff;">
+        <strong style="color:#ff8533;font-weight:600;">Referenznummer: #${opts.ticketCode}</strong><br>
+        <span style="color:rgba(255,255,255,0.62);font-size:11px;">Bitte bei Antwort im Betreff belassen &mdash; hilft uns bei der Zuordnung.</span>
+      </div>`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -43,7 +54,7 @@ export function renderBrandedMail(innerContent: string): string {
     <td style="padding:36px 32px;font-size:14px;line-height:1.7;color:#1a202c;">${innerContent}</td>
   </tr>
   <tr>
-    <td style="background:#0b3756;padding:32px 32px 26px 32px;color:#cbd5e0;">
+    <td style="background:#0b3756;padding:32px 32px 26px 32px;color:#cbd5e0;">${ticketRefBlock}
       <a href="${SHOP_URL}" style="display:inline-block;text-decoration:none;border:0;margin-bottom:14px;">
         <img src="${LOGO_URL}" alt="kfzBlitz24" width="140" style="display:block;width:140px;max-width:140px;height:auto;border:0;outline:none;">
       </a>
