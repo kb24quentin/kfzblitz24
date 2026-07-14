@@ -18,6 +18,7 @@ class PrinterRepository(
     private val api: RetoureApi,
     private val printerStore: PrinterStore,
     private val bluetoothPrinter: BluetoothLabelPrinter,
+    private val wifiPrinter: WifiTcpLabelPrinter,
 ) {
 
     sealed class PrintOutcome {
@@ -67,7 +68,15 @@ class PrinterRepository(
                         PrintOutcome.Err(r.message)
                 }
             }
-            else -> PrintOutcome.Err("Test-Druck nur für Bluetooth implementiert.")
+            PrinterStore.TRANSPORT_WIFI -> {
+                when (val r = wifiPrinter.print(address = saved.address, labelBody = body)) {
+                    is WifiTcpLabelPrinter.Result.Ok ->
+                        PrintOutcome.Ok(printerName = saved.name, durationMs = r.durationMs)
+                    is WifiTcpLabelPrinter.Result.Err ->
+                        PrintOutcome.Err(r.message)
+                }
+            }
+            else -> PrintOutcome.Err("Unbekannter Drucker-Transport: ${saved.transport}")
         }
     }
 
@@ -79,8 +88,37 @@ class PrinterRepository(
     suspend fun printContainerLabel(containerId: String): PrintOutcome {
         val saved = printerStore.get() ?: return PrintOutcome.NoPrinterConfigured
 
-        // 1. Label-Bytes holen — Backend liefert je nach `format`-Query
-        //    entweder ZPL oder TSPL.
+        // WiFi-Weg: pixel-perfektes PDF-Label als BITMAP-TSPL vom Server
+        // holen und direkt an TCP:9100 durchreichen. Response ist binary
+        // → als ByteArray lesen, nicht als String.
+        if (saved.transport == PrinterStore.TRANSPORT_WIFI) {
+            val bytes: ByteArray = try {
+                val body = api.getContainerLabelTsplBitmap(containerId)
+                body.bytes()
+            } catch (e: Throwable) {
+                return PrintOutcome.Err(e.friendlyMessage("Label-Download (BITMAP)"))
+            }
+            if (bytes.isEmpty()) {
+                return PrintOutcome.Err("Server hat leeres BITMAP-Label zurückgegeben.")
+            }
+            // Sanity-Check: TSPL-Header muss am Anfang stehen (ASCII "SIZE ").
+            val head = bytes.copyOfRange(0, minOf(64, bytes.size)).toString(Charsets.US_ASCII)
+            if (!head.contains("SIZE ")) {
+                return PrintOutcome.Err(
+                    "Server hat ungültige BITMAP-Daten geliefert (kein SIZE-Header). " +
+                        "Ist pdftoppm im Backend-Docker installiert?",
+                )
+            }
+            return when (val r = wifiPrinter.printBytes(address = saved.address, bytes = bytes)) {
+                is WifiTcpLabelPrinter.Result.Ok ->
+                    PrintOutcome.Ok(printerName = saved.name, durationMs = r.durationMs)
+                is WifiTcpLabelPrinter.Result.Err ->
+                    PrintOutcome.Err(r.message)
+            }
+        }
+
+        // Bluetooth-Weg (Munbyn u. Ä.): einfaches Text-TSPL/ZPL vom Backend
+        // holen. Sprache je nach saved.language, keine PDF-Rasterisierung.
         val labelBody: String = try {
             val body = api.getContainerLabelZpl(containerId, format = saved.language)
             body.string()
@@ -92,9 +130,6 @@ class PrinterRepository(
             return PrintOutcome.Err("Server hat ein leeres Label zurückgegeben.")
         }
 
-        // Sanity-Check: enthält die Antwort die erwarteten Start-Tokens?
-        // - ZPL beginnt mit `^XA`
-        // - TSPL beginnt mit `SIZE ` (uns reicht das)
         val looksValid = when (saved.language) {
             PrinterStore.LANGUAGE_ZPL  -> labelBody.contains("^XA")
             PrinterStore.LANGUAGE_TSPL -> labelBody.contains("SIZE ")
@@ -106,7 +141,6 @@ class PrinterRepository(
             )
         }
 
-        // 2. An den passenden Transport delegieren
         return when (saved.transport) {
             PrinterStore.TRANSPORT_BLUETOOTH -> {
                 when (val r = bluetoothPrinter.print(macAddress = saved.address, zpl = labelBody)) {
@@ -115,13 +149,6 @@ class PrinterRepository(
                     is BluetoothLabelPrinter.Result.Err ->
                         PrintOutcome.Err(r.message)
                 }
-            }
-            PrinterStore.TRANSPORT_WIFI -> {
-                // Stub: WiFi-Druck läuft serverseitig (siehe sendZplToPrinter()
-                // im Backend). Wenn wir später WiFi-Drucker registrieren,
-                // sollte dieser Pfad eher gar nicht erst erreicht werden —
-                // der Server druckt selbst und antwortet "already printed".
-                PrintOutcome.Err("WiFi-Druck ist noch nicht implementiert — bitte Bluetooth-Drucker wählen.")
             }
             else -> PrintOutcome.Err("Unbekannter Drucker-Transport: ${saved.transport}")
         }

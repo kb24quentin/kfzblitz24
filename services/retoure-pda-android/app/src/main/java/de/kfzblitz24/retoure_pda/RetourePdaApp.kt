@@ -8,6 +8,7 @@ import de.kfzblitz24.retoure_pda.data.auth.TokenStore
 import de.kfzblitz24.retoure_pda.data.printer.BluetoothLabelPrinter
 import de.kfzblitz24.retoure_pda.data.printer.PrinterRepository
 import de.kfzblitz24.retoure_pda.data.printer.PrinterStore
+import de.kfzblitz24.retoure_pda.data.printer.WifiTcpLabelPrinter
 import de.kfzblitz24.retoure_pda.data.repo.CaseRepository
 import de.kfzblitz24.retoure_pda.data.repo.ContainerRepository
 import de.kfzblitz24.retoure_pda.data.repo.PairRepository
@@ -58,6 +59,8 @@ class RetourePdaApp : Application(), ImageLoaderFactory {
         private set
     lateinit var bluetoothPrinter: BluetoothLabelPrinter
         private set
+    lateinit var wifiPrinter: WifiTcpLabelPrinter
+        private set
     lateinit var printerRepository: PrinterRepository
         private set
 
@@ -79,10 +82,12 @@ class RetourePdaApp : Application(), ImageLoaderFactory {
 
         printerStore       = PrinterStore(this)
         bluetoothPrinter   = BluetoothLabelPrinter(this)
+        wifiPrinter        = WifiTcpLabelPrinter()
         printerRepository  = PrinterRepository(
             api = apiClient.api,
             printerStore = printerStore,
             bluetoothPrinter = bluetoothPrinter,
+            wifiPrinter = wifiPrinter,
         )
     }
 

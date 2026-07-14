@@ -24,7 +24,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Prisma braucht openssl auf Alpine; Prisma CLI global damit der
 # entrypoint `prisma migrate deploy` aufrufen kann.
-RUN apk add --no-cache openssl \
+# poppler-utils liefert `pdftoppm` für die PDF→BITMAP-Rasterisierung
+# im Container-Label-Endpoint (services/retoure/src/lib/pdf-to-tspl.ts) —
+# damit das pixel-perfekte Dashboard-Design auf dem Xprinter XP-420B
+# im Warehouse landet, statt einfaches Text-TSPL.
+RUN apk add --no-cache openssl poppler-utils \
  && npm install -g prisma@6.19.3
 
 RUN addgroup --system --gid 1001 nodejs \

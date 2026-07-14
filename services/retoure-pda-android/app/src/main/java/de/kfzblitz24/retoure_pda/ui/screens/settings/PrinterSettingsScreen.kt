@@ -283,6 +283,113 @@ fun PrinterSettingsScreen(
                 )
             }
 
+            // ── WiFi-Drucker (TCP:9100) ─────────────────────────────
+            // Xprinter XP-420B im Warehouse spricht TSPL auf raw TCP:9100.
+            // User trägt IP händisch ein (statisch reservieren in der
+            // Fritz!Box damit sie stabil bleibt), Preset-Button lädt den
+            // aktuellen Warehouse-Default.
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "WiFi-Drucker (TCP:9100)",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+            )
+            Text(
+                "Für Xprinter XP-420B u. Ä. — PDA und Drucker müssen im gleichen WLAN sein.",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+            )
+
+            var wifiIp by remember { mutableStateOf(current?.let {
+                if (it.transport == PrinterStore.TRANSPORT_WIFI) it.address else ""
+            } ?: "") }
+            var wifiName by remember { mutableStateOf(current?.let {
+                if (it.transport == PrinterStore.TRANSPORT_WIFI) it.name else ""
+            } ?: "Xprinter XP-420B") }
+            var wifiSaved by remember { mutableStateOf<String?>(null) }
+            var wifiError by remember { mutableStateOf<String?>(null) }
+
+            OutlinedTextField(
+                value = wifiIp,
+                onValueChange = { wifiIp = it.trim() },
+                label = { Text("IP-Adresse", color = Color.White.copy(alpha = 0.7f)) },
+                placeholder = { Text("z.B. 192.168.178.66", color = Color.White.copy(alpha = 0.4f)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Orange,
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                    cursorColor = Orange,
+                ),
+            )
+
+            OutlinedTextField(
+                value = wifiName,
+                onValueChange = { wifiName = it },
+                label = { Text("Anzeigename", color = Color.White.copy(alpha = 0.7f)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Orange,
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                    cursorColor = Orange,
+                ),
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        wifiIp = "192.168.178.66"
+                        wifiName = "Xprinter XP-420B"
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text("Warehouse-Default", color = Color.White, fontSize = 12.sp)
+                }
+                Button(
+                    onClick = {
+                        val ip = wifiIp.trim()
+                        val name = wifiName.trim().ifBlank { ip }
+                        // Simple sanity: mind. eine Ziffer + Punkt, nicht komplett leer
+                        if (ip.isBlank() || !ip.contains('.')) {
+                            wifiError = "Bitte eine gültige IP eingeben (z.B. 192.168.178.66)."
+                            wifiSaved = null
+                        } else {
+                            printerStore.save(PrinterStore.SavedPrinter(
+                                transport = PrinterStore.TRANSPORT_WIFI,
+                                address = ip,
+                                name = name,
+                                language = PrinterStore.LANGUAGE_TSPL, // Xprinter default
+                            ))
+                            current = printerStore.get()
+                            wifiSaved = "✓ WiFi-Drucker gespeichert"
+                            wifiError = null
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Orange,
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Text("Als Default speichern", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+            wifiSaved?.let { Text(it, color = Color(0xFFB9F6CA), fontSize = 12.sp) }
+            wifiError?.let { Text(it, color = Color(0xFFEF9A9A), fontSize = 12.sp) }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 12.dp),
+                color = Color.White.copy(alpha = 0.1f),
+            )
+
             // ── Gepairte Geräte ──────────────────────────────────────
             Spacer(Modifier.height(8.dp))
             Text(

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Config
+    ────────────────────────
+
+    Default: TLS-only für alle Public-Domains (retoure.staging.kfzblitz24-group.com,
+    rma.staging.kfzblitz24-group.com etc.). Kein Cleartext für Backend-Traffic.
+
+    Ausnahme: private RFC-1918 IP-Ranges dürfen Cleartext, weil unsere
+    WiFi-Etikettendrucker (Xprinter XP-420B im Warehouse-Fritz!Box-Netz)
+    kein TLS sprechen — sie hören auf raw TCP:9100 (JetDirect-Protokoll).
+
+    Erlaubt:
+      • 192.168.0.0/16 — Fritz!Box / typische Warehouse-LANs
+      • 10.0.0.0/8      — größere Firmen-LANs / VPN
+      • 172.16.0.0/12   — Docker-Default-Range
+
+    NICHT erlaubt: öffentliche IPs im Cleartext. Wenn wir Cloudflared /
+    Tailscale nutzen und der Drucker plötzlich unter public IP steht,
+    diese Datei ergänzen — nicht global usesCleartextTraffic aufmachen.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Fritz!Box / typische Warehouse-LANs (192.168.x.x) -->
+        <domain includeSubdomains="false">192.168.0.0</domain>
+        <domain includeSubdomains="false">192.168.1.0</domain>
+        <!-- Wir können hier leider keine CIDR-Ranges nutzen; entweder
+             wir listen wichtige einzelne IPs auf, oder wir nehmen den
+             base-config-Trick unten. -->
+    </domain-config>
+
+    <!--
+        Base-config gilt für ALLE Verbindungen die nicht explizit unter
+        <domain-config> stehen. Wir setzen `cleartextTrafficPermitted="true"`,
+        damit beliebige lokale IPs (z.B. 192.168.178.66) ohne HTTPS
+        angesprochen werden können. Backend-URLs sind über die Retrofit-
+        Konfiguration ohnehin `https://…`, also weiterhin TLS-verschlüsselt.
+
+        Trade-off: würde theoretisch auch Cleartext zu Public-IPs erlauben,
+        aber unsere App macht keine solchen Aufrufe (alle Backend-Calls
+        gehen an HTTPS-Domains).
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

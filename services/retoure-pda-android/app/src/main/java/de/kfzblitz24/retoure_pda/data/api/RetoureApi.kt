@@ -221,4 +221,25 @@ interface RetoureApi {
         @Query("format") format: String = "tspl",
         @Query("test") testMarker: String = "hello",
     ): ResponseBody
+
+    /**
+     * Pixel-perfektes Container-Label als TSPL mit BITMAP-Kommandos.
+     *
+     * Der Server rendert das Dashboard-PDF (buildPalletLabelPdf),
+     * rasterisiert es auf 203 DPI monochrom via pdftoppm und wickelt
+     * das PBM in TSPL BITMAP-Chunks (STRIP_ROWS=64, weiße Streifen
+     * werden gedroppt). Der Response ist `application/octet-stream`
+     * mit gemischt Text (SIZE/CLS/PRINT) und binären Pixel-Daten —
+     * MUSS als raw `.bytes()` gelesen werden, NICHT als `.string()`,
+     * sonst zerstört UTF-8-Decoding die Bitmap-Bytes.
+     *
+     * Nur für WiFi-Drucker (Xprinter XP-420B im Warehouse). Für
+     * Bluetooth-Drucker bleibt getContainerLabelZpl der richtige
+     * Endpoint mit einfachem Text-TSPL.
+     */
+    @Streaming
+    @GET("api/pda/containers/{containerId}/label-tspl-bitmap")
+    suspend fun getContainerLabelTsplBitmap(
+        @Path("containerId") containerId: String,
+    ): ResponseBody
 }
