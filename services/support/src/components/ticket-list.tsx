@@ -3,7 +3,7 @@ import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { Inbox, Plus, Clock, AlertCircle, Search, Archive, Bell } from "lucide-react";
+import { Inbox, Plus, Clock, AlertCircle, Search, Archive, Bell, Check } from "lucide-react";
 import { fullNameOf } from "@/lib/name-parse";
 import { STATUS_LABEL, PRIORITY_LABEL, PRIORITY_CLASSES } from "@/lib/status";
 
@@ -236,8 +236,11 @@ export async function TicketList({
             </thead>
             <tbody className="divide-y divide-border">
               {tickets.map((t) => {
+                // Overdue nur wenn's noch KEINE erst-antwort gab.
+                // Sobald firstResponseAt gesetzt → SLA erfüllt, kein countdown mehr.
                 const overdue =
-                  !t.resolvedAt && t.firstResponseDueAt.getTime() < Date.now();
+                  !t.resolvedAt && !t.firstResponseAt && t.firstResponseDueAt.getTime() < Date.now();
+                const firstResponseDone = !!t.firstResponseAt;
                 const displayName = fullNameOf(t.contact);
                 const snoozeDue = t.snoozedUntil && t.snoozedUntil.getTime() <= Date.now();
                 return (
@@ -291,7 +294,9 @@ export async function TicketList({
                           ? snoozeDue
                             ? "text-danger font-semibold"
                             : "text-warning"
-                          : slaColor(t.firstResponseDueAt, !!t.resolvedAt)
+                          : firstResponseDone
+                            ? "text-success"
+                            : slaColor(t.firstResponseDueAt, !!t.resolvedAt)
                     }`}>
                       {mode === "archived" && t.resolvedAt ? (
                         formatDistanceToNow(t.resolvedAt, { locale: de, addSuffix: true })
@@ -299,6 +304,14 @@ export async function TicketList({
                         <span className="inline-flex items-center gap-1">
                           <Bell className="w-3.5 h-3.5" />
                           {formatDistanceToNow(t.snoozedUntil, { locale: de, addSuffix: true })}
+                        </span>
+                      ) : firstResponseDone ? (
+                        <span
+                          className="inline-flex items-center gap-1"
+                          title={`Erstantwort gesendet ${formatDistanceToNow(t.firstResponseAt!, { locale: de, addSuffix: true })}`}
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          erledigt
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1">
