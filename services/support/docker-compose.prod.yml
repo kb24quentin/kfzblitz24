@@ -4,6 +4,7 @@ services:
     container_name: support_db_prod
     restart: unless-stopped
     environment:
+      TZ: Europe/Berlin
       POSTGRES_USER: support
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: support
@@ -28,6 +29,7 @@ services:
       support-db:
         condition: service_healthy
     environment:
+      TZ: Europe/Berlin
       DATABASE_URL: postgresql://support:${DB_PASSWORD}@support-db:5432/support
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_TRUST_HOST: "true"

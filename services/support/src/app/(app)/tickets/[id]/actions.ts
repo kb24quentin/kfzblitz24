@@ -10,6 +10,11 @@ import { TICKET_STATUSES } from "@/lib/status";
 import { generateTicketCode } from "@/lib/ticket-code";
 import { generateDraftForTicket } from "@/lib/ticket-ai";
 import { submitRetoure, type RetoureSubmitItem } from "@/lib/retoure-submit";
+import {
+  belegDeliveryDate,
+  hasSichereRueckgabe,
+  type Beleg,
+} from "@/lib/webisco-lookup";
 
 async function requireUser() {
   const session = await auth();
@@ -309,7 +314,11 @@ export type CreateRetoureResult =
     }
   | { ok: false; error: string };
 
-const MAX_AGE_DAYS_AGENT = 30;
+// Age-Gate (Support-Seite mirror OrderCard) — muss auf dem Server unabhängig
+// von der UI enforced werden, sonst umgeht ein manipuliertes Frontend die Frist.
+const AGENT_STANDARD_DAYS = 14;
+const AGENT_RUECKGABE_PLUS_DAYS = 30;
+const ADMIN_MAX_DAYS = 730;
 
 export async function createRetoureFromTicketAction(
   input: CreateRetoureInput,
@@ -334,18 +343,22 @@ export async function createRetoureFromTicketAction(
     return { ok: false, error: "gewaehrleistung_admin_only" };
   }
 
-  const beleg = JSON.parse(order.webiscoData) as {
-    belegdatum?: string;
-    rechnungsadresse?: Record<string, string | undefined>;
-    lieferadresse?: Record<string, string | undefined>;
-  };
+  const beleg = JSON.parse(order.webiscoData) as Beleg;
 
-  const belegDate = beleg.belegdatum ? new Date(beleg.belegdatum) : null;
-  const ageDays = belegDate
-    ? Math.floor((Date.now() - belegDate.getTime()) / (24 * 60 * 60 * 1000))
+  const referenceDate = belegDeliveryDate(beleg);
+  const ageDays = referenceDate
+    ? Math.floor((Date.now() - referenceDate.getTime()) / (24 * 60 * 60 * 1000))
     : null;
-  if (!isAdmin && ageDays !== null && ageDays > MAX_AGE_DAYS_AGENT) {
-    return { ok: false, error: `too_old_for_agent (${ageDays}d, max ${MAX_AGE_DAYS_AGENT}d)` };
+  const rueckgabePlus = hasSichereRueckgabe(beleg);
+  const maxDaysAgent = rueckgabePlus ? AGENT_RUECKGABE_PLUS_DAYS : AGENT_STANDARD_DAYS;
+  const maxDays = isAdmin ? ADMIN_MAX_DAYS : maxDaysAgent;
+  if (ageDays !== null && ageDays > maxDays) {
+    return {
+      ok: false,
+      error: isAdmin
+        ? `too_old (${ageDays}d > ${ADMIN_MAX_DAYS}d Gewährleistungsfrist)`
+        : `too_old_for_agent (${ageDays}d, max ${maxDaysAgent}d${rueckgabePlus ? " mit Rückgabe+" : ""})`,
+    };
   }
 
   if (input.items.length === 0) return { ok: false, error: "no_items_selected" };

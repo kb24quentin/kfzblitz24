@@ -72,7 +72,44 @@ export type OrderCardData = {
   retoureFreeLabel?: boolean;
 };
 
-const MAX_AGE_DAYS_AGENT = 30;
+// Age-Gate laut Fachvorgabe: ab Zustellungsdatum.
+// - Agent ohne Rückgabe+ → 14 Tage (BGB §312g Widerruf)
+// - Agent mit Rückgabe+ → 30 Tage (Premium-Service)
+// - Admin → 730 Tage (§437 Gewährleistung)
+const AGENT_STANDARD_DAYS = 14;
+const AGENT_RUECKGABE_PLUS_DAYS = 30;
+const ADMIN_MAX_DAYS = 730;
+
+const NON_RETURNABLE_TYPES = new Set([
+  "versand",
+  "zustellung",
+  "rabatt",
+  "textposition",
+  "gutschrift",
+]);
+
+function detectSichereRueckgabe(beleg: Beleg | null): boolean {
+  if (!beleg?.positionen) return false;
+  const keywords = ["sichere rückgabe", "sichere rueckgabe", "gratis rücksendung", "rückgabe+"];
+  return beleg.positionen
+    .filter((p) => (p.typ ?? "").toLowerCase() === "zustellung")
+    .some((z) => {
+      const label = (z.beschreibung ?? "").toLowerCase();
+      return keywords.some((k) => label.includes(k));
+    });
+}
+
+function detectDeliveryDate(beleg: Beleg | null): Date | null {
+  if (!beleg?.positionen) return beleg?.belegdatum ? new Date(beleg.belegdatum) : null;
+  const times = beleg.positionen
+    .map((p) => p.status && p.status.toLowerCase().includes("geliefert") ? undefined : undefined) // reserved for future use
+    .concat(beleg.positionen.map((p) => (p as { lieferdatum?: string }).lieferdatum))
+    .filter((s): s is string => typeof s === "string" && s.length > 0)
+    .map((s) => new Date(s).getTime())
+    .filter((t) => !isNaN(t));
+  if (times.length > 0) return new Date(Math.max(...times));
+  return beleg.belegdatum ? new Date(beleg.belegdatum) : null;
+}
 
 export function OrderCard({
   order,
@@ -93,11 +130,17 @@ export function OrderCard({
   const beleg = order.beleg;
 
   const belegDate = beleg?.belegdatum ? new Date(beleg.belegdatum) : null;
-  const ageDays = belegDate
-    ? Math.floor((Date.now() - belegDate.getTime()) / (24 * 60 * 60 * 1000))
+  const deliveryDate = detectDeliveryDate(beleg);
+  const referenceDate = deliveryDate ?? belegDate;
+  const hasRueckgabePlus = detectSichereRueckgabe(beleg);
+
+  const ageDays = referenceDate
+    ? Math.floor((Date.now() - referenceDate.getTime()) / (24 * 60 * 60 * 1000))
     : null;
-  const isTooOldForAgent = ageDays !== null && ageDays > MAX_AGE_DAYS_AGENT;
-  const canRetoure = beleg !== null && (isAdmin || !isTooOldForAgent);
+  const maxDaysForAgent = hasRueckgabePlus ? AGENT_RUECKGABE_PLUS_DAYS : AGENT_STANDARD_DAYS;
+  const maxDays = isAdmin ? ADMIN_MAX_DAYS : maxDaysForAgent;
+  const isTooOld = ageDays !== null && ageDays > maxDays;
+  const canRetoure = beleg !== null && !isTooOld;
 
   const fmtEur = (n: number | undefined | null) =>
     typeof n === "number" ? `${n.toFixed(2).replace(".", ",")} €` : "—";
@@ -161,6 +204,14 @@ export function OrderCard({
           <span title={format(belegDate, "PPPP", { locale: de })}>
             {format(belegDate, "dd.MM.yyyy")}
             {ageDays !== null && ` · vor ${ageDays}d`}
+          </span>
+        )}
+        {hasRueckgabePlus && (
+          <span
+            title="Kunde hat Sichere Rückgabe / Rückgabe+ gebucht — 30-Tage-Frist + kostenfreies Label"
+            className="px-1.5 py-0.5 bg-success/15 text-success rounded font-medium"
+          >
+            Rückgabe+
           </span>
         )}
       </div>
@@ -282,9 +333,14 @@ export function OrderCard({
               >
                 <Undo2 className="w-3 h-3" /> Kundenretoure erstellen
               </button>
-            ) : isTooOldForAgent && !isAdmin ? (
+            ) : isTooOld ? (
               <div className="flex items-center gap-1.5 text-xs text-text-light bg-bg-secondary/60 rounded px-2 py-1.5">
-                <Lock className="w-3 h-3" /> Zu alt ({ageDays}d, max {MAX_AGE_DAYS_AGENT}d) — Admin bitten
+                <Lock className="w-3 h-3" />
+                {isAdmin
+                  ? `Bestellung > ${ADMIN_MAX_DAYS}d alt (${ageDays}d)`
+                  : `Zu alt (${ageDays}d, max ${maxDaysForAgent}d${
+                      hasRueckgabePlus ? " mit Rückgabe+" : ""
+                    }) — Admin bitten`}
               </div>
             ) : null}
           </div>

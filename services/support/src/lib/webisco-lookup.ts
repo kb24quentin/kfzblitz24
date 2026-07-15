@@ -16,12 +16,17 @@ type BelegAddress = {
 };
 
 type BelegPosition = {
+  id?: number;
+  typ?: string;
   artikelnummer?: string;
   hersteller?: string;
   beschreibung?: string;
   menge?: number;
   einzelpreis_brutto?: number;
+  positionspreis_brutto?: number;
   status?: string;
+  lieferdatum?: string;
+  offene_gutschriftsmenge?: number;
 };
 
 export type Beleg = {
@@ -139,6 +144,60 @@ export function extractOrderNumbers(text: string): string[] {
     seen.add(`KB24-${m[1]}`);
   }
   return Array.from(seen);
+}
+
+/** Position-Typen die auf dem Beleg stehen aber KEINE physischen retour-baren
+ * Artikel sind (Versandkosten, Rabatte, Textzeilen, Gutschriften). Alles andere
+ * — inkl. Pfand — ist grundsätzlich retourfähig aus Support-Sicht. */
+const NON_RETURNABLE_TYPES = new Set([
+  "versand",
+  "zustellung",
+  "rabatt",
+  "textposition",
+  "gutschrift",
+]);
+
+export function isReturnablePosition(p: BelegPosition): boolean {
+  const t = (p.typ ?? "artikel").toLowerCase();
+  if (NON_RETURNABLE_TYPES.has(t)) return false;
+  if (p.status === "geliefertstreckengeschaeft") return false;
+  const menge = p.offene_gutschriftsmenge && p.offene_gutschriftsmenge > 0
+    ? p.offene_gutschriftsmenge
+    : Math.abs(p.menge ?? 0);
+  return menge > 0;
+}
+
+/** Erkennt "Sichere Rückgabe" / "Rückgabe+" via Zustellungs-Position mit
+ *  entsprechendem Keyword. Passt zur Logik in retoure/src/lib/shipping.ts. */
+const SICHERE_RUECKGABE_KEYWORDS = [
+  "sichere rückgabe",
+  "sichere rueckgabe",
+  "gratis rücksendung",
+  "gratis ruecksendung",
+  "rückgabe+",
+  "rueckgabe+",
+];
+
+export function hasSichereRueckgabe(beleg: Beleg): boolean {
+  const zustellungen = (beleg.positionen ?? []).filter(
+    (p) => (p.typ ?? "").toLowerCase() === "zustellung",
+  );
+  return zustellungen.some((z) => {
+    const label = (z.beschreibung ?? "").toLowerCase();
+    return SICHERE_RUECKGABE_KEYWORDS.some((k) => label.includes(k));
+  });
+}
+
+/** Effektives Zustellungsdatum: neuestes lieferdatum aus Positionen, sonst
+ *  belegdatum als Fallback. Null wenn beides fehlt. */
+export function belegDeliveryDate(beleg: Beleg): Date | null {
+  const dates = (beleg.positionen ?? [])
+    .map((p) => p.lieferdatum)
+    .filter((s): s is string => !!s)
+    .map((s) => new Date(s))
+    .filter((d) => !isNaN(d.getTime()));
+  if (dates.length > 0) return new Date(Math.max(...dates.map((d) => d.getTime())));
+  return beleg.belegdatum ? new Date(beleg.belegdatum) : null;
 }
 
 /**

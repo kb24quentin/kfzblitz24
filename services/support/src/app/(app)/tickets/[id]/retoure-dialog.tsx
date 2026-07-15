@@ -19,11 +19,21 @@ const REASONS: Array<{ code: string; label: string }> = [
   { code: "anderes", label: "Anderer Grund (Freitext)" },
 ];
 
+/** Position-Typen die auf dem Beleg stehen aber KEIN physisches Item sind. */
+const NON_RETURNABLE_TYPES = new Set([
+  "versand",
+  "zustellung",
+  "rabatt",
+  "textposition",
+  "gutschrift",
+]);
+
 type ItemState = {
   key: string;
   selected: boolean;
   menge: number;
   maxMenge: number;
+  typ: string;
   artikelnummer: string;
   hersteller: string;
   beschreibung: string;
@@ -52,7 +62,7 @@ export function RetoureDialog({
   const [items, setItems] = useState<ItemState[]>(() => {
     if (!order?.beleg?.positionen) return [];
     return order.beleg.positionen
-      .filter((p) => p.typ === "artikel" || !p.typ)
+      .filter((p) => !NON_RETURNABLE_TYPES.has((p.typ ?? "artikel").toLowerCase()))
       .map((p, i) => {
         const menge = Math.max(1, Math.floor(p.menge ?? 1));
         return {
@@ -60,6 +70,7 @@ export function RetoureDialog({
           selected: false,
           menge,
           maxMenge: menge,
+          typ: p.typ ?? "artikel",
           artikelnummer: p.artikelnummer ?? "",
           hersteller: p.hersteller ?? "",
           beschreibung: p.beschreibung ?? "",
@@ -165,8 +176,13 @@ export function RetoureDialog({
                       className="mt-1 accent-accent"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-text">
+                      <div className="text-sm text-text flex items-center gap-2 flex-wrap">
                         {it.beschreibung}
+                        {it.typ && it.typ !== "artikel" && (
+                          <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 bg-warning/15 text-warning rounded">
+                            {it.typ}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-text-light flex items-center gap-2 flex-wrap">
                         {it.hersteller && <span className="font-medium">{it.hersteller}</span>}
