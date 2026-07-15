@@ -233,21 +233,6 @@ function SignaturePreview({
             </table>
           </td>
         </tr>
-        <tr>
-          <td
-            style={{
-              borderTop: "3px solid #ff6600",
-              padding: "8px 0 0 0",
-              fontSize: 11,
-              lineHeight: 1.5,
-              color: "#718096",
-            }}
-          >
-            kfzBlitz24 GmbH · Bomhardstraße 7 · 82031 Grünwald bei München
-            <br />
-            Geschäftsführer: Christian Engert · HRB 291765, Amtsgericht München · USt-ID: DE367617344
-          </td>
-        </tr>
       </tbody>
     </table>
   );

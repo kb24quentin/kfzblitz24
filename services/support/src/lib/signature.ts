@@ -54,12 +54,6 @@ export function renderSignatureHtml(f: SignatureFields): string {
       </table>
     </td>
   </tr>
-  <tr>
-    <td style="border-top:3px solid #ff6600;padding:8px 0 0 0;font-size:11px;line-height:1.5;color:#718096;">
-      kfzBlitz24 GmbH &middot; Bomhardstra&szlig;e 7 &middot; 82031 Gr&uuml;nwald bei M&uuml;nchen<br>
-      Gesch&auml;ftsf&uuml;hrer: Christian Engert &middot; HRB 291765, Amtsgericht M&uuml;nchen &middot; USt-ID: DE367617344
-    </td>
-  </tr>
 </table>`;
 }
 
