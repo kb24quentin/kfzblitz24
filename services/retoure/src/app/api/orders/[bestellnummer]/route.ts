@@ -35,16 +35,27 @@ export async function GET(
   const cfg = getWebiscoConfig();
   const demoMode = !cfg || process.env.WEBISCO_DEMO_MODE === "true";
 
-  // Try candidates in order — first hit wins. Customers/agents type shortened
-  // or ambiguous refs; Webisco's field where the order lives varies:
-  //   - "KB24-…", "W…" etc → bestellnummer (external)
-  //   - "AW…"              → auftragsnummer (Abisco internal)
-  //   - "W…" (no A prefix) sometimes displays without the A but is stored as
-  //     "AW…" in Webisco → try "A"+input as auftragsnummer fallback.
-  const candidates = new Set<string>();
-  candidates.add(bestellnummer);
-  if (/^W\d+$/i.test(bestellnummer)) candidates.add(`A${bestellnummer}`);
-  if (/^\d+$/.test(bestellnummer)) candidates.add(`AW${bestellnummer}`);
+  // KB24-interne Nummern-Semantik (Auskunft User 2026-07-15):
+  //   A…     → Auftrag (Belegnummer eines Auftrags-Belegs)
+  //   AW…    → Rechnung (Belegnummer eines Rechnungs-Belegs, in Webisco
+  //            aber unter dem Feld `auftragsnummer` erreichbar)
+  //   W…     → Bestellnummer (kundenzugewandte Referenz)
+  //   KB24-… → Bestellnummer (Shopware/Marketplace-Format)
+  //
+  // Webisco-Realität: W-Bestellnummern liegen bei manchen Belegen NICHT im
+  // `bestellnummer`-Feld — man findet sie nur über die zugehörige Rechnung
+  // (auftragsnummer=A+W). Deshalb probieren wir mehrere Strategien in
+  // reihenfolge — erster hit gewinnt.
+  const candidates: string[] = [bestellnummer];
+  if (/^W\d+$/i.test(bestellnummer)) {
+    // Fallback: Kunde tippt W-Bestellnummer, Beleg nur über Rechnungs-Nr auffindbar
+    candidates.push(`A${bestellnummer}`);
+  }
+  if (/^\d+$/.test(bestellnummer)) {
+    // Reine Ziffern könnten interne Auftragsnummer ohne Prefix sein
+    candidates.push(`AW${bestellnummer}`);
+    candidates.push(`A${bestellnummer}`);
+  }
 
   let belege: Beleg[] = [];
   let lastError: string | null = null;
