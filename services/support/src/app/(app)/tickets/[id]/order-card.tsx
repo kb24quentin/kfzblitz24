@@ -102,8 +102,7 @@ function detectSichereRueckgabe(beleg: Beleg | null): boolean {
 function detectDeliveryDate(beleg: Beleg | null): Date | null {
   if (!beleg?.positionen) return beleg?.belegdatum ? new Date(beleg.belegdatum) : null;
   const times = beleg.positionen
-    .map((p) => p.status && p.status.toLowerCase().includes("geliefert") ? undefined : undefined) // reserved for future use
-    .concat(beleg.positionen.map((p) => (p as { lieferdatum?: string }).lieferdatum))
+    .map((p) => (p as { lieferdatum?: string }).lieferdatum)
     .filter((s): s is string => typeof s === "string" && s.length > 0)
     .map((s) => new Date(s).getTime())
     .filter((t) => !isNaN(t));
