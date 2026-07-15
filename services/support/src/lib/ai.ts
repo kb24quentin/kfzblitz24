@@ -81,6 +81,15 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt in dieser Form:
   "bodyHtml": "<HTML-Antwort, mit <p>-Tags, ohne <html>/<body>-Wrapper, ohne Signatur>"
 }`;
 
+export type AiUsageInfo = {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cachedTokens: number;
+  latencyMs: number;
+};
+
 export type AiResult = {
   category: "shipping" | "returns" | "invoice" | "general" | "other";
   priority: "low" | "normal" | "high" | "urgent";
@@ -89,6 +98,7 @@ export type AiResult = {
   templateUsed: string | null;
   subject: string;
   bodyHtml: string;
+  usage: AiUsageInfo;
 };
 
 export type TemplateForPrompt = {
@@ -164,8 +174,10 @@ export async function classifyAndDraft(input: {
     .filter(Boolean)
     .join("\n");
 
+  const model = aiModel();
+  const startedAt = Date.now();
   const completion = await c.chat.completions.create({
-    model: aiModel(),
+    model,
     temperature: 0.3,
     response_format: { type: "json_object" },
     messages: [
@@ -173,6 +185,7 @@ export async function classifyAndDraft(input: {
       { role: "user", content: userMsg },
     ],
   });
+  const latencyMs = Date.now() - startedAt;
 
   const raw = completion.choices[0]?.message?.content;
   if (!raw) throw new Error("empty AI response");
@@ -188,6 +201,13 @@ export async function classifyAndDraft(input: {
     throw new Error("malformed AI response: " + raw.slice(0, 200));
   }
 
+  const u = completion.usage;
+  const promptTokens = u?.prompt_tokens ?? 0;
+  const completionTokens = u?.completion_tokens ?? 0;
+  const totalTokens = u?.total_tokens ?? promptTokens + completionTokens;
+  const cachedTokens =
+    (u?.prompt_tokens_details as { cached_tokens?: number } | undefined)?.cached_tokens ?? 0;
+
   return {
     category: parsed.category,
     priority: parsed.priority,
@@ -196,5 +216,13 @@ export async function classifyAndDraft(input: {
     templateUsed: parsed.templateUsed || null,
     subject: parsed.subject,
     bodyHtml: parsed.bodyHtml,
+    usage: {
+      model: completion.model || model,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      cachedTokens,
+      latencyMs,
+    },
   };
 }

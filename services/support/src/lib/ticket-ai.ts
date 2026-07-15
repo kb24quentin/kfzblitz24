@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { classifyAndDraft, isAiConfigured, aiModel } from "@/lib/ai";
+import { calculateCost } from "@/lib/ai-pricing";
 import { sendMailAndPersist } from "@/lib/resend-send";
 import { getAutoSendCategories, getAutoSendMinConfidence } from "@/lib/settings";
 
@@ -92,6 +93,29 @@ export async function generateDraftForTicket(
       category: result.category,
       autoSendEligible: eligible,
       status: eligible ? "approved" : "pending",
+    },
+  });
+
+  const cost = calculateCost(
+    result.usage.model,
+    result.usage.promptTokens,
+    result.usage.completionTokens,
+    result.usage.cachedTokens,
+  );
+  await prisma.aiUsage.create({
+    data: {
+      ticketId,
+      aiDraftId: draft.id,
+      model: result.usage.model,
+      purpose: force ? "regenerate" : "draft",
+      promptTokens: result.usage.promptTokens,
+      completionTokens: result.usage.completionTokens,
+      totalTokens: result.usage.totalTokens,
+      cachedTokens: result.usage.cachedTokens,
+      inputCostUsd: cost.inputCostUsd,
+      outputCostUsd: cost.outputCostUsd,
+      totalCostUsd: cost.totalCostUsd,
+      latencyMs: result.usage.latencyMs,
     },
   });
 

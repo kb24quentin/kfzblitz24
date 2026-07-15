@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { SignatureEditor } from "./signature-editor";
 import { AutoAckEditor } from "./auto-ack-editor";
 import { AiAutopilotSection } from "./ai-autopilot";
+import { AiCostsSection } from "./ai-costs";
 import { CategoriesManager } from "./categories-manager";
 import { BusinessHoursEditor } from "./business-hours";
 import {
@@ -181,6 +182,13 @@ export default async function SettingsPage({
         />
       </div>
 
+      {currentUser?.role === "admin" && (
+        <>
+          <SectionHeader title="AI · Kosten & Nutzung" />
+          <AiCostsSection />
+        </>
+      )}
+
       <div className="mb-6">
         <CategoriesManager initial={ticketCategories} />
       </div>
@@ -245,7 +253,14 @@ export default async function SettingsPage({
 
       {currentUser && (
         <div className="mb-6">
-          <SignatureEditor signature={currentUser.signature} />
+          <SignatureEditor
+            signature={currentUser.signature}
+            currentUser={{
+              name: currentUser.name,
+              email: currentUser.email,
+              role: currentUser.role,
+            }}
+          />
         </div>
       )}
 

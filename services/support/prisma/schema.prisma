@@ -79,6 +79,7 @@ model Ticket {
   drafts   AiDraft[]
   events   TicketEvent[]
   orders   TicketOrder[]
+  aiUsage  AiUsage[]
 
   @@index([status])
   @@index([assigneeId])
@@ -174,6 +175,29 @@ model AiDraft {
 
   @@index([ticketId])
   @@index([status])
+}
+
+model AiUsage {
+  id               String   @id @default(cuid())
+  ticketId         String?
+  aiDraftId        String?
+  model            String // e.g. "gpt-4o-2024-08-06"
+  purpose          String   @default("draft") // draft, regenerate, other
+  promptTokens     Int
+  completionTokens Int
+  totalTokens      Int
+  cachedTokens     Int      @default(0) // prompt tokens served from cache (billed cheaper)
+  inputCostUsd     Float
+  outputCostUsd    Float
+  totalCostUsd     Float
+  latencyMs        Int?
+  createdAt        DateTime @default(now())
+
+  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([model])
+  @@index([ticketId])
 }
 
 model Attachment {

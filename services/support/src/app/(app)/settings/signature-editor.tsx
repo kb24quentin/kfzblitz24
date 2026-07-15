@@ -11,8 +11,22 @@ type Signature = {
   updatedAt: Date;
 } | null;
 
-export function SignatureEditor({ signature }: { signature: Signature }) {
-  const [html, setHtml] = useState(signature?.html ?? DEFAULT_SIGNATURE_HTML);
+type CurrentUser = {
+  name: string;
+  email: string;
+  role?: string;
+};
+
+export function SignatureEditor({
+  signature,
+  currentUser,
+}: {
+  signature: Signature;
+  currentUser?: CurrentUser;
+}) {
+  const [html, setHtml] = useState(
+    signature?.html ?? buildDefaultSignature(currentUser),
+  );
   const [name, setName] = useState(signature?.name ?? "Standard");
   const [showPreview, setShowPreview] = useState(true);
 
@@ -120,16 +134,43 @@ export function SignatureEditor({ signature }: { signature: Signature }) {
 
 // Table-based default signature — inline styles so it survives Gmail/Outlook.
 // Uses kfzBlitz24 brand colors (NAVY #0b3756, ORANGE #ff6600).
-const DEFAULT_SIGNATURE_HTML = `<table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,sans-serif;font-size:13px;color:#3d4654;line-height:1.5">
+// Placeholders like {{name}}, {{position}}, {{email}} are substituted at load
+// time from the current user; the saved HTML then has real values, not tokens.
+function buildDefaultSignature(u?: CurrentUser): string {
+  const name = u?.name || "Dein Name";
+  const email = u?.email || "service@kfzblitz24.de";
+  const position = u?.role === "admin" ? "Administrator" : "Kundenservice";
+  return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#1a202c;">
   <tr>
-    <td style="padding-right:16px;border-right:2px solid #ff6600;vertical-align:top">
-      <div style="font-weight:bold;color:#0b3756;font-size:15px">Dein Name</div>
-      <div style="color:#8a93a0;font-size:12px">Kundenservice</div>
+    <td style="padding:0;">
+      <div style="font-size:15px;font-weight:700;color:#0b3756;line-height:1.3;letter-spacing:-0.2px;">${name}</div>
+      <div style="font-size:13px;color:#4a5568;line-height:1.5;margin-top:2px;">${position} &middot; kfzBlitz24 GmbH</div>
     </td>
-    <td style="padding-left:16px;vertical-align:top">
-      <div><strong style="color:#0b3756">kfz</strong><strong style="color:#ff6600">blitz</strong><strong style="color:#0b3756">24</strong></div>
-      <div><a href="mailto:service@kfzblitz24.de" style="color:#3d4654;text-decoration:none">service@kfzblitz24.de</a></div>
-      <div><a href="https://kfzblitz24.de" style="color:#3d4654;text-decoration:none">kfzblitz24.de</a></div>
+  </tr>
+  <tr>
+    <td style="padding:12px 0 12px 0;">
+      <img src="https://support.kfzblitz24-group.com/sig-logo.png" width="200" height="auto" alt="kfzBlitz24" style="display:block;border:0;outline:none;text-decoration:none;">
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:0;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="padding:1px 12px 1px 0;font-size:12px;color:#718096;font-weight:600;">E-Mail</td>
+          <td style="padding:1px 0;font-size:12px;"><a href="mailto:${email}" style="color:#ff6600;text-decoration:none;font-weight:600;">${email}</a></td>
+        </tr>
+        <tr>
+          <td style="padding:1px 12px 1px 0;font-size:12px;color:#718096;font-weight:600;">Web</td>
+          <td style="padding:1px 0;font-size:12px;"><a href="https://www.kfzblitz24.de" style="color:#ff6600;text-decoration:none;font-weight:600;">www.kfzblitz24.de</a></td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td style="border-top:3px solid #ff6600;padding:8px 0 0 0;font-size:11px;line-height:1.5;color:#718096;">
+      kfzBlitz24 GmbH &middot; Bomhardstra&szlig;e 7 &middot; 82031 Gr&uuml;nwald bei M&uuml;nchen<br>
+      Gesch&auml;ftsf&uuml;hrer: Christian Engert &middot; HRB 291765, Amtsgericht M&uuml;nchen &middot; USt-ID: DE367617344
     </td>
   </tr>
 </table>`;
+}
