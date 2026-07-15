@@ -184,6 +184,24 @@ export type RetoureLabelResult =
       filename: string;
     };
 
+/**
+ * Normalizes country codes to ISO-2 for dodajpaczke's
+ * IdentityAddressOriginCountryISOCodeEnum which only accepts 2-letter codes.
+ * Webisco + some legacy shops send ISO-3 ("DEU", "AUT", "CHE") which would
+ * blow up as HTTP 422 without conversion.
+ */
+const ISO3_TO_ISO2: Record<string, string> = {
+  DEU: "DE", AUT: "AT", CHE: "CH", LIE: "LI", LUX: "LU",
+  BEL: "BE", NLD: "NL", FRA: "FR", ITA: "IT", ESP: "ES",
+  POL: "PL", CZE: "CZ", DNK: "DK", SVK: "SK", HUN: "HU",
+};
+function normalizeCountryIso2(code: string | null | undefined): string | undefined {
+  if (!code) return undefined;
+  const upper = code.trim().toUpperCase();
+  if (upper.length === 2) return upper;
+  return ISO3_TO_ISO2[upper] ?? upper.slice(0, 2);
+}
+
 export interface CustomerForReceiver {
   salutation?: string; // "Herr" | "Frau"
   firstname?: string;
@@ -270,7 +288,7 @@ export async function createRetoureLabel(
         streetNumber: c.streetNumber ?? street.streetNumber ?? "",
         zipNumber: c.zipNumber ?? cfg.warehouseZip,
         city: c.city ?? "",
-        originCountryISOCode: c.countryISOCode ?? "DE",
+        originCountryISOCode: normalizeCountryIso2(c.countryISOCode) ?? "DE",
       },
       identityCommunication: {
         contactPerson: fullName || "",

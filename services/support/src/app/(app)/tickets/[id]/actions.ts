@@ -332,6 +332,21 @@ const AGENT_STANDARD_DAYS = 14;
 const AGENT_RUECKGABE_PLUS_DAYS = 30;
 const ADMIN_MAX_DAYS = 730;
 
+// Webisco liefert Adress-Land als ISO-3 ("DEU", "AUT", "CHE"). DHL-Backend
+// (dodajpaczke) akzeptiert nur ISO-2 als Enum. Konvertierung defensiv, damit
+// retoure /submit nicht mit HTTP 422 abbricht.
+const ISO3_TO_ISO2: Record<string, string> = {
+  DEU: "DE", AUT: "AT", CHE: "CH", LIE: "LI", LUX: "LU",
+  BEL: "BE", NLD: "NL", FRA: "FR", ITA: "IT", ESP: "ES",
+  POL: "PL", CZE: "CZ", DNK: "DK", SVK: "SK", HUN: "HU",
+};
+function toIso2Country(land: string | null | undefined): string | undefined {
+  if (!land) return undefined;
+  const upper = land.trim().toUpperCase();
+  if (upper.length === 2) return upper; // already ISO-2
+  return ISO3_TO_ISO2[upper] ?? upper.slice(0, 2); // best-effort truncate
+}
+
 export async function createRetoureFromTicketAction(
   input: CreateRetoureInput,
 ): Promise<CreateRetoureResult> {
@@ -403,7 +418,7 @@ export async function createRetoureFromTicketAction(
       strasse: addr.strasse,
       plz: addr.plz,
       ort: addr.ort,
-      land: addr.land,
+      land: toIso2Country(addr.land),
       email: customerEmail,
       telefon: addr.telefon,
     },
