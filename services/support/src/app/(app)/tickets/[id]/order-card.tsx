@@ -338,20 +338,20 @@ export function OrderCard({
                 </div>
                 {order.retoureAnmeldungUrl && (
                   <a
-                    href={order.retoureAnmeldungUrl}
+                    href={`/api/orders/${order.id}/retoure-anmeldung-pdf`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block text-accent hover:underline break-all"
+                    className="block text-accent hover:underline"
                   >
                     ↓ Retoure-Anmeldung (PDF)
                   </a>
                 )}
                 {order.retoureLabelUrl && (
                   <a
-                    href={order.retoureLabelUrl}
+                    href={`/api/orders/${order.id}/retoure-label-pdf`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block text-accent hover:underline break-all"
+                    className="block text-accent hover:underline"
                   >
                     ↓ DHL-Label (PDF)
                   </a>

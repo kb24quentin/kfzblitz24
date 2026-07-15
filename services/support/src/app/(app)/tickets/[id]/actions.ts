@@ -497,9 +497,10 @@ function buildRetoureReplyBody(opts: {
 
   return [
     `<p>${salutation}</p>`,
-    `<p>wir haben Ihre ${kategorieText} zu Bestellung <strong>${opts.ref}</strong> angelegt. Anbei finden Sie den Retourenschein mit allen weiteren Informationen.</p>`,
+    `<p>wir haben Ihre ${kategorieText} zu Bestellung <strong>${opts.ref}</strong> angelegt. Den Retourenschein${
+      opts.labelRequested ? " inklusive DHL-Versandlabel" : ""
+    } finden Sie <strong>im Anhang dieser E-Mail</strong>.</p>`,
     labelLine,
-    `<p><strong>Retourenschein herunterladen:</strong> <a href="${opts.anmeldungUrl}">Retoure-Anmeldung.pdf</a></p>`,
     opts.trackingNumber
       ? `<p>Sendungsverfolgung (nach Einlieferung): <strong>${opts.trackingNumber}</strong></p>`
       : "",
