@@ -35,21 +35,41 @@ export async function GET(
   const cfg = getWebiscoConfig();
   const demoMode = !cfg || process.env.WEBISCO_DEMO_MODE === "true";
 
-  let belege: Beleg[];
-  if (demoMode) {
-    belege = mockBelegByNumber(bestellnummer);
-  } else {
-    const result = await fetchBelegByNumber(cfg, { typ: "auftrag", id: bestellnummer });
-    if (!result.ok) {
-      return NextResponse.json(
-        { ok: false, mode: "live", error: result.error },
-        { status: 502 },
-      );
+  // Try candidates in order — first hit wins. Customers/agents type shortened
+  // or ambiguous refs; Webisco's field where the order lives varies:
+  //   - "KB24-…", "W…" etc → bestellnummer (external)
+  //   - "AW…"              → auftragsnummer (Abisco internal)
+  //   - "W…" (no A prefix) sometimes displays without the A but is stored as
+  //     "AW…" in Webisco → try "A"+input as auftragsnummer fallback.
+  const candidates = new Set<string>();
+  candidates.add(bestellnummer);
+  if (/^W\d+$/i.test(bestellnummer)) candidates.add(`A${bestellnummer}`);
+  if (/^\d+$/.test(bestellnummer)) candidates.add(`AW${bestellnummer}`);
+
+  let belege: Beleg[] = [];
+  let lastError: string | null = null;
+
+  for (const candidate of candidates) {
+    if (demoMode) {
+      belege = mockBelegByNumber(candidate);
+    } else {
+      const result = await fetchBelegByNumber(cfg, { typ: "auftrag", id: candidate });
+      if (!result.ok) {
+        lastError = result.error;
+        continue;
+      }
+      belege = result.data;
     }
-    belege = result.data;
+    if (belege.length > 0) break;
   }
 
   if (belege.length === 0) {
+    if (lastError) {
+      return NextResponse.json(
+        { ok: false, mode: "live", error: lastError },
+        { status: 502 },
+      );
+    }
     return NextResponse.json({ ok: false, error: "not_found", mode: demoMode ? "demo" : "live" }, { status: 404 });
   }
 
