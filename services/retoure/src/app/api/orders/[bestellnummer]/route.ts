@@ -37,50 +37,31 @@ export async function GET(
 
   // KB24-interne Nummern-Semantik (Auskunft User 2026-07-15):
   //   A…     → Auftrag (Belegnummer eines Auftrags-Belegs)
-  //   AW…    → Rechnung (Belegnummer eines Rechnungs-Belegs, in Webisco
-  //            aber unter dem Feld `auftragsnummer` erreichbar)
-  //   W…     → Bestellnummer (kundenzugewandte Referenz)
+  //   AW…    → Rechnung (Belegnummer eines Rechnungs-Belegs)
+  //   W…     → Bestellnummer (kundenzugewandte Referenz — was der Kunde sieht)
   //   KB24-… → Bestellnummer (Shopware/Marketplace-Format)
   //
-  // Webisco-Realität: W-Bestellnummern liegen bei manchen Belegen NICHT im
-  // `bestellnummer`-Feld — man findet sie nur über die zugehörige Rechnung
-  // (auftragsnummer=A+W). Deshalb probieren wir mehrere Strategien in
-  // reihenfolge — erster hit gewinnt.
-  const candidates: string[] = [bestellnummer];
-  if (/^W\d+$/i.test(bestellnummer)) {
-    // Fallback: Kunde tippt W-Bestellnummer, Beleg nur über Rechnungs-Nr auffindbar
-    candidates.push(`A${bestellnummer}`);
-  }
-  if (/^\d+$/.test(bestellnummer)) {
-    // Reine Ziffern könnten interne Auftragsnummer ohne Prefix sein
-    candidates.push(`AW${bestellnummer}`);
-    candidates.push(`A${bestellnummer}`);
-  }
-
-  let belege: Beleg[] = [];
-  let lastError: string | null = null;
-
-  for (const candidate of candidates) {
-    if (demoMode) {
-      belege = mockBelegByNumber(candidate);
-    } else {
-      const result = await fetchBelegByNumber(cfg, { typ: "auftrag", id: candidate });
-      if (!result.ok) {
-        lastError = result.error;
-        continue;
-      }
-      belege = result.data;
-    }
-    if (belege.length > 0) break;
-  }
-
-  if (belege.length === 0) {
-    if (lastError) {
+  // A/AW/W sind SEMANTISCH VERSCHIEDEN — keine variationen desselben.
+  // Deshalb NIEMALS versuchen A/AW als fallback für W-input zu tippen,
+  // das würde fremde belege matchen die zufällig dieselben ziffern haben.
+  // Wenn W-Bestellnummer nicht als bestellnummer findbar ist, ist der
+  // Beleg aktuell nicht in Webisco (marketplace-sync-lücke etc.) —
+  // ehrlich 'not_found' zurückgeben, nicht raten.
+  let belege: Beleg[];
+  if (demoMode) {
+    belege = mockBelegByNumber(bestellnummer);
+  } else {
+    const result = await fetchBelegByNumber(cfg, { typ: "auftrag", id: bestellnummer });
+    if (!result.ok) {
       return NextResponse.json(
-        { ok: false, mode: "live", error: lastError },
+        { ok: false, mode: "live", error: result.error },
         { status: 502 },
       );
     }
+    belege = result.data;
+  }
+
+  if (belege.length === 0) {
     return NextResponse.json({ ok: false, error: "not_found", mode: demoMode ? "demo" : "live" }, { status: 404 });
   }
 
