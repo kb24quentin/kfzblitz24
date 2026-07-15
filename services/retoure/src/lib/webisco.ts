@@ -324,7 +324,20 @@ export async function fetchBelegByNumber(
 
   const result: Beleg[] = belege.map((b) => {
     const beleg = b as Record<string, unknown>;
-    const positions = toArray(beleg["position"] as unknown);
+    // Webisco liefert Pfand-Positionen als KIND-Position innerhalb der
+    // Parent-Artikel-Position (verschachtelt). Flach klopfen damit wir alle
+    // Positionen (inkl. Pfand) im Retoure-Flow behandeln können.
+    const flattenPositions = (raw: unknown): unknown[] => {
+      const arr = toArray(raw);
+      const out: unknown[] = [];
+      for (const item of arr) {
+        out.push(item);
+        const child = (item as Record<string, unknown>)?.position;
+        if (child !== undefined) out.push(...flattenPositions(child));
+      }
+      return out;
+    };
+    const positions = flattenPositions(beleg["position"]);
     return {
       typ: str(beleg.typ) ?? typ,
       id: Number(beleg.id) || 0,
