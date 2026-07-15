@@ -24,8 +24,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   CheckCircle2,
-  Pencil,
-  X as XIcon,
 } from "lucide-react";
 import { RichTextEditor, type RichTextEditorHandle, type ShortcodeChoice } from "@/components/rich-text-editor";
 import { OrderCard } from "./order-card";
@@ -44,7 +42,6 @@ import {
   addOrderAction,
   removeOrderAction,
   refreshOrderAction,
-  editMessageBodyAction,
   resendMessageAction,
   regenerateDraftAction,
 } from "./actions";
@@ -84,7 +81,6 @@ type Message = {
   attachments: MessageAttachment[];
   createdAt: string;
   sentAt: string | null;
-  editedAt: string | null;
 };
 
 type Note = {
@@ -257,7 +253,6 @@ const EVENT_LABEL: Record<string, string> = {
   order_refresh_failed: "Webisco-Refresh fehlgeschlagen",
   retoure_created: "Kundenretoure angelegt",
   retoure_create_failed: "Retoure-Anlage fehlgeschlagen",
-  message_edited: "Nachricht bearbeitet",
 };
 
 function slaColor(dueAt: string, resolved: boolean) {
@@ -979,6 +974,14 @@ export function TicketDetail({
                   />
                 </div>
                 <input
+                  name="email"
+                  type="email"
+                  required
+                  defaultValue={ticket.contact.email || ""}
+                  placeholder="E-Mail"
+                  className="w-full px-2 py-1.5 border border-border rounded text-sm"
+                />
+                <input
                   name="phone"
                   type="tel"
                   defaultValue={ticket.contact.phone || ""}
@@ -1112,10 +1115,6 @@ function MessageItem({
   onResend: (id: string) => void;
   pending: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [editHtml, setEditHtml] = useState(m.bodyHtml);
-  const [savePending, startSave] = useTransition();
-  const router = useRouter();
   const isOutbound = m.direction === "outbound";
   const kindBadge =
     m.kind === "acknowledgement"
@@ -1125,18 +1124,6 @@ function MessageItem({
         : null;
 
   const bg = m.kind === "acknowledgement" ? "bg-success/5" : isOutbound ? "bg-info/5" : "";
-
-  const saveEdit = () => {
-    if (!editHtml.trim()) return;
-    const fd = new FormData();
-    fd.set("messageId", m.id);
-    fd.set("bodyHtml", editHtml);
-    startSave(async () => {
-      await editMessageBodyAction(fd);
-      setEditing(false);
-      router.refresh();
-    });
-  };
 
   return (
     <div className={`px-5 py-4 ${bg}`}>
@@ -1180,28 +1167,7 @@ function MessageItem({
               ✓ gesendet
             </span>
           )}
-          {m.editedAt && !editing && (
-            <span
-              className="text-text-light italic"
-              title={`Zuletzt bearbeitet: ${format(new Date(m.editedAt), "dd.MM.yyyy HH:mm", { locale: de })}`}
-            >
-              (bearbeitet)
-            </span>
-          )}
-          {!editing && (
-            <button
-              onClick={() => {
-                setEditHtml(m.bodyHtml);
-                setEditing(true);
-              }}
-              disabled={pending}
-              className="inline-flex items-center gap-1 px-2 py-0.5 border border-border rounded text-text-light hover:bg-bg-secondary hover:text-text transition-colors disabled:opacity-50"
-              title="Nachricht intern bearbeiten (Kunde bekommt davon nichts mit)"
-            >
-              <Pencil className="w-3 h-3" /> Bearbeiten
-            </button>
-          )}
-          {isOutbound && !editing && (
+          {isOutbound && (
             <button
               onClick={() => {
                 if (confirm("Diese Nachricht erneut an den Kunden senden?")) {
@@ -1220,44 +1186,11 @@ function MessageItem({
       {m.subject && (
         <div className="text-sm font-medium text-text mb-2">{m.subject}</div>
       )}
-      {editing ? (
-        <div className="space-y-2">
-          <div className="text-xs text-warning bg-warning/10 border border-warning/30 rounded px-2 py-1.5">
-            Interne Bearbeitung — ändert nur die Anzeige hier im Support-System.
-            Der Kunde hat die Original-Nachricht bereits erhalten.
-          </div>
-          <RichTextEditor
-            value={editHtml}
-            onChange={setEditHtml}
-            placeholder="Nachricht-Body bearbeiten…"
-            minHeight={200}
-          />
-          <div className="flex items-center gap-2">
-            <button
-              onClick={saveEdit}
-              disabled={savePending || !editHtml.trim()}
-              className="inline-flex items-center gap-1 px-3 py-1.5 bg-accent text-white rounded text-sm font-medium hover:bg-accent-light disabled:opacity-50"
-            >
-              <Check className="w-3.5 h-3.5" /> Speichern
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              disabled={savePending}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-text-light hover:text-text hover:bg-bg-secondary rounded text-sm"
-            >
-              <XIcon className="w-3.5 h-3.5" /> Abbrechen
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div
-            className="prose prose-sm max-w-none text-text [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded"
-            dangerouslySetInnerHTML={{ __html: m.bodyHtml }}
-          />
-          <MessageAttachments attachments={m.attachments || []} />
-        </>
-      )}
+      <div
+        className="prose prose-sm max-w-none text-text [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded"
+        dangerouslySetInnerHTML={{ __html: m.bodyHtml }}
+      />
+      <MessageAttachments attachments={m.attachments || []} />
     </div>
   );
 }

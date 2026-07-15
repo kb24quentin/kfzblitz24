@@ -131,7 +131,6 @@ export default async function TicketDetailPage({
           ...m,
           sentAt: m.sentAt?.toISOString() || null,
           createdAt: m.createdAt.toISOString(),
-          editedAt: m.editedAt?.toISOString() || null,
           kind: m.kind,
           resentFromId: m.resentFromId,
           resendMessageId: m.resendMessageId,

@@ -539,54 +539,6 @@ Rauschwalder Str. 48 B<br>
     .join("\n");
 }
 
-/**
- * Manuelles Editieren einer Message im Ticket-Thread. Ändert NUR die
- * Anzeige in Support — der Kunde hat die Original-Version via Resend
- * (outbound) bzw. Gmail (inbound) bereits erhalten. Nutzung: PII redigieren,
- * Typos fixen, Notiz nachtragen, veraltete Info markieren.
- */
-export async function editMessageBodyAction(formData: FormData) {
-  const user = await requireUser();
-  const messageId = String(formData.get("messageId") || "");
-  const newBodyHtml = String(formData.get("bodyHtml") || "").trim();
-  if (!messageId) throw new Error("messageId erforderlich");
-  if (!newBodyHtml) throw new Error("bodyHtml darf nicht leer sein");
-
-  const existing = await prisma.message.findUnique({
-    where: { id: messageId },
-    select: { id: true, ticketId: true, bodyHtml: true },
-  });
-  if (!existing) throw new Error("Nachricht nicht gefunden");
-
-  // Aktualisiere bodyHtml + bodyText (plain-fallback), setze audit-felder.
-  const bodyText = newBodyHtml
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  await prisma.message.update({
-    where: { id: messageId },
-    data: {
-      bodyHtml: newBodyHtml,
-      bodyText,
-      editedAt: new Date(),
-      editedById: user.id,
-    },
-  });
-  await prisma.ticketEvent.create({
-    data: {
-      ticketId: existing.ticketId,
-      userId: user.id,
-      type: "message_edited",
-      meta: JSON.stringify({ messageId }),
-    },
-  });
-  revalidatePath(`/tickets/${existing.ticketId}`);
-}
-
 export async function refreshOrderAction(orderId: string) {
   const user = await requireUser();
   const existing = await prisma.ticketOrder.findUnique({
@@ -692,13 +644,25 @@ export async function updateContactAction(formData: FormData) {
   const contactId = String(formData.get("contactId") || "");
   const firstName = String(formData.get("firstName") || "").trim() || null;
   const lastName = String(formData.get("lastName") || "").trim() || null;
+  const email = String(formData.get("email") || "").trim().toLowerCase();
   const phone = String(formData.get("phone") || "").trim() || null;
   const orderRef = String(formData.get("orderRef") || "").trim() || null;
   const ticketId = String(formData.get("ticketId") || "");
 
   if (!contactId) throw new Error("Kontakt-ID erforderlich");
+  if (!email || !email.includes("@")) throw new Error("Gültige E-Mail erforderlich");
 
   const composedName = [firstName, lastName].filter(Boolean).join(" ") || null;
+
+  // Email-uniqueness enforced by DB, aber vor dem update prüfen für bessere
+  // fehlermeldung — sonst kommt hässlicher Prisma-P2002-error hoch.
+  const existing = await prisma.contact.findFirst({
+    where: { email, NOT: { id: contactId } },
+    select: { id: true },
+  });
+  if (existing) {
+    throw new Error(`Ein anderer Kontakt hat bereits die E-Mail ${email}`);
+  }
 
   await prisma.contact.update({
     where: { id: contactId },
@@ -706,6 +670,7 @@ export async function updateContactAction(formData: FormData) {
       firstName,
       lastName,
       name: composedName,
+      email,
       phone,
       orderRef,
     },
