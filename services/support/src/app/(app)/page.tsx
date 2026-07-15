@@ -312,30 +312,73 @@ function KpiCard({
   icon: React.ReactNode;
   href?: string;
 }) {
-  const toneClass = {
-    info: "text-info",
-    success: "text-success",
-    warning: "text-warning",
-    danger: "text-danger",
+  // Echte Ampel-Optik: 3 vertikale Lampen (rot/gelb/grün), die aktive leuchtet.
+  // "info" ist neutral → alle drei gedimmt, keine Ampel-Aussage.
+  const activeLamp: "red" | "yellow" | "green" | null = {
+    danger: "red" as const,
+    warning: "yellow" as const,
+    success: "green" as const,
+    info: null,
+  }[tone];
+
+  const toneAccent = {
+    info: "text-info border-border",
+    success: "text-success border-success/30",
+    warning: "text-warning border-warning/40",
+    danger: "text-danger border-danger/40",
   }[tone];
 
   const inner = (
-    <>
-      <div className="flex items-center justify-between text-text-light text-xs mb-1">
-        <span className="uppercase tracking-wide">{label}</span>
-        <span className={toneClass}>{icon}</span>
+    <div className="flex items-start gap-3">
+      <TrafficLight active={activeLamp} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between text-text-light text-xs mb-1">
+          <span className="uppercase tracking-wide truncate">{label}</span>
+          <span className={toneAccent.split(" ")[0]}>{icon}</span>
+        </div>
+        <div className="text-2xl font-bold text-text tabular-nums">{value}</div>
+        <div className="text-xs text-text-light mt-1">{detail}</div>
       </div>
-      <div className="text-2xl font-bold text-text">{value}</div>
-      <div className="text-xs text-text-light mt-1">{detail}</div>
-    </>
+    </div>
   );
 
-  const clsBase = "bg-bg-card border border-border rounded-xl p-4 block";
+  const clsBase = `bg-bg-card border-l-4 border ${toneAccent} rounded-xl p-4 block`;
   return href ? (
-    <Link href={href} className={`${clsBase} hover:border-accent/30 transition-colors`}>
+    <Link href={href} className={`${clsBase} hover:shadow-md transition-shadow`}>
       {inner}
     </Link>
   ) : (
     <div className={clsBase}>{inner}</div>
+  );
+}
+
+/** Kleine vertikale Ampel im Dashboard-KPI. `active=null` → alle gedimmt. */
+function TrafficLight({ active }: { active: "red" | "yellow" | "green" | null }) {
+  const lamp = (color: "red" | "yellow" | "green") => {
+    const isOn = active === color;
+    const base = "w-3 h-3 rounded-full";
+    if (!isOn) {
+      // gedimmt — matte Farbe, kein Glow
+      const dimClass = {
+        red: "bg-danger/15",
+        yellow: "bg-warning/15",
+        green: "bg-success/15",
+      }[color];
+      return <span className={`${base} ${dimClass}`} />;
+    }
+    // aktiv — volle Farbe + subtle glow
+    const onClass = {
+      red: "bg-danger shadow-[0_0_8px_rgba(239,68,68,0.6)]",
+      yellow: "bg-warning shadow-[0_0_8px_rgba(234,179,8,0.55)]",
+      green: "bg-success shadow-[0_0_8px_rgba(34,197,94,0.55)]",
+    }[color];
+    return <span className={`${base} ${onClass}`} />;
+  };
+  return (
+    <div className="flex flex-col items-center gap-1 bg-neutral-900 rounded-md px-1.5 py-2 shrink-0">
+      {lamp("red")}
+      {lamp("yellow")}
+      {lamp("green")}
+    </div>
   );
 }
