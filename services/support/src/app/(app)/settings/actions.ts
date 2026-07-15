@@ -213,9 +213,3 @@ export async function saveAiAutosendDelayAction(formData: FormData) {
   await saveAiAutosendDelayRange({ min, max });
   revalidatePath("/settings");
 }
-
-async function requireAdmin() {
-  const user = await requireUser();
-  if (user.role !== "admin") throw new Error("Nur Admins");
-  return user;
-}
