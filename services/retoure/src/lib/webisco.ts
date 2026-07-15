@@ -237,11 +237,16 @@ function classifyInput(
   if (/^AW\d+$/i.test(trimmed)) {
     return { kind: "auftragsnummer", value: trimmed };
   }
-  // "A243775523", "R123456", "243775523" → internal beleg-id
-  if (/^[A-Za-z]?\d+$/.test(trimmed)) {
-    return { kind: "id", value: trimmed.replace(/^[A-Za-z]+/, "") };
+  // Nur A-prefix ("A243775523") oder R-prefix ("R123456") oder pure Ziffern
+  // → interne Beleg-ID. Andere Buchstaben-Prefixe wie "W..." sind
+  // Marketplace-/Shopware-Bestellnummern und dürfen NICHT als id gesendet
+  // werden — sonst matched Webisco irrtümlich einen anderen Beleg mit
+  // demselben Zahlensuffix.
+  if (/^[AR]?\d+$/.test(trimmed)) {
+    return { kind: "id", value: trimmed.replace(/^[AR]/, "") };
   }
-  // Anything else (contains "-", letters mid-string, etc.) → external bestellnummer
+  // Anything else (contains "-", other letter-prefixes like "W...", letters
+  // mid-string, etc.) → external bestellnummer
   return { kind: "bestellnummer", value: trimmed };
 }
 
