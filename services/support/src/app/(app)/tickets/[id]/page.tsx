@@ -123,6 +123,8 @@ export default async function TicketDetailPage({
             retoureLabelUrl: o.retoureLabelUrl,
             retoureCreatedAt: o.retoureCreatedAt?.toISOString() || null,
             retoureFreeLabel: o.retoureFreeLabel,
+            lastLookupError: o.lastLookupError,
+            lastLookupAt: o.lastLookupAt?.toISOString() || null,
           };
         }),
         messages: ticket.messages.map((m) => ({

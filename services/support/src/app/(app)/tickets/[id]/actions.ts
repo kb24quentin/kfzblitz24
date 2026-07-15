@@ -267,18 +267,30 @@ export async function addOrderAction(formData: FormData) {
       select: { contact: { select: { email: true } } },
     });
     const result = await lookupOrder(ref);
-    if (result.ok && ticket) {
-      const matched = belegEmailMatches(result.beleg, ticket.contact.email);
-      await prisma.ticketOrder.update({
-        where: { ticketId_ref: { ticketId, ref } },
-        data: {
-          emailMatched: matched,
-          status: result.beleg.status ?? null,
-          totalBrutto: result.beleg.endpreis_brutto ?? null,
-          webiscoData: JSON.stringify(result.beleg),
-          fetchedAt: new Date(),
-        },
-      });
+    if (ticket) {
+      if (result.ok) {
+        const matched = belegEmailMatches(result.beleg, ticket.contact.email);
+        await prisma.ticketOrder.update({
+          where: { ticketId_ref: { ticketId, ref } },
+          data: {
+            emailMatched: matched,
+            status: result.beleg.status ?? null,
+            totalBrutto: result.beleg.endpreis_brutto ?? null,
+            webiscoData: JSON.stringify(result.beleg),
+            fetchedAt: new Date(),
+            lastLookupError: null,
+            lastLookupAt: new Date(),
+          },
+        });
+      } else {
+        await prisma.ticketOrder.update({
+          where: { ticketId_ref: { ticketId, ref } },
+          data: {
+            lastLookupError: result.error,
+            lastLookupAt: new Date(),
+          },
+        });
+      }
     }
   } catch (err) {
     console.warn("[addOrder] webisco enrich failed:", err instanceof Error ? err.message : err);
@@ -512,7 +524,8 @@ export async function refreshOrderAction(orderId: string) {
   if (!result.ok) {
     // Clear any stale snapshot — sonst zeigt die UI ewig falsche daten
     // (bekanntes problem beim wechsel des lookup-verhaltens). Fetch war
-    // erfolglos → daten weg, sidebar zeigt 'Noch nicht geladen'.
+    // erfolglos → daten weg, aber lastLookupError/At erhalten damit UI
+    // die diagnose anzeigen kann (z.b. 'Streckengeschäft nicht in Webisco').
     await prisma.ticketOrder.update({
       where: { id: orderId },
       data: {
@@ -521,6 +534,8 @@ export async function refreshOrderAction(orderId: string) {
         totalBrutto: null,
         fetchedAt: null,
         emailMatched: false,
+        lastLookupError: result.error,
+        lastLookupAt: new Date(),
       },
     });
     await prisma.ticketEvent.create({
@@ -544,6 +559,8 @@ export async function refreshOrderAction(orderId: string) {
       totalBrutto: result.beleg.endpreis_brutto ?? null,
       webiscoData: JSON.stringify(result.beleg),
       fetchedAt: new Date(),
+      lastLookupError: null,
+      lastLookupAt: new Date(),
     },
   });
   await prisma.ticketEvent.create({

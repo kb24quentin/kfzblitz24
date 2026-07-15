@@ -104,6 +104,8 @@ model TicketOrder {
   retoureLabelUrl      String? // DHL label PDF URL (if label was booked)
   retoureCreatedAt     DateTime?
   retoureFreeLabel     Boolean   @default(false) // admin toggled free label (Rückgabe+)
+  lastLookupError      String? // last Webisco error code (e.g. "not_found") — surfaces why data is missing
+  lastLookupAt         DateTime? // when last refresh attempt happened (success OR failure)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 

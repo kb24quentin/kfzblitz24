@@ -165,6 +165,8 @@ type Order = {
   retoureLabelUrl: string | null;
   retoureCreatedAt: string | null;
   retoureFreeLabel: boolean;
+  lastLookupError: string | null;
+  lastLookupAt: string | null;
 };
 
 type Ticket = {

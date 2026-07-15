@@ -32,6 +32,22 @@ export async function linkOrdersFromMessage(
     try {
       const result = await lookupOrder(ref);
       if (!result.ok) {
+        // Persist the failure too so the sidebar can show a specific reason
+        // (e.g. Streckengeschäft not indexed) instead of "noch nicht geladen".
+        await prisma.ticketOrder.upsert({
+          where: { ticketId_ref: { ticketId, ref } },
+          create: {
+            ticketId,
+            ref,
+            source: "ai_detected",
+            lastLookupError: result.error,
+            lastLookupAt: new Date(),
+          },
+          update: {
+            lastLookupError: result.error,
+            lastLookupAt: new Date(),
+          },
+        });
         console.log(`[order-detect] ${ref} lookup failed: ${result.error}`);
         continue;
       }
@@ -49,6 +65,8 @@ export async function linkOrdersFromMessage(
           totalBrutto: result.beleg.endpreis_brutto ?? null,
           webiscoData: JSON.stringify(result.beleg),
           fetchedAt: new Date(),
+          lastLookupError: null,
+          lastLookupAt: new Date(),
         },
         update: {
           emailMatched: matched,
@@ -56,6 +74,8 @@ export async function linkOrdersFromMessage(
           totalBrutto: result.beleg.endpreis_brutto ?? null,
           webiscoData: JSON.stringify(result.beleg),
           fetchedAt: new Date(),
+          lastLookupError: null,
+          lastLookupAt: new Date(),
         },
       });
 

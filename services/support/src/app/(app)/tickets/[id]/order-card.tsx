@@ -70,7 +70,27 @@ export type OrderCardData = {
   retoureLabelUrl?: string | null;
   retoureCreatedAt?: string | null;
   retoureFreeLabel?: boolean;
+  lastLookupError?: string | null;
+  lastLookupAt?: string | null;
 };
+
+/** Menschliche Übersetzung der Webisco-Error-Codes für die Sidebar. */
+function humanizeLookupError(err: string | null): { title: string; hint: string } {
+  if (!err) return { title: "Noch nicht aus Webisco geladen", hint: "Klick auf Refresh um zu laden." };
+  if (err === "not_found") {
+    return {
+      title: "In Webisco nicht auffindbar",
+      hint: "Wahrscheinlich Streckengeschäft/Marktplatz-Bestellung — solche Belege sind nicht in der öffentlichen Query-API indexiert. Details manuell im ERP prüfen.",
+    };
+  }
+  if (err.startsWith("http_5") || err.startsWith("fetch_failed")) {
+    return { title: "Webisco nicht erreichbar", hint: "Später erneut versuchen." };
+  }
+  if (err === "lookup_not_configured") {
+    return { title: "Order-Lookup nicht konfiguriert", hint: "RETOURE_API_URL/TOKEN fehlt." };
+  }
+  return { title: "Lookup fehlgeschlagen", hint: err };
+}
 
 // Age-Gate laut Fachvorgabe: ab Zustellungsdatum.
 // - Agent ohne Rückgabe+ → 14 Tage (BGB §312g Widerruf)
@@ -215,11 +235,24 @@ export function OrderCard({
         )}
       </div>
 
-      {!order.fetchedAt && (
-        <div className="ml-4 text-xs text-text-light italic">
-          Noch nicht aus Webisco geladen — klick auf Refresh
-        </div>
-      )}
+      {!order.fetchedAt && (() => {
+        const diag = humanizeLookupError(order.lastLookupError ?? null);
+        const isNotFound = order.lastLookupError === "not_found";
+        return (
+          <div
+            className={`ml-4 mt-1 text-xs px-2 py-1.5 rounded ${
+              isNotFound
+                ? "bg-warning/10 text-warning border border-warning/30"
+                : order.lastLookupError
+                  ? "bg-danger/10 text-danger border border-danger/30"
+                  : "text-text-light italic"
+            }`}
+          >
+            <div className="font-medium">{diag.title}</div>
+            <div className={isNotFound ? "opacity-80" : "text-text-light"}>{diag.hint}</div>
+          </div>
+        );
+      })()}
 
       {order.note && (
         <div className="ml-4 text-xs text-text-light">— {order.note}</div>
