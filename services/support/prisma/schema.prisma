@@ -136,6 +136,8 @@ model Message {
   resentFromId    String? // FK to a prior Message that this is a resend of
   sentAt          DateTime?
   createdAt       DateTime  @default(now())
+  editedAt        DateTime? // set when an agent manually edited body via UI
+  editedById      String? // who did the last edit
 
   ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   authorUser  User?        @relation(fields: [authorUserId], references: [id])
@@ -215,6 +217,9 @@ model AiUsage {
   @@index([model])
   @@index([ticketId])
 }
+
+// Note: Message already has bodyHtml/bodyText — we add edit-audit fields
+// separately below via ALTER TABLE migration since Message is defined elsewhere.
 
 model Attachment {
   id          String   @id @default(cuid())
