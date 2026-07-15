@@ -384,21 +384,28 @@ export async function buildRetoureAnmeldungPdf(
     x: PAGE_LEFT + 12, y, size: 9.2, font, color: DARK_GREY,
   });
 
-  // Versand-Block
+  // Versand-Block. Drei Fälle:
+  //   1. Rückgabe+ / Sichere Rückgabe → Label auf Seite 2, keine Adresse nötig
+  //   2. Standard + Label vorhanden → Label auf Seite 2, keine Adresse nötig
+  //   3. Standard ohne Label → Adresse zeigen (Kunde versendet selbst)
   y -= 30;
-  if (input.shippingMode === "sicher") {
-    drawSectionHeading(page, fontBold, "Sichere Rückgabe", y);
+  const hasLabel = !!input.labelPdfBytes && input.labelPdfBytes.length > 0;
+  const isSicher = input.shippingMode === "sicher";
+
+  if (hasLabel) {
+    drawSectionHeading(page, fontBold, isSicher ? "Sichere Rückgabe" : "DHL-Retourenlabel", y);
     y -= 18;
     page.drawText(
-      input.labelPdfBytes
-        ? "Sichere Rückgabe — DHL-Retourenlabel auf der nächsten Seite."
-        : "Sichere Rückgabe. Bei Bedarf kannst du ein DHL-Label nachfordern.",
+      isSicher
+        ? "Sichere Rückgabe — DHL-Retourenlabel auf der nächsten Seite. Der Rückversand ist für Sie kostenfrei."
+        : "DHL-Retourenlabel auf der nächsten Seite.",
       { x: PAGE_LEFT, y, size: 9.2, font, color: DARK_GREY },
     );
     y -= 18;
     const steps = [
-      "Lege diesen Retourenschein der Sendung bei.",
-      "Verwende das DHL-Label zum Versand (siehe nächste Seite).",
+      "Legen Sie diesen Retourenschein der Sendung bei.",
+      "Verwenden Sie das DHL-Label zum Versand (siehe nächste Seite).",
+      "Geben Sie das Paket in einer beliebigen DHL-Filiale ab.",
       "Bearbeitung dauert bis zu 5 Werktage nach Eingang.",
     ];
     for (const s of steps) {
@@ -406,17 +413,24 @@ export async function buildRetoureAnmeldungPdf(
       y -= 12;
     }
   } else {
+    // Kunde versendet selbst → Adresse zeigen
+    const company = process.env.RETOURE_RETURN_COMPANY?.trim() || "kfzBlitz24 GmbH";
+    const co = process.env.RETOURE_RETURN_CO?.trim() || "c/o ZAK";
+    const street = process.env.RETOURE_RETURN_STREET?.trim() || "Rauschwalder Str. 48 B";
+    const zip = process.env.RETOURE_RETURN_ZIP?.trim() || "02826";
+    const city = process.env.RETOURE_RETURN_CITY?.trim() || "Görlitz";
+
     drawSectionHeading(page, fontBold, "Rücksendeadresse", y);
     y -= 18;
-    page.drawText("kfzBlitz24 GmbH", { x: PAGE_LEFT, y, size: 10.5, font: fontBold, color: NAVY });
+    page.drawText(company, { x: PAGE_LEFT, y, size: 10.5, font: fontBold, color: NAVY });
     y -= 13;
-    page.drawText("c/o RETOURE", { x: PAGE_LEFT, y, size: 9.2, font, color: DARK_GREY });
+    page.drawText(co, { x: PAGE_LEFT, y, size: 9.2, font, color: DARK_GREY });
     y -= 12;
-    page.drawText("Musterstraße 1", { x: PAGE_LEFT, y, size: 9.2, font, color: DARK_GREY });
+    page.drawText(street, { x: PAGE_LEFT, y, size: 9.2, font, color: DARK_GREY });
     y -= 12;
-    page.drawText("12345 Musterstadt", { x: PAGE_LEFT, y, size: 9.2, font, color: DARK_GREY });
+    page.drawText(`${zip} ${city}`, { x: PAGE_LEFT, y, size: 9.2, font, color: DARK_GREY });
     y -= 22;
-    drawBullet(page, font, fontBold, "Bitte frankiere die Sendung ausreichend.", y);
+    drawBullet(page, font, fontBold, "Bitte frankieren Sie die Sendung ausreichend.", y);
     y -= 12;
     drawBullet(
       page, font, fontBold,

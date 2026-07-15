@@ -504,18 +504,30 @@ function buildRetoureReplyBody(opts: {
     opts.kategorie === "gewaehrleistung"
       ? "Gewährleistungs-Retoure"
       : "Retoure";
-  const labelLine = opts.labelRequested
+
+  // Zwei Szenarien für den Mail-Body:
+  //  A) Label über uns → im Anhang ist Retourenschein + DHL-Label,
+  //     DHL bringt Paket automatisch zu unserer Adresse — Kunde braucht
+  //     die Adresse NICHT.
+  //  B) Kunde versendet selbst → Adresse muss in der Mail stehen damit
+  //     der Kunde sie beim Frankieren zur Hand hat.
+  const labelBlock = opts.labelRequested
     ? opts.freeLabel
-      ? "<p>Der Retourenschein enthält bereits das <strong>vorfrankierte DHL-Versandlabel</strong> — der Versand ist für Sie kostenfrei.</p>"
-      : "<p>Der Retourenschein enthält das vorfrankierte DHL-Versandlabel. Die Versandkosten von 5,50 € werden bei der Rückerstattung vom Warenwert abgezogen.</p>"
-    : "<p>Bitte senden Sie das Paket auf einem Versandweg Ihrer Wahl an unser Retourenzentrum. Die Adresse finden Sie auf dem Retourenschein.</p>";
+      ? "<p>Anbei finden Sie den Retourenschein mit dem <strong>vorfrankierten DHL-Versandlabel</strong> — der Rückversand ist für Sie <strong>kostenfrei</strong>. Geben Sie das Paket einfach in einer beliebigen DHL-Filiale ab.</p>"
+      : "<p>Anbei finden Sie den Retourenschein mit dem vorfrankierten DHL-Versandlabel. Die Versandkosten von 5,50 € werden bei der Rückerstattung vom Warenwert abgezogen. Geben Sie das Paket einfach in einer beliebigen DHL-Filiale ab.</p>"
+    : `<p>Bitte senden Sie das Paket auf einem Versandweg Ihrer Wahl frankiert an folgende Adresse:</p>
+<p><strong>kfzBlitz24 GmbH</strong><br>
+c/o ZAK<br>
+Rauschwalder Str. 48 B<br>
+02826 Görlitz</p>
+<p style="font-size:12px;color:#8a93a0">Wichtig: Unfrei gesendete Pakete können leider nicht angenommen werden.</p>`;
 
   return [
     `<p>${salutation}</p>`,
     `<p>wir haben Ihre ${kategorieText} zu Bestellung <strong>${opts.ref}</strong> angelegt. Den Retourenschein${
       opts.labelRequested ? " inklusive DHL-Versandlabel" : ""
     } finden Sie <strong>im Anhang dieser E-Mail</strong>.</p>`,
-    labelLine,
+    labelBlock,
     opts.trackingNumber
       ? `<p>Sendungsverfolgung (nach Einlieferung): <strong>${opts.trackingNumber}</strong></p>`
       : "",
