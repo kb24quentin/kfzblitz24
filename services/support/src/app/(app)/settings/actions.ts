@@ -24,20 +24,23 @@ async function requireUser() {
 
 export async function saveMySignatureAction(formData: FormData) {
   const user = await requireUser();
-  const name = String(formData.get("name") || "Standard").trim() || "Standard";
-  const html = String(formData.get("html") || "").trim();
-  if (!html) throw new Error("HTML erforderlich");
+  const displayName = String(formData.get("displayName") || "").trim();
+  const position = String(formData.get("position") || "").trim();
+  const email = String(formData.get("email") || "").trim();
+  if (!displayName) throw new Error("Name erforderlich");
+  if (!position) throw new Error("Position erforderlich");
+  if (!email || !email.includes("@")) throw new Error("Gültige E-Mail erforderlich");
 
   await prisma.signature.upsert({
     where: { userId: user.id },
-    create: { userId: user.id, name, html },
-    update: { name, html },
+    create: { userId: user.id, displayName, position, email },
+    update: { displayName, position, email },
   });
 
   revalidatePath("/settings");
 }
 
-export async function deleteMySignatureAction() {
+export async function resetMySignatureAction() {
   const user = await requireUser();
   await prisma.signature.deleteMany({ where: { userId: user.id } });
   revalidatePath("/settings");

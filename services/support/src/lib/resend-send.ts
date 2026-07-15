@@ -4,6 +4,7 @@ import { getFromAddress, getReplyToAddress, wrapEmailHtml, htmlToPlainText } fro
 import { insertToGmailSent } from "@/lib/gmail";
 import { isFullHtmlDocument } from "@/lib/mail-template";
 import { ensureCodeInSubject } from "@/lib/ticket-code";
+import { loadSignatureHtmlForUser } from "@/lib/signature";
 import {
   getAutoAckEnabled,
   getAutoAckSubject,
@@ -86,9 +87,7 @@ export async function sendAcknowledgement(ticketId: string): Promise<void> {
 }
 
 async function loadSignatureHtml(userId: string | null | undefined): Promise<string | null> {
-  if (!userId) return null;
-  const sig = await prisma.signature.findUnique({ where: { userId } });
-  return sig?.html?.trim() || null;
+  return loadSignatureHtmlForUser(userId ?? null);
 }
 
 function joinBodyWithSignature(bodyHtml: string, signatureHtml: string | null): string {
