@@ -107,7 +107,8 @@ async function fetchRetoureAttachments(
 ): Promise<Array<{ filename: string; content: string }>> {
   if (ticketOrderIds.length === 0) return [];
   const token = process.env.RETOURE_API_TOKEN?.trim();
-  if (!token) return [];
+  const base = (process.env.RETOURE_API_URL || "").replace(/\/+$/, "");
+  if (!token || !base) return [];
 
   const orders = await prisma.ticketOrder.findMany({
     where: { id: { in: ticketOrderIds } },
@@ -116,9 +117,22 @@ async function fetchRetoureAttachments(
 
   const results: Array<{ filename: string; content: string }> = [];
   for (const o of orders) {
-    if (!o.retoureAnmeldungUrl) continue;
+    // Prefer stored URL (absolute), fall back to relative-with-base, then
+    // build from caseId. retoure/submit builds the URL against its own
+    // RETOURE_PUBLIC_URL env — if unset, URL comes back relative and
+    // needs manual base-prefix here to be fetch()able.
+    let pdfUrl: string | null = null;
+    if (o.retoureAnmeldungUrl && /^https?:\/\//i.test(o.retoureAnmeldungUrl)) {
+      pdfUrl = o.retoureAnmeldungUrl;
+    } else if (o.retoureAnmeldungUrl && o.retoureAnmeldungUrl.startsWith("/")) {
+      pdfUrl = `${base}${o.retoureAnmeldungUrl}`;
+    } else if (o.retoureCaseId) {
+      pdfUrl = `${base}/api/retoure/cases/${o.retoureCaseId}/retoure-anmeldung-pdf`;
+    }
+    if (!pdfUrl) continue;
+
     try {
-      const r = await fetch(o.retoureAnmeldungUrl, {
+      const r = await fetch(pdfUrl, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
@@ -131,6 +145,7 @@ async function fetchRetoureAttachments(
         filename: `Retourenschein-${o.ref}.pdf`,
         content: buffer.toString("base64"),
       });
+      console.log(`[send] retoure PDF attached ${o.ref} (${buffer.length} bytes)`);
     } catch (e) {
       console.warn(`[send] retoure PDF fetch ${o.ref} failed:`, e instanceof Error ? e.message : e);
     }
