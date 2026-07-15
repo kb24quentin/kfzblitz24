@@ -91,6 +91,11 @@ export async function TicketList({
       contact: true,
       assignee: true,
       _count: { select: { messages: true, notes: true } },
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { createdAt: true, direction: true, sentAt: true },
+      },
     },
   });
 
@@ -225,6 +230,7 @@ export async function TicketList({
                       ? "Wiedervorlage"
                       : "1. Antwort SLA"}
                 </th>
+                <th className="px-4 py-3 font-medium">Letzte Aktivität</th>
                 <th className="px-4 py-3 font-medium">Erstellt</th>
               </tr>
             </thead>
@@ -304,6 +310,27 @@ export async function TicketList({
                           {formatDistanceToNow(t.firstResponseDueAt, { locale: de, addSuffix: true })}
                         </span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const last = t.messages[0];
+                        if (!last) return <span className="text-text-light">—</span>;
+                        const when = last.sentAt || last.createdAt;
+                        const isInbound = last.direction === "inbound";
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+                                isInbound ? "bg-warning" : "bg-info"
+                              }`}
+                              title={isInbound ? "Kunden-Nachricht" : "Unsere Antwort"}
+                            />
+                            <span className={isInbound ? "text-warning font-medium" : "text-text-light"}>
+                              {formatDistanceToNow(when, { locale: de, addSuffix: true })}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-text-light">
                       {formatDistanceToNow(t.createdAt, { locale: de, addSuffix: true })}
