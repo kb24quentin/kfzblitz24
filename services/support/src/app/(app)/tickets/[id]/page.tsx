@@ -93,14 +93,8 @@ export default async function TicketDetailPage({
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
         orders: ticket.orders.map((o) => {
-          let beleg: unknown = null;
-          if (o.webiscoData) {
-            try {
-              beleg = JSON.parse(o.webiscoData);
-            } catch {
-              beleg = null;
-            }
-          }
+          let beleg: ReturnType<typeof safeParseBeleg> = null;
+          if (o.webiscoData) beleg = safeParseBeleg(o.webiscoData);
           return {
             id: o.id,
             ref: o.ref,
@@ -147,4 +141,50 @@ export default async function TicketDetailPage({
       currentUserRole={currentUser?.role ?? "agent"}
     />
   );
+}
+
+type BelegAddress = {
+  anrede?: string;
+  vorname?: string;
+  name?: string;
+  strasse?: string;
+  plz?: string;
+  ort?: string;
+  land?: string;
+  email?: string;
+  telefon?: string;
+};
+
+type BelegPosition = {
+  id?: number;
+  typ?: string;
+  artikelnummer?: string;
+  hersteller?: string;
+  herstellernummer?: string;
+  beschreibung?: string;
+  menge?: number;
+  einzelpreis_brutto?: number;
+  positionspreis_brutto?: number;
+  status?: string;
+};
+
+type BelegShape = {
+  typ?: string;
+  belegnummer?: string;
+  belegdatum?: string;
+  status?: string;
+  bestellnummer?: string;
+  endpreis_brutto?: number;
+  endpreis_netto?: number;
+  rechnungsadresse?: BelegAddress;
+  lieferadresse?: BelegAddress;
+  positionen?: BelegPosition[];
+};
+
+function safeParseBeleg(raw: string): BelegShape | null {
+  try {
+    return JSON.parse(raw) as BelegShape;
+  } catch {
+    return null;
+  }
 }
