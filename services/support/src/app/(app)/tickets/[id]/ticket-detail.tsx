@@ -254,6 +254,7 @@ const EVENT_LABEL: Record<string, string> = {
   retoure_created: "Kundenretoure angelegt",
   retoure_create_failed: "Retoure-Anlage fehlgeschlagen",
   auto_closed_no_response: "Auto-geschlossen (7 Tage keine Kunden-Antwort)",
+  reminder_sent: "Erinnerung an Kunden gesendet (5 Tage)",
 };
 
 function slaColor(dueAt: string, resolved: boolean) {

@@ -2,8 +2,9 @@ import { prisma } from "@/lib/db";
 import { classifyAndDraft, isAiConfigured, aiModel } from "@/lib/ai";
 import { calculateCost } from "@/lib/ai-pricing";
 import { sendMailAndPersist } from "@/lib/resend-send";
-import { getAutoSendCategories, getAutoSendMinConfidence } from "@/lib/settings";
+import { getAutoSendCategories, getAutoSendMinConfidence, pickAiAutosendDelayMs } from "@/lib/settings";
 import { summarizeBeleg, type Beleg } from "@/lib/webisco-lookup";
+import { pickWeightedAiPersona } from "@/lib/ai-personas";
 
 /**
  * Generates an AI draft for the newest inbound message on a ticket.
@@ -101,6 +102,12 @@ export async function generateDraftForTicket(
   const eligible =
     result.confidence >= minConf && autoSendCats.has(result.category);
 
+  // Bei autosend: AI-persona picken (weighted) und delay bestimmen.
+  // Beides nur wenn autosend eligible — manuelle drafts nutzen agent-signatur.
+  const persona = eligible ? await pickWeightedAiPersona() : null;
+  const delayMs = eligible ? await pickAiAutosendDelayMs() : 0;
+  const scheduledSendAt = eligible ? new Date(Date.now() + delayMs) : null;
+
   const draft = await prisma.aiDraft.create({
     data: {
       ticketId,
@@ -111,6 +118,8 @@ export async function generateDraftForTicket(
       category: result.category,
       autoSendEligible: eligible,
       status: eligible ? "approved" : "pending",
+      aiPersonaId: persona?.id ?? null,
+      scheduledSendAt,
     },
   });
 
@@ -167,12 +176,45 @@ export async function generateDraftForTicket(
   ]);
 
   if (eligible) {
-    await sendMailAndPersist({
-      ticketId,
-      subject: result.subject,
-      bodyHtml: result.bodyHtml,
-      aiGenerated: true,
-      approvedDraftId: draft.id,
-    });
+    // Delay ist bewusst NICHT-blocking — wir feuern setTimeout und return
+    // sofort. Cron /api/cron/sla-check ist der safety-net-fallback falls der
+    // process während des delays neustartet (deploy etc.) — er picken alle
+    // approved drafts mit scheduledSendAt <= now die noch nicht gesendet sind.
+    if (delayMs > 0) {
+      setTimeout(() => {
+        dispatchScheduledSend(draft.id).catch((err) =>
+          console.warn("[ticket-ai] scheduled send failed:", err instanceof Error ? err.message : err),
+        );
+      }, delayMs);
+      console.log(`[ticket-ai] AI-autosend scheduled ${Math.round(delayMs / 1000)}s (draft=${draft.id}, persona=${persona?.name ?? "none"})`);
+    } else {
+      await dispatchScheduledSend(draft.id);
+    }
   }
+}
+
+/**
+ * Sendet einen scheduled AI-draft (aufgerufen von setTimeout ODER vom
+ * cron-safety-net). Idempotent: prüft draft.status vor send damit ein
+ * bereits gesendeter/rejected draft nicht doppelt rausgeht.
+ */
+export async function dispatchScheduledSend(draftId: string): Promise<void> {
+  const draft = await prisma.aiDraft.findUnique({
+    where: { id: draftId },
+    include: { aiPersona: { select: { name: true, position: true } } },
+  });
+  if (!draft) return;
+  if (draft.status !== "approved") return; // already sent, rejected, or superseded
+  if (!draft.autoSendEligible) return;
+
+  await sendMailAndPersist({
+    ticketId: draft.ticketId,
+    subject: draft.subject,
+    bodyHtml: draft.bodyHtml,
+    aiGenerated: true,
+    approvedDraftId: draft.id,
+    aiPersona: draft.aiPersona
+      ? { name: draft.aiPersona.name, position: draft.aiPersona.position }
+      : null,
+  });
 }

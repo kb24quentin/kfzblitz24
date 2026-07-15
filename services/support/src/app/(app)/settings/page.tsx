@@ -7,6 +7,7 @@ import { SignatureEditor } from "./signature-editor";
 import { AutoAckEditor } from "./auto-ack-editor";
 import { AiAutopilotSection } from "./ai-autopilot";
 import { AiCostsSection } from "./ai-costs";
+import { AiTeamSection } from "./ai-team";
 import { CategoriesManager } from "./categories-manager";
 import { BusinessHoursEditor } from "./business-hours";
 import { fieldsForUser, signatureEmail } from "@/lib/signature";
@@ -18,9 +19,11 @@ import {
   getAutoAckBody,
   getAutoSendCategories,
   getAutoSendMinConfidence,
+  getAiAutosendDelayRange,
   getTicketCategories,
   getBusinessHours,
 } from "@/lib/settings";
+import { listAiPersonas } from "@/lib/ai-personas";
 import { saveSlaSettingsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +55,8 @@ export default async function SettingsPage({
     ackBody,
     autoSendCats,
     autoSendMinConf,
+    aiDelayRange,
+    aiPersonas,
     ticketCategories,
     businessHours,
   ] = await Promise.all([
@@ -67,6 +72,8 @@ export default async function SettingsPage({
     getAutoAckBody(),
     getAutoSendCategories(),
     getAutoSendMinConfidence(),
+    getAiAutosendDelayRange(),
+    listAiPersonas(),
     getTicketCategories(),
     getBusinessHours(),
   ]);
@@ -185,6 +192,13 @@ export default async function SettingsPage({
 
       {currentUser?.role === "admin" && (
         <>
+          <SectionHeader title="AI-Team & Auto-Send" />
+          <AiTeamSection
+            personas={aiPersonas}
+            delayMin={aiDelayRange.min}
+            delayMax={aiDelayRange.max}
+          />
+
           <SectionHeader title="AI · Kosten & Nutzung" />
           <AiCostsSection />
         </>

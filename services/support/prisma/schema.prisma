@@ -167,6 +167,24 @@ model Message {
   @@index([ticketId])
 }
 
+/**
+ * AI-Persona = ein "AI-Mitarbeiter" der bei Auto-Send-Antworten als
+ * Signatur-Name verwendet wird. Weight entscheidet die relative
+ * Auswahl-Häufigkeit (weighted random). Bei manuellen Drafts wird KEINE
+ * persona verwendet — dort steht der reviewende Agent in der Signatur.
+ */
+model AiPersona {
+  id        String   @id @default(cuid())
+  name      String // "Patrick Schuster"
+  position  String   @default("Kundenservice")
+  weight    Int      @default(10) // percentage weight — relative im Pool
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  aiDrafts AiDraft[]
+}
+
 model TicketNote {
   id        String   @id @default(cuid())
   ticketId  String
@@ -202,16 +220,20 @@ model AiDraft {
   category         String?
   status           String    @default("pending") // pending, approved, rejected, sent, superseded
   autoSendEligible Boolean   @default(false)
+  scheduledSendAt  DateTime? // when the auto-send delay expires — cron picks up drafts >= now
+  aiPersonaId      String? // welche AI-persona für signatur benutzt wird (null = manueller send)
   reviewedById     String?
   reviewedAt       DateTime?
   rejectedReason   String?
   createdAt        DateTime  @default(now())
 
-  ticket     Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  reviewedBy User?  @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  ticket     Ticket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  reviewedBy User?      @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  aiPersona  AiPersona? @relation(fields: [aiPersonaId], references: [id])
 
   @@index([ticketId])
   @@index([status])
+  @@index([scheduledSendAt])
 }
 
 model AiUsage {

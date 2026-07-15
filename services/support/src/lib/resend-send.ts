@@ -4,7 +4,7 @@ import { getFromAddress, getReplyToAddress, wrapEmailHtml, htmlToPlainText } fro
 import { insertToGmailSent } from "@/lib/gmail";
 import { isFullHtmlDocument } from "@/lib/mail-template";
 import { ensureCodeInSubject } from "@/lib/ticket-code";
-import { loadSignatureHtmlForUser } from "@/lib/signature";
+import { loadSignatureHtmlForUser, renderSignatureHtml } from "@/lib/signature";
 import {
   getAutoAckEnabled,
   getAutoAckSubject,
@@ -43,6 +43,11 @@ type SendArgs = {
    * the customer gets the Retourenschein embedded, not a link they can't open.
    */
   attachRetoureOrderIds?: string[];
+  /**
+   * Wenn gesetzt, wird die AI-Persona-Signatur genutzt statt user-signatur.
+   * Nur für AI-autosend — bei manuellen sends bleibt user-signatur.
+   */
+  aiPersona?: { name: string; position: string } | null;
 };
 
 /**
@@ -177,6 +182,7 @@ export async function sendMailAndPersist({
   resentFromId = null,
   countsAsFirstResponse = true,
   attachRetoureOrderIds = [],
+  aiPersona = null,
 }: SendArgs) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -199,7 +205,21 @@ export async function sendMailAndPersist({
   // TipTap composer or from the ack template) OR a pre-wrapped full HTML
   // document (rare — legacy resend of pre-refactor messages). The double-
   // wrap check below keeps both cases correct.
-  const signatureHtml = appendSignature ? await loadSignatureHtml(authorUserId) : null;
+  // AI-persona-signatur hat precedence vor user-signatur — bei AI-autosend
+  // ist authorUserId null, sonst wäre die signatur leer und der Kunde bekäme
+  // eine anonyme mail. Bei manuellen sends (authorUserId gesetzt) bleibt die
+  // per-user-signatur bestehen.
+  let signatureHtml: string | null = null;
+  if (appendSignature) {
+    if (aiPersona) {
+      signatureHtml = renderSignatureHtml({
+        displayName: aiPersona.name,
+        position: aiPersona.position,
+      });
+    } else {
+      signatureHtml = await loadSignatureHtml(authorUserId);
+    }
+  }
   const innerContentRaw = joinBodyWithSignature(bodyHtml, signatureHtml);
   // Embed the ticket code as an HTML comment right before the body — invisible
   // to the customer but preserved by most mail clients on reply, giving us a

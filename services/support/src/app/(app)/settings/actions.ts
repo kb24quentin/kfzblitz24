@@ -9,6 +9,7 @@ import {
   saveAutoAckSettings,
   saveAutoSendCategories,
   saveAutoSendMinConfidence,
+  saveAiAutosendDelayRange,
   saveTicketCategories,
   saveBusinessHours,
   type BusinessHours,
@@ -177,4 +178,44 @@ export async function toggleUserActiveAction(formData: FormData) {
 
   await prisma.user.update({ where: { id }, data: { active } });
   revalidatePath("/settings");
+}
+
+// ── AI-Personas ────────────────────────────────────────────────────
+export async function saveAiPersonaAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "").trim() || null;
+  const name = String(formData.get("name") || "").trim();
+  const position = String(formData.get("position") || "").trim() || "Kundenservice";
+  const weight = Math.max(0, Math.min(100, parseInt(String(formData.get("weight") || "10"), 10) || 10));
+  const active = String(formData.get("active") || "") === "on";
+  if (!name) throw new Error("Name erforderlich");
+
+  if (id) {
+    await prisma.aiPersona.update({ where: { id }, data: { name, position, weight, active } });
+  } else {
+    await prisma.aiPersona.create({ data: { name, position, weight, active } });
+  }
+  revalidatePath("/settings");
+}
+
+export async function deleteAiPersonaAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+  await prisma.aiPersona.delete({ where: { id } });
+  revalidatePath("/settings");
+}
+
+export async function saveAiAutosendDelayAction(formData: FormData) {
+  await requireAdmin();
+  const min = parseInt(String(formData.get("min") || "60"), 10);
+  const max = parseInt(String(formData.get("max") || "300"), 10);
+  await saveAiAutosendDelayRange({ min, max });
+  revalidatePath("/settings");
+}
+
+async function requireAdmin() {
+  const user = await requireUser();
+  if (user.role !== "admin") throw new Error("Nur Admins");
+  return user;
 }

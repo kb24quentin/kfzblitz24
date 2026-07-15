@@ -1,5 +1,7 @@
 import { checkBearer } from "@/lib/api-auth";
 import { prisma } from "@/lib/db";
+import { dispatchScheduledSend } from "@/lib/ticket-ai";
+import { sendReminderIfNeeded } from "@/lib/reminder";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +95,31 @@ export async function POST(req: Request) {
     });
   }
 
-  // 4. Auto-close tickets die 7 Tage im 'pending' hängen ohne Kunden-Antwort.
+  // 4a. Reminder nach 5 Tagen: gib dem Kunden nochmal die chance zu antworten
+  //     bevor wir bei tag 7 zumachen.
+  const remindersSent = await sendReminderIfNeeded();
+
+  // 4b. Scheduled AI-autosends safety-net: falls setTimeout durch deploy/crash
+  //     verloren ging, holt der cron die approved drafts nach.
+  const dueScheduled = await prisma.aiDraft.findMany({
+    where: {
+      status: "approved",
+      autoSendEligible: true,
+      scheduledSendAt: { lte: now, not: null },
+    },
+    select: { id: true },
+  });
+  let dispatchedScheduled = 0;
+  for (const d of dueScheduled) {
+    try {
+      await dispatchScheduledSend(d.id);
+      dispatchedScheduled++;
+    } catch (err) {
+      console.warn(`[cron] scheduled send failed for ${d.id}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  // 5. Auto-close tickets die 7 Tage im 'pending' hängen ohne Kunden-Antwort.
   //    Trigger: status=pending + letzte outbound-message >7d + KEINE inbound
   //    seit dieser outbound. Auto-reopen setzt bei jeder Kunden-antwort den
   //    status zurück auf 'open', deshalb impliziert status=pending: der Kunde
@@ -148,6 +174,8 @@ export async function POST(req: Request) {
     woken,
     firstResponseBreachesFlagged: firstResponseBreaches.length,
     resolutionBreachesFlagged: resolutionBreaches.length,
+    remindersSent,
+    dispatchedScheduled,
     autoClosed,
   });
 }

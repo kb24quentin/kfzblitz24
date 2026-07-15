@@ -126,6 +126,50 @@ export async function saveAutoSendMinConfidence(v: number): Promise<void> {
   });
 }
 
+const KEY_AI_DELAY_MIN = "ai_autosend_delay_min_seconds";
+const KEY_AI_DELAY_MAX = "ai_autosend_delay_max_seconds";
+
+export async function getAiAutosendDelayRange(): Promise<{ min: number; max: number }> {
+  const [minS, maxS] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: KEY_AI_DELAY_MIN } }),
+    prisma.setting.findUnique({ where: { key: KEY_AI_DELAY_MAX } }),
+  ]);
+  const min = Number(minS?.value ?? 60);
+  const max = Number(maxS?.value ?? 300);
+  return {
+    min: Number.isFinite(min) && min >= 0 ? min : 60,
+    max: Number.isFinite(max) && max >= 0 ? Math.max(max, min) : 300,
+  };
+}
+
+export async function saveAiAutosendDelayRange(input: { min: number; max: number }): Promise<void> {
+  const min = Math.max(0, Math.floor(input.min));
+  const max = Math.max(min, Math.floor(input.max));
+  await Promise.all([
+    prisma.setting.upsert({
+      where: { key: KEY_AI_DELAY_MIN },
+      create: { key: KEY_AI_DELAY_MIN, value: String(min) },
+      update: { value: String(min) },
+    }),
+    prisma.setting.upsert({
+      where: { key: KEY_AI_DELAY_MAX },
+      create: { key: KEY_AI_DELAY_MAX, value: String(max) },
+      update: { value: String(max) },
+    }),
+  ]);
+}
+
+/** Zufällige delay-dauer in ms basierend auf gespeicherten min/max settings. */
+export async function pickAiAutosendDelayMs(): Promise<number> {
+  const { min, max } = await getAiAutosendDelayRange();
+  // Bewusst kein Math.random() — deterministisch aus timestamp,
+  // reicht für gleichmäßig verteilte delays innerhalb des ranges.
+  const seed = Date.now() % 1_000_000;
+  const spread = max - min;
+  const jitter = spread > 0 ? seed % (spread + 1) : 0;
+  return (min + jitter) * 1000;
+}
+
 export async function getTicketCategories(): Promise<{ key: string; label: string }[]> {
   const s = await prisma.setting.findUnique({ where: { key: KEY_TICKET_CATEGORIES } });
   if (!s?.value) return DEFAULT_CATEGORIES;

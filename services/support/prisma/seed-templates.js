@@ -356,7 +356,7 @@ Bomhardstraße 7<br>
  */
 function ensureClosing(bodyHtml) {
   if (/[Mm]it freundlichen/.test(bodyHtml)) return bodyHtml;
-  return `${bodyHtml}\n<p>Mit freundlichen Grüßen</p>`;
+  return `${bodyHtml}\n<p>&nbsp;</p>\n<p>Mit freundlichen Grüßen</p>`;
 }
 
 async function main() {
