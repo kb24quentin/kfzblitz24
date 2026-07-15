@@ -89,18 +89,23 @@ model Ticket {
 }
 
 model TicketOrder {
-  id            String    @id @default(cuid())
-  ticketId      String
-  ref           String // customer-facing order number, e.g. "KB24-73627372300"
-  note          String?
-  source        String    @default("manual") // manual, ai_detected, webisco
-  emailMatched  Boolean   @default(false) // true only when Webisco order email matches ticket contact
-  status        String? // webisco order status snapshot (e.g. "abgeschlossen", "offen")
-  totalBrutto   Float? // snapshot of endpreis_brutto for quick display
-  webiscoData   String? // JSON snapshot of the full Beleg (positions, addresses, etc.)
-  fetchedAt     DateTime? // when webiscoData was last synced
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  ticketId             String
+  ref                  String // customer-facing order number, e.g. "KB24-73627372300"
+  note                 String?
+  source               String    @default("manual") // manual, ai_detected, webisco
+  emailMatched         Boolean   @default(false) // true only when Webisco order email matches ticket contact
+  status               String? // webisco order status snapshot (e.g. "abgeschlossen", "offen")
+  totalBrutto          Float? // snapshot of endpreis_brutto for quick display
+  webiscoData          String? // JSON snapshot of the full Beleg (positions, addresses, etc.)
+  fetchedAt            DateTime? // when webiscoData was last synced
+  retoureCaseId        String? // if a return was created for this order via /retoure/submit
+  retoureAnmeldungUrl  String? // customer PDF (Retourenschein + Label) URL from retoure service
+  retoureLabelUrl      String? // DHL label PDF URL (if label was booked)
+  retoureCreatedAt     DateTime?
+  retoureFreeLabel     Boolean   @default(false) // admin toggled free label (Rückgabe+)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 

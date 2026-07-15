@@ -26,6 +26,8 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { RichTextEditor, type RichTextEditorHandle, type ShortcodeChoice } from "@/components/rich-text-editor";
+import { OrderCard } from "./order-card";
+import { RetoureDialog } from "./retoure-dialog";
 import { useMemo } from "react";
 import {
   sendReplyAction,
@@ -99,6 +101,44 @@ type Event = {
   createdAt: string;
 };
 
+type BelegPosition = {
+  id?: number;
+  typ?: string;
+  artikelnummer?: string;
+  hersteller?: string;
+  herstellernummer?: string;
+  beschreibung?: string;
+  menge?: number;
+  einzelpreis_brutto?: number;
+  positionspreis_brutto?: number;
+  status?: string;
+};
+
+type BelegAddress = {
+  anrede?: string;
+  vorname?: string;
+  name?: string;
+  strasse?: string;
+  plz?: string;
+  ort?: string;
+  land?: string;
+  email?: string;
+  telefon?: string;
+};
+
+type Beleg = {
+  typ?: string;
+  belegnummer?: string;
+  belegdatum?: string;
+  status?: string;
+  bestellnummer?: string;
+  endpreis_brutto?: number;
+  endpreis_netto?: number;
+  rechnungsadresse?: BelegAddress;
+  lieferadresse?: BelegAddress;
+  positionen?: BelegPosition[];
+};
+
 type Order = {
   id: string;
   ref: string;
@@ -109,6 +149,12 @@ type Order = {
   totalBrutto: number | null;
   fetchedAt: string | null;
   createdAt: string;
+  beleg: Beleg | null;
+  retoureCaseId: string | null;
+  retoureAnmeldungUrl: string | null;
+  retoureLabelUrl: string | null;
+  retoureCreatedAt: string | null;
+  retoureFreeLabel: boolean;
 };
 
 type Ticket = {
@@ -193,6 +239,8 @@ const EVENT_LABEL: Record<string, string> = {
   order_linked: "Bestellung automatisch verknüpft",
   order_refreshed: "Bestellung aus Webisco aktualisiert",
   order_refresh_failed: "Webisco-Refresh fehlgeschlagen",
+  retoure_created: "Kundenretoure angelegt",
+  retoure_create_failed: "Retoure-Anlage fehlgeschlagen",
 };
 
 function slaColor(dueAt: string, resolved: boolean) {
@@ -209,12 +257,15 @@ export function TicketDetail({
   users,
   templates,
   signatureHtml,
+  currentUserRole,
 }: {
   ticket: Ticket;
   users: UserLite[];
   templates: TemplateLite[];
   signatureHtml: string | null;
+  currentUserRole: string;
 }) {
+  const isAdmin = currentUserRole === "admin";
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [replyHtml, setReplyHtml] = useState("");
@@ -229,7 +280,11 @@ export function TicketDetail({
   const [snoozeUntil, setSnoozeUntil] = useState("");
   const [snoozeReason, setSnoozeReason] = useState("");
   const [newOrderRef, setNewOrderRef] = useState("");
+  const [retoureOrderId, setRetoureOrderId] = useState<string | null>(null);
   const editorRef = useRef<RichTextEditorHandle>(null);
+  const retoureOrder = retoureOrderId
+    ? ticket.orders.find((o) => o.id === retoureOrderId) ?? null
+    : null;
 
   const substitute = (input: string): string => {
     const c = ticket.contact;
@@ -284,6 +339,8 @@ export function TicketDetail({
     setDraftIdApplied(d.id);
   };
 
+  const [pendingRetoureAttach, setPendingRetoureAttach] = useState<string[]>([]);
+
   const submitReply = () => {
     if (!replyHtml.trim() || pending) return;
     const fd = new FormData();
@@ -292,10 +349,14 @@ export function TicketDetail({
     fd.set("bodyHtml", replyHtml);
     fd.set("statusAfter", replyStatus);
     if (draftIdApplied) fd.set("draftId", draftIdApplied);
+    if (pendingRetoureAttach.length > 0) {
+      fd.set("attachRetoureOrderIds", pendingRetoureAttach.join(","));
+    }
     startTransition(async () => {
       await sendReplyAction(fd);
       setReplyHtml("");
       setDraftIdApplied(null);
+      setPendingRetoureAttach([]);
       router.refresh();
     });
   };
@@ -584,6 +645,34 @@ export function TicketDetail({
                 placeholder="Antwort verfassen… (Tipp: :: für Template-Auswahl)"
                 minHeight={180}
               />
+
+              {pendingRetoureAttach.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {pendingRetoureAttach.map((orderId) => {
+                    const o = ticket.orders.find((x) => x.id === orderId);
+                    if (!o) return null;
+                    return (
+                      <span
+                        key={orderId}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-accent/10 border border-accent/30 text-accent rounded text-xs"
+                      >
+                        <Package className="w-3 h-3" />
+                        Retourenschein-{o.ref}.pdf
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPendingRetoureAttach((prev) => prev.filter((id) => id !== orderId))
+                          }
+                          className="ml-1 opacity-60 hover:opacity-100"
+                          title="Nicht anhängen"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
 
               {signatureHtml ? (
                 <details className="border border-border rounded-lg bg-bg-secondary/40">
@@ -915,67 +1004,19 @@ export function TicketDetail({
                 </div>
               )}
               {ticket.orders.map((o) => (
-                <div
+                <OrderCard
                   key={o.id}
-                  className="border border-border/60 rounded-lg p-2 hover:bg-bg-secondary/40 text-sm"
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                      <span className="font-mono text-text truncate">{o.ref}</span>
-                      {o.fetchedAt && o.emailMatched && (
-                        <span title="Email-Match bestätigt (Webisco)">
-                          <ShieldCheck className="w-3.5 h-3.5 text-success shrink-0" />
-                        </span>
-                      )}
-                      {o.fetchedAt && !o.emailMatched && (
-                        <span title="Bestellung existiert, aber Email stimmt nicht mit Kunde überein">
-                          <ShieldAlert className="w-3.5 h-3.5 text-warning shrink-0" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      <button
-                        onClick={() =>
-                          startTransition(() => {
-                            refreshOrderAction(o.id).then(() => router.refresh());
-                          })
-                        }
-                        disabled={pending}
-                        className="p-1 text-text-light hover:text-accent hover:bg-accent/10 rounded transition-colors"
-                        title="Aus Webisco neu laden"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${pending ? "animate-spin" : ""}`} />
-                      </button>
-                      <button
-                        onClick={() => submitRemoveOrder(o.id)}
-                        disabled={pending}
-                        className="p-1 text-text-light hover:text-danger hover:bg-danger/10 rounded transition-colors"
-                        title="Entfernen"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                  {(o.status || o.totalBrutto) && (
-                    <div className="flex items-center gap-2 text-xs text-text-light">
-                      {o.status && <span>{o.status}</span>}
-                      {o.status && o.totalBrutto && <span>·</span>}
-                      {o.totalBrutto !== null && (
-                        <span className="tabular-nums">
-                          {o.totalBrutto.toFixed(2).replace(".", ",")} €
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {!o.fetchedAt && (
-                    <div className="text-xs text-text-light italic">
-                      Noch nicht aus Webisco geladen
-                    </div>
-                  )}
-                  {o.note && (
-                    <div className="text-xs text-text-light mt-0.5">— {o.note}</div>
-                  )}
-                </div>
+                  order={o}
+                  isAdmin={isAdmin}
+                  pending={pending}
+                  onRefresh={() =>
+                    startTransition(() => {
+                      refreshOrderAction(o.id).then(() => router.refresh());
+                    })
+                  }
+                  onRemove={() => submitRemoveOrder(o.id)}
+                  onCreateRetoure={() => setRetoureOrderId(o.id)}
+                />
               ))}
             </div>
             <div className="flex gap-1">
@@ -1022,6 +1063,24 @@ export function TicketDetail({
           </div>
         </div>
       </div>
+
+      <RetoureDialog
+        order={retoureOrder}
+        isAdmin={isAdmin}
+        onClose={() => setRetoureOrderId(null)}
+        onCreated={(result) => {
+          const attachOrderId = retoureOrderId;
+          setRetoureOrderId(null);
+          setReplyHtml(result.composerText);
+          setReplyStatus("resolved");
+          if (attachOrderId) {
+            setPendingRetoureAttach((prev) =>
+              prev.includes(attachOrderId) ? prev : [...prev, attachOrderId],
+            );
+          }
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

@@ -92,17 +92,33 @@ export default async function TicketDetailPage({
         snoozedUntil: ticket.snoozedUntil?.toISOString() || null,
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
-        orders: ticket.orders.map((o) => ({
-          id: o.id,
-          ref: o.ref,
-          note: o.note,
-          source: o.source,
-          emailMatched: o.emailMatched,
-          status: o.status,
-          totalBrutto: o.totalBrutto,
-          fetchedAt: o.fetchedAt?.toISOString() || null,
-          createdAt: o.createdAt.toISOString(),
-        })),
+        orders: ticket.orders.map((o) => {
+          let beleg: unknown = null;
+          if (o.webiscoData) {
+            try {
+              beleg = JSON.parse(o.webiscoData);
+            } catch {
+              beleg = null;
+            }
+          }
+          return {
+            id: o.id,
+            ref: o.ref,
+            note: o.note,
+            source: o.source,
+            emailMatched: o.emailMatched,
+            status: o.status,
+            totalBrutto: o.totalBrutto,
+            fetchedAt: o.fetchedAt?.toISOString() || null,
+            createdAt: o.createdAt.toISOString(),
+            beleg,
+            retoureCaseId: o.retoureCaseId,
+            retoureAnmeldungUrl: o.retoureAnmeldungUrl,
+            retoureLabelUrl: o.retoureLabelUrl,
+            retoureCreatedAt: o.retoureCreatedAt?.toISOString() || null,
+            retoureFreeLabel: o.retoureFreeLabel,
+          };
+        }),
         messages: ticket.messages.map((m) => ({
           ...m,
           sentAt: m.sentAt?.toISOString() || null,
@@ -128,6 +144,7 @@ export default async function TicketDetailPage({
       users={users}
       templates={templates}
       signatureHtml={currentUserSignatureHtml}
+      currentUserRole={currentUser?.role ?? "agent"}
     />
   );
 }

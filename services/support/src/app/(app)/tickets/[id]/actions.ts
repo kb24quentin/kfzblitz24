@@ -9,6 +9,7 @@ import { computeSlaDeadlines } from "@/lib/settings";
 import { TICKET_STATUSES } from "@/lib/status";
 import { generateTicketCode } from "@/lib/ticket-code";
 import { generateDraftForTicket } from "@/lib/ticket-ai";
+import { submitRetoure, type RetoureSubmitItem } from "@/lib/retoure-submit";
 
 async function requireUser() {
   const session = await auth();
@@ -31,6 +32,10 @@ export async function sendReplyAction(formData: FormData) {
   const bodyHtml = String(formData.get("bodyHtml") || "").trim();
   const draftId = String(formData.get("draftId") || "") || null;
   const statusAfter = String(formData.get("statusAfter") || "pending");
+  const attachRetoureRaw = String(formData.get("attachRetoureOrderIds") || "").trim();
+  const attachRetoureOrderIds = attachRetoureRaw
+    ? attachRetoureRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
 
   if (!ticketId || !bodyHtml) throw new Error("Ticket-ID + Body erforderlich");
 
@@ -41,6 +46,7 @@ export async function sendReplyAction(formData: FormData) {
     authorUserId: user.id,
     aiGenerated: !!draftId,
     approvedDraftId: draftId,
+    attachRetoureOrderIds,
   });
 
   if (
@@ -274,6 +280,209 @@ export async function addOrderAction(formData: FormData) {
   }
 
   revalidatePath(`/tickets/${ticketId}`);
+}
+
+export type CreateRetoureInput = {
+  orderId: string;
+  items: Array<{
+    artikelnummer: string;
+    menge: number;
+    grund_code: string;
+    grund_freitext?: string;
+    hersteller: string;
+    beschreibung: string;
+    einzelpreis_brutto: number;
+  }>;
+  labelRequested: boolean;
+  freeLabel: boolean; // admin-only override
+  kategorie: "widerruf" | "gewaehrleistung";
+};
+
+export type CreateRetoureResult =
+  | {
+      ok: true;
+      caseId: string;
+      anmeldungPdfUrl: string;
+      labelPdfUrl: string | null;
+      trackingNumber: string | null;
+      composerText: string;
+    }
+  | { ok: false; error: string };
+
+const MAX_AGE_DAYS_AGENT = 30;
+
+export async function createRetoureFromTicketAction(
+  input: CreateRetoureInput,
+): Promise<CreateRetoureResult> {
+  const user = await requireUser();
+  const order = await prisma.ticketOrder.findUnique({
+    where: { id: input.orderId },
+    include: {
+      ticket: {
+        include: { contact: true },
+      },
+    },
+  });
+  if (!order) return { ok: false, error: "order_not_found" };
+  if (!order.webiscoData) return { ok: false, error: "order_not_loaded" };
+  if (order.retoureCaseId) return { ok: false, error: "already_has_retoure" };
+
+  // Free-label + gewährleistung + age-bypass are admin-only privileges.
+  const isAdmin = user.role === "admin";
+  if (input.freeLabel && !isAdmin) return { ok: false, error: "free_label_admin_only" };
+  if (input.kategorie === "gewaehrleistung" && !isAdmin) {
+    return { ok: false, error: "gewaehrleistung_admin_only" };
+  }
+
+  const beleg = JSON.parse(order.webiscoData) as {
+    belegdatum?: string;
+    rechnungsadresse?: Record<string, string | undefined>;
+    lieferadresse?: Record<string, string | undefined>;
+  };
+
+  const belegDate = beleg.belegdatum ? new Date(beleg.belegdatum) : null;
+  const ageDays = belegDate
+    ? Math.floor((Date.now() - belegDate.getTime()) / (24 * 60 * 60 * 1000))
+    : null;
+  if (!isAdmin && ageDays !== null && ageDays > MAX_AGE_DAYS_AGENT) {
+    return { ok: false, error: `too_old_for_agent (${ageDays}d, max ${MAX_AGE_DAYS_AGENT}d)` };
+  }
+
+  if (input.items.length === 0) return { ok: false, error: "no_items_selected" };
+
+  const addr = beleg.lieferadresse ?? beleg.rechnungsadresse ?? {};
+  const contact = order.ticket.contact;
+  const customerEmail = addr.email || contact.email;
+  if (!customerEmail || !customerEmail.includes("@")) {
+    return { ok: false, error: "customer_email_missing" };
+  }
+
+  const items: RetoureSubmitItem[] = input.items.map((it) => ({
+    artikelnummer: it.artikelnummer,
+    menge: it.menge,
+    grund_code: it.grund_code,
+    grund_freitext: it.grund_freitext,
+    hersteller: it.hersteller,
+    beschreibung: it.beschreibung,
+    einzelpreis_brutto: it.einzelpreis_brutto,
+  }));
+
+  const result = await submitRetoure({
+    bestellnummer: order.ref,
+    source: "direct",
+    kategorie: input.kategorie,
+    customer: {
+      anrede: addr.anrede,
+      vorname: addr.vorname || contact.firstName || undefined,
+      name: addr.name || contact.lastName || undefined,
+      strasse: addr.strasse,
+      plz: addr.plz,
+      ort: addr.ort,
+      land: addr.land,
+      email: customerEmail,
+      telefon: addr.telefon,
+    },
+    items,
+    label_requested: input.labelRequested,
+    premium_return: input.labelRequested && input.freeLabel
+      ? { active: true, frist_tage: 30, free_label: true }
+      : undefined,
+  });
+
+  if (!result.ok) {
+    await prisma.ticketEvent.create({
+      data: {
+        ticketId: order.ticketId,
+        userId: user.id,
+        type: "retoure_create_failed",
+        meta: JSON.stringify({ ref: order.ref, error: result.error }),
+      },
+    });
+    return { ok: false, error: result.error };
+  }
+
+  await prisma.ticketOrder.update({
+    where: { id: order.id },
+    data: {
+      retoureCaseId: result.caseId,
+      retoureAnmeldungUrl: result.retoureAnmeldungPdfUrl,
+      retoureLabelUrl: result.shippingLabel?.labelPdfUrl ?? null,
+      retoureCreatedAt: new Date(),
+      retoureFreeLabel: input.freeLabel,
+    },
+  });
+
+  await prisma.ticketEvent.create({
+    data: {
+      ticketId: order.ticketId,
+      userId: user.id,
+      type: "retoure_created",
+      meta: JSON.stringify({
+        ref: order.ref,
+        caseId: result.caseId,
+        items: input.items.length,
+        labelRequested: input.labelRequested,
+        freeLabel: input.freeLabel,
+        kategorie: input.kategorie,
+      }),
+    },
+  });
+
+  const composerText = buildRetoureReplyBody({
+    firstName: contact.firstName || contact.name?.split(" ")[0] || null,
+    ref: order.ref,
+    kategorie: input.kategorie,
+    labelRequested: input.labelRequested,
+    freeLabel: input.freeLabel,
+    anmeldungUrl: result.retoureAnmeldungPdfUrl,
+    trackingNumber: result.shippingLabel?.trackingNumber ?? null,
+  });
+
+  revalidatePath(`/tickets/${order.ticketId}`);
+
+  return {
+    ok: true,
+    caseId: result.caseId,
+    anmeldungPdfUrl: result.retoureAnmeldungPdfUrl,
+    labelPdfUrl: result.shippingLabel?.labelPdfUrl ?? null,
+    trackingNumber: result.shippingLabel?.trackingNumber ?? null,
+    composerText,
+  };
+}
+
+function buildRetoureReplyBody(opts: {
+  firstName: string | null;
+  ref: string;
+  kategorie: "widerruf" | "gewaehrleistung";
+  labelRequested: boolean;
+  freeLabel: boolean;
+  anmeldungUrl: string;
+  trackingNumber: string | null;
+}): string {
+  const salutation = opts.firstName ? `Guten Tag ${opts.firstName},` : "Guten Tag,";
+  const kategorieText =
+    opts.kategorie === "gewaehrleistung"
+      ? "Gewährleistungs-Retoure"
+      : "Retoure";
+  const labelLine = opts.labelRequested
+    ? opts.freeLabel
+      ? "<p>Der Retourenschein enthält bereits das <strong>vorfrankierte DHL-Versandlabel</strong> — der Versand ist für Sie kostenfrei.</p>"
+      : "<p>Der Retourenschein enthält das vorfrankierte DHL-Versandlabel. Die Versandkosten von 5,50 € werden bei der Rückerstattung vom Warenwert abgezogen.</p>"
+    : "<p>Bitte senden Sie das Paket auf einem Versandweg Ihrer Wahl an unser Retourenzentrum. Die Adresse finden Sie auf dem Retourenschein.</p>";
+
+  return [
+    `<p>${salutation}</p>`,
+    `<p>wir haben Ihre ${kategorieText} zu Bestellung <strong>${opts.ref}</strong> angelegt. Anbei finden Sie den Retourenschein mit allen weiteren Informationen.</p>`,
+    labelLine,
+    `<p><strong>Retourenschein herunterladen:</strong> <a href="${opts.anmeldungUrl}">Retoure-Anmeldung.pdf</a></p>`,
+    opts.trackingNumber
+      ? `<p>Sendungsverfolgung (nach Einlieferung): <strong>${opts.trackingNumber}</strong></p>`
+      : "",
+    `<p>Bitte packen Sie die Artikel möglichst originalverpackt und gepolstert ins Paket. Sobald die Ware bei uns eingegangen ist, prüfen wir den Zustand und erstatten Ihnen den entsprechenden Betrag.</p>`,
+    `<p>Bei Fragen antworten Sie einfach auf diese E-Mail — wir helfen gerne weiter.</p>`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export async function refreshOrderAction(orderId: string) {

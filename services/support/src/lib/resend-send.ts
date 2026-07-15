@@ -37,6 +37,12 @@ type SendArgs = {
   resentFromId?: string | null;
   /** For acknowledgements: don't set firstResponseAt (ack is not a real response) */
   countsAsFirstResponse?: boolean;
+  /**
+   * TicketOrder IDs whose retoureAnmeldungUrl should be fetched (bearer-auth)
+   * and attached as PDF to this send. Used by the Retoure-Erstellen flow so
+   * the customer gets the Retourenschein embedded, not a link they can't open.
+   */
+  attachRetoureOrderIds?: string[];
 };
 
 /**
@@ -90,6 +96,48 @@ async function loadSignatureHtml(userId: string | null | undefined): Promise<str
   return loadSignatureHtmlForUser(userId ?? null);
 }
 
+/**
+ * Fetches the retoure PDFs for the given TicketOrder IDs (bearer-auth against
+ * the retoure service) and returns them base64-encoded for Resend attachment.
+ * Skips silently for orders without a retoureAnmeldungUrl or on fetch failure —
+ * we prefer to send the reply without attachment over failing the whole send.
+ */
+async function fetchRetoureAttachments(
+  ticketOrderIds: string[],
+): Promise<Array<{ filename: string; content: string }>> {
+  if (ticketOrderIds.length === 0) return [];
+  const token = process.env.RETOURE_API_TOKEN?.trim();
+  if (!token) return [];
+
+  const orders = await prisma.ticketOrder.findMany({
+    where: { id: { in: ticketOrderIds } },
+    select: { ref: true, retoureAnmeldungUrl: true, retoureCaseId: true },
+  });
+
+  const results: Array<{ filename: string; content: string }> = [];
+  for (const o of orders) {
+    if (!o.retoureAnmeldungUrl) continue;
+    try {
+      const r = await fetch(o.retoureAnmeldungUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!r.ok) {
+        console.warn(`[send] retoure PDF fetch ${o.ref}: HTTP ${r.status}`);
+        continue;
+      }
+      const buffer = Buffer.from(await r.arrayBuffer());
+      results.push({
+        filename: `Retourenschein-${o.ref}.pdf`,
+        content: buffer.toString("base64"),
+      });
+    } catch (e) {
+      console.warn(`[send] retoure PDF fetch ${o.ref} failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return results;
+}
+
 function joinBodyWithSignature(bodyHtml: string, signatureHtml: string | null): string {
   if (!signatureHtml) return bodyHtml;
   // Skip if signature is already present verbatim (idempotent for AI-approved drafts)
@@ -113,6 +161,7 @@ export async function sendMailAndPersist({
   kind = "reply",
   resentFromId = null,
   countsAsFirstResponse = true,
+  attachRetoureOrderIds = [],
 }: SendArgs) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -162,6 +211,8 @@ export async function sendMailAndPersist({
   const from = getFromAddress();
   const replyTo = getReplyToAddress();
 
+  const attachments = await fetchRetoureAttachments(attachRetoureOrderIds);
+
   const res = await client().emails.send({
     from,
     to,
@@ -170,6 +221,7 @@ export async function sendMailAndPersist({
     html: wrappedHtml,
     text: plainText,
     headers,
+    ...(attachments.length > 0 ? { attachments } : {}),
   });
 
   if (res.error) {
