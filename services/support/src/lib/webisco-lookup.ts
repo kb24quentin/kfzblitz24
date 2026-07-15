@@ -6,6 +6,7 @@
  */
 
 type BelegAddress = {
+  anrede?: string;
   vorname?: string;
   name?: string;
   strasse?: string;
@@ -13,6 +14,8 @@ type BelegAddress = {
   ort?: string;
   land?: string;
   email?: string;
+  telefon?: string;
+  handy?: string;
 };
 
 type BelegPosition = {
