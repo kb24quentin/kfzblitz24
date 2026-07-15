@@ -66,32 +66,77 @@ type Parsed = {
   bodyHtml: string;
   bodyText: string;
   receivedAt: Date;
+  attachments: AttachmentPart[];
 };
 
 function decodeB64Url(data: string): string {
   return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
 }
 
-function extractBodies(payload: {
+type AttachmentPart = {
+  filename: string;
+  mimeType: string;
+  size: number;
+  gmailAttachmentId: string;
+  contentId: string | null;
+  inline: boolean;
+};
+
+type GmailPart = {
   mimeType?: string | null;
-  body?: { data?: string | null; size?: number | null } | null;
+  filename?: string | null;
+  body?: { data?: string | null; size?: number | null; attachmentId?: string | null } | null;
   parts?: unknown[] | null;
-}): { html: string; text: string } {
+  headers?: Array<{ name?: string | null; value?: string | null }> | null;
+};
+
+function partHeader(p: GmailPart, name: string): string | null {
+  const lower = name.toLowerCase();
+  return (
+    p.headers?.find((h) => (h.name || "").toLowerCase() === lower)?.value ?? null
+  );
+}
+
+function extractBodies(payload: GmailPart): {
+  html: string;
+  text: string;
+  attachments: AttachmentPart[];
+} {
   let html = "";
   let text = "";
+  const attachments: AttachmentPart[] = [];
 
-  const walk = (p: {
-    mimeType?: string | null;
-    body?: { data?: string | null } | null;
-    parts?: unknown[] | null;
-  }) => {
-    if (p.body?.data) {
-      const decoded = decodeB64Url(p.body.data);
-      if (p.mimeType === "text/html" && !html) html = decoded;
-      else if (p.mimeType === "text/plain" && !text) text = decoded;
+  const walk = (p: GmailPart) => {
+    const mime = (p.mimeType || "").toLowerCase();
+    const hasAttachmentId = !!p.body?.attachmentId;
+    const hasBodyData = !!p.body?.data;
+    const filename = p.filename || "";
+
+    // Body: text/html and text/plain WITHOUT attachmentId are the actual message body.
+    if (hasBodyData && !hasAttachmentId && !filename) {
+      const decoded = decodeB64Url(p.body!.data!);
+      if (mime === "text/html" && !html) html = decoded;
+      else if (mime === "text/plain" && !text) text = decoded;
     }
+
+    // Attachment: has attachmentId, OR has filename (even inline images have both).
+    if (hasAttachmentId) {
+      const contentIdRaw = partHeader(p, "Content-Id") || partHeader(p, "Content-ID");
+      const contentId = contentIdRaw ? contentIdRaw.replace(/^<|>$/g, "").trim() : null;
+      const disposition = (partHeader(p, "Content-Disposition") || "").toLowerCase();
+      const inline = disposition.includes("inline") || (mime.startsWith("image/") && !!contentId);
+      attachments.push({
+        filename: filename || (contentId ? `${contentId}` : "attachment"),
+        mimeType: p.mimeType || "application/octet-stream",
+        size: p.body?.size ?? 0,
+        gmailAttachmentId: p.body!.attachmentId!,
+        contentId,
+        inline,
+      });
+    }
+
     if (p.parts && Array.isArray(p.parts)) {
-      for (const child of p.parts) walk(child as Parameters<typeof walk>[0]);
+      for (const child of p.parts) walk(child as GmailPart);
     }
   };
   walk(payload);
@@ -105,7 +150,7 @@ function extractBodies(payload: {
       .replace(/\s+/g, " ")
       .trim();
   }
-  return { html, text };
+  return { html, text, attachments };
 }
 
 function escapeHtml(s: string): string {
@@ -158,7 +203,29 @@ async function parseMessage(id: string): Promise<Parsed | null> {
     bodyHtml: bodies.html,
     bodyText: bodies.text,
     receivedAt,
+    attachments: bodies.attachments,
   };
+}
+
+/** Fetches attachment bytes from Gmail (bearer) and returns as Buffer. */
+async function fetchGmailAttachment(
+  gmailMessageId: string,
+  gmailAttachmentId: string,
+): Promise<Buffer | null> {
+  try {
+    const g = await gmail();
+    const res = await g.users.messages.attachments.get({
+      userId: "me",
+      messageId: gmailMessageId,
+      id: gmailAttachmentId,
+    });
+    const data = res.data?.data;
+    if (!data) return null;
+    return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  } catch (e) {
+    console.warn("[gmail-sync] attachment fetch failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 async function applyReopenLogic(
@@ -303,7 +370,10 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
 
   const { ticketId, isNew } = await findOrCreateTicket(parsed);
 
-  await prisma.message.create({
+  // Save the message first with the RAW bodyHtml — cid: refs will be rewritten
+  // to /api/attachments/<id>/inline in a post-processing pass once the
+  // Attachment rows have IDs.
+  const message = await prisma.message.create({
     data: {
       ticketId,
       direction: "inbound",
@@ -318,6 +388,47 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
       createdAt: parsed.receivedAt,
     },
   });
+
+  // Fetch + persist attachments. cid → attachmentId map is built here so we
+  // can rewrite the bodyHtml right after.
+  const cidToAttachmentId = new Map<string, string>();
+  for (const att of parsed.attachments) {
+    const buf = await fetchGmailAttachment(parsed.gmailMessageId, att.gmailAttachmentId);
+    if (!buf) continue;
+    const created = await prisma.attachment.create({
+      data: {
+        messageId: message.id,
+        filename: att.filename,
+        contentType: att.mimeType,
+        size: buf.length,
+        storageKey: "", // legacy field, unused for gmail-ingested
+        contentId: att.contentId,
+        inline: att.inline,
+        content: buf,
+      },
+    });
+    if (att.contentId) cidToAttachmentId.set(att.contentId, created.id);
+  }
+
+  // Rewrite cid: refs → /api/attachments/<id>/inline so inline images render
+  // in the ticket thread. Both src="cid:xxx" and src='cid:xxx' and
+  // src=cid:xxx (unquoted) are covered.
+  if (cidToAttachmentId.size > 0) {
+    let rewritten = parsed.bodyHtml;
+    for (const [cid, attId] of cidToAttachmentId) {
+      const escapedCid = cid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      rewritten = rewritten.replace(
+        new RegExp(`src=(["']?)cid:${escapedCid}\\1`, "gi"),
+        `src=$1/api/attachments/${attId}/inline$1`,
+      );
+    }
+    if (rewritten !== parsed.bodyHtml) {
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { bodyHtml: rewritten },
+      });
+    }
+  }
 
   await prisma.ticketEvent.create({
     data: {

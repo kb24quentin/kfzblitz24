@@ -44,6 +44,18 @@ export default async function TicketDetailPage({
           orderBy: { createdAt: "asc" },
           include: {
             authorUser: { select: { id: true, name: true, email: true } },
+            attachments: {
+              // Don't ship the raw bytes to the client — only metadata; the
+              // /api/attachments/<id>/{inline,download} endpoints stream content.
+              select: {
+                id: true,
+                filename: true,
+                contentType: true,
+                size: true,
+                inline: true,
+                contentId: true,
+              },
+            },
           },
         },
         notes: {

@@ -220,10 +220,16 @@ model Attachment {
   filename    String
   contentType String
   size        Int
-  storageKey  String
+  storageKey  String // legacy — path/blob-key placeholder, may be empty when content column is used
+  contentId   String? // MIME Content-Id header (without <>) for inline-image cid: mapping
+  inline      Boolean  @default(false) // true if attachment is referenced via cid: in bodyHtml
+  content     Bytes? // raw bytes (Postgres BYTEA) — for gmail-ingested inline images + small attachments
   createdAt   DateTime @default(now())
 
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([contentId])
 }
 
 model TicketEvent {

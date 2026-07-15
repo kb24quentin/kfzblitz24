@@ -57,6 +57,15 @@ type TemplateLite = {
   category: string | null;
 };
 
+type MessageAttachment = {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  inline: boolean;
+  contentId: string | null;
+};
+
 type Message = {
   id: string;
   direction: string;
@@ -69,6 +78,7 @@ type Message = {
   resentFromId: string | null;
   resendMessageId: string | null;
   authorUser: UserLite | null;
+  attachments: MessageAttachment[];
   createdAt: string;
   sentAt: string | null;
 };
@@ -1166,10 +1176,85 @@ function MessageItem({
         <div className="text-sm font-medium text-text mb-2">{m.subject}</div>
       )}
       <div
-        className="prose prose-sm max-w-none text-text"
+        className="prose prose-sm max-w-none text-text [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded"
         dangerouslySetInnerHTML={{ __html: m.bodyHtml }}
       />
+      <MessageAttachments attachments={m.attachments || []} />
     </div>
   );
+}
+
+function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
+  // Show all non-inline attachments as a downloadable strip. Inline images
+  // are already embedded in the body (via /api/attachments/<id>/inline).
+  const nonInline = attachments.filter((a) => !a.inline);
+  // Also show inline images as thumbnails in case the HTML didn't reference
+  // them (some mail clients attach without cid: refs).
+  const inlineImages = attachments.filter(
+    (a) => a.inline && a.contentType.startsWith("image/"),
+  );
+  const unreferencedInlineImages = inlineImages.filter(
+    (a) => !a.contentId, // truly unreferenced if it has no cid
+  );
+
+  if (nonInline.length === 0 && unreferencedInlineImages.length === 0) return null;
+
+  const fmtSize = (n: number) => {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border/60">
+      {unreferencedInlineImages.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+          {unreferencedInlineImages.map((a) => (
+            <a
+              key={a.id}
+              href={`/api/attachments/${a.id}/download`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block border border-border rounded overflow-hidden hover:border-accent transition-colors"
+              title={a.filename}
+            >
+              <img
+                src={`/api/attachments/${a.id}/inline`}
+                alt={a.filename}
+                className="w-full h-24 object-cover"
+              />
+            </a>
+          ))}
+        </div>
+      )}
+      {nonInline.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {nonInline.map((a) => (
+            <a
+              key={a.id}
+              href={`/api/attachments/${a.id}/download`}
+              download={a.filename}
+              className="inline-flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg text-xs bg-white hover:bg-bg-secondary hover:border-accent transition-colors"
+              title={`Download ${a.filename}`}
+            >
+              <FileIcon contentType={a.contentType} />
+              <span className="font-medium text-text max-w-[200px] truncate">{a.filename}</span>
+              <span className="text-text-light tabular-nums">{fmtSize(a.size)}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FileIcon({ contentType }: { contentType: string }) {
+  const iconClass = "w-4 h-4 shrink-0";
+  if (contentType.startsWith("image/")) return <span className={`${iconClass} text-accent`}>🖼</span>;
+  if (contentType === "application/pdf") return <span className={`${iconClass} text-danger`}>📄</span>;
+  if (contentType.includes("word") || contentType.includes("document")) return <span className={`${iconClass} text-info`}>📝</span>;
+  if (contentType.includes("excel") || contentType.includes("sheet")) return <span className={`${iconClass} text-success`}>📊</span>;
+  if (contentType.includes("zip") || contentType.includes("archive")) return <span className={`${iconClass} text-warning`}>🗜</span>;
+  return <span className={`${iconClass} text-text-light`}>📎</span>;
 }
 
