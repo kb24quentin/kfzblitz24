@@ -404,7 +404,7 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
         storageKey: "", // legacy field, unused for gmail-ingested
         contentId: att.contentId,
         inline: att.inline,
-        content: buf,
+        content: new Uint8Array(buf),
       },
     });
     if (att.contentId) cidToAttachmentId.set(att.contentId, created.id);
