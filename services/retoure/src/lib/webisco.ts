@@ -263,14 +263,14 @@ export async function fetchBelegByNumber(
   const typ =
     input.kind === "id" ? options.typ ?? "auftrag" : "auftrag";
 
-  // Webisco requires von/bis for non-id searches. Angebliche 365-Tage-Kappe
-  // scheint in aktuellen Protokoll-Versionen (56/57) aufgeweicht — wir
-  // versuchen 730 Tage weil Support-Fälle auch mal an alte Aufträge
-  // rankommen müssen (Gewährleistung §437 = 2 Jahre). Wenn Webisco
-  // strengthens, gibt's einen ehrlichen Fehler zurück und wir sehen's.
+  // Webisco kappt harter bei 365 Tagen (getestet auf Protokoll 56/57 mit
+  // "Der Zeitbereich, in dem Belege gesucht werden sollen, darf maximal
+  // 365 betragen." als Fehler bei >365d). 360 als sicherer Puffer.
+  // Gewährleistungs-Fälle (>1 Jahr alt) sind über bestellnummer-Lookup
+  // nicht mehr auffindbar — Agents müssen dort per belegnummer manuell.
   const bis = new Date();
   const von = new Date();
-  von.setDate(von.getDate() - 730);
+  von.setDate(von.getDate() - 360);
 
   const attrs = [`typ="${typ}"`];
   if (input.kind === "id") {
