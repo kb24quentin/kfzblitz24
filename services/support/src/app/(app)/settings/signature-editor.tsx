@@ -7,21 +7,21 @@ import { saveMySignatureAction, resetMySignatureAction } from "./actions";
 type SignatureFields = {
   displayName: string;
   position: string;
-  email: string;
   updatedAt?: Date;
 };
 
 export function SignatureEditor({
   signature,
   defaults,
+  signatureEmail,
 }: {
   signature: SignatureFields | null;
-  defaults: { displayName: string; position: string; email: string };
+  defaults: { displayName: string; position: string };
+  signatureEmail: string;
 }) {
   const initial = signature ?? defaults;
   const [displayName, setDisplayName] = useState(initial.displayName);
   const [position, setPosition] = useState(initial.position);
-  const [email, setEmail] = useState(initial.email);
 
   return (
     <div className="bg-bg-card rounded-xl border border-border p-6">
@@ -31,8 +31,8 @@ export function SignatureEditor({
             <FileSignature className="w-4 h-4 text-accent" /> Meine Signatur
           </h2>
           <p className="text-xs text-text-light mt-0.5">
-            Wird automatisch an alle deine ausgehenden Antworten angehängt. Design
-            und Impressum sind fix — du kannst nur Name, Position und E-Mail
+            Wird automatisch an alle deine ausgehenden Antworten angehängt. Design,
+            E-Mail-Adresse und Impressum sind fix — du kannst nur Name und Position
             anpassen.
           </p>
         </div>
@@ -75,17 +75,18 @@ export function SignatureEditor({
           </div>
           <div>
             <label className="block text-xs font-medium text-text-light mb-1">
-              E-Mail
+              E-Mail <span className="font-normal text-text-light/70">(fix)</span>
             </label>
             <input
               type="email"
-              name="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              maxLength={120}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+              value={signatureEmail}
+              disabled
+              readOnly
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary text-text-light cursor-not-allowed"
             />
+            <p className="text-xs text-text-light mt-1">
+              Zentral über die System-Konfiguration gesteuert.
+            </p>
           </div>
 
           <div className="flex items-center gap-2 pt-2">
@@ -118,7 +119,7 @@ export function SignatureEditor({
             <SignaturePreview
               displayName={displayName || defaults.displayName}
               position={position || defaults.position}
-              email={email || defaults.email}
+              email={signatureEmail}
             />
           </div>
         </div>

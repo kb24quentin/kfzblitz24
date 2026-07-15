@@ -31,7 +31,6 @@ model Signature {
   userId      String   @unique
   displayName String // shown as name in signature
   position    String // e.g. "Kundenservice", "Administrator"
-  email       String // signature contact address, may differ from login email
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

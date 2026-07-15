@@ -26,15 +26,13 @@ export async function saveMySignatureAction(formData: FormData) {
   const user = await requireUser();
   const displayName = String(formData.get("displayName") || "").trim();
   const position = String(formData.get("position") || "").trim();
-  const email = String(formData.get("email") || "").trim();
   if (!displayName) throw new Error("Name erforderlich");
   if (!position) throw new Error("Position erforderlich");
-  if (!email || !email.includes("@")) throw new Error("Gültige E-Mail erforderlich");
 
   await prisma.signature.upsert({
     where: { userId: user.id },
-    create: { userId: user.id, displayName, position, email },
-    update: { displayName, position, email },
+    create: { userId: user.id, displayName, position },
+    update: { displayName, position },
   });
 
   revalidatePath("/settings");

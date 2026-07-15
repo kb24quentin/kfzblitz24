@@ -22,12 +22,11 @@ export default async function TicketDetailPage({
   const currentUserSignatureHtml = currentUser
     ? renderSignatureHtml(
         fieldsForUser(
-          { name: currentUser.name, email: currentUser.email, role: currentUser.role },
+          { name: currentUser.name, role: currentUser.role },
           currentUser.signature
             ? {
                 displayName: currentUser.signature.displayName,
                 position: currentUser.signature.position,
-                email: currentUser.signature.email,
               }
             : null,
         ),

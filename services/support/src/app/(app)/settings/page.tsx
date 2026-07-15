@@ -9,7 +9,7 @@ import { AiAutopilotSection } from "./ai-autopilot";
 import { AiCostsSection } from "./ai-costs";
 import { CategoriesManager } from "./categories-manager";
 import { BusinessHoursEditor } from "./business-hours";
-import { fieldsForUser } from "@/lib/signature";
+import { fieldsForUser, signatureEmail } from "@/lib/signature";
 import {
   getSlaFirstResponseHours,
   getSlaResolutionHours,
@@ -260,19 +260,15 @@ export default async function SettingsPage({
                 ? {
                     displayName: currentUser.signature.displayName,
                     position: currentUser.signature.position,
-                    email: currentUser.signature.email,
                     updatedAt: currentUser.signature.updatedAt,
                   }
                 : null
             }
             defaults={fieldsForUser(
-              {
-                name: currentUser.name,
-                email: currentUser.email,
-                role: currentUser.role,
-              },
+              { name: currentUser.name, role: currentUser.role },
               null,
             )}
+            signatureEmail={signatureEmail()}
           />
         </div>
       )}

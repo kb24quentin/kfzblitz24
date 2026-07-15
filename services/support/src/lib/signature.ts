@@ -1,7 +1,7 @@
 /**
- * Fixed brand signature template — everyone gets this layout, only 3 fields
- * (Name, Position, Email) are user-editable. Inline styles + table layout
- * so it survives Gmail/Outlook.
+ * Fixed brand signature template. Everyone gets the same layout + the same
+ * outgoing email (from FROM_EMAIL env — the shared service@ mailbox).
+ * Only Name and Position are user-editable.
  */
 
 import { prisma } from "@/lib/db";
@@ -9,7 +9,6 @@ import { prisma } from "@/lib/db";
 export type SignatureFields = {
   displayName: string;
   position: string;
-  email: string;
 };
 
 function escapeHtml(s: string): string {
@@ -21,10 +20,14 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+export function signatureEmail(): string {
+  return process.env.FROM_EMAIL?.trim() || "service@kfzblitz24.de";
+}
+
 export function renderSignatureHtml(f: SignatureFields): string {
   const name = escapeHtml(f.displayName);
   const position = escapeHtml(f.position);
-  const email = escapeHtml(f.email);
+  const email = escapeHtml(signatureEmail());
   return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#1a202c;">
   <tr>
     <td style="padding:0;">
@@ -60,28 +63,17 @@ export function renderSignatureHtml(f: SignatureFields): string {
 </table>`;
 }
 
-/**
- * Returns the fields to prefill the signature editor with — either the user's
- * saved override, or defaults derived from their User row.
- */
-export function fieldsForUser(user: {
-  name: string;
-  email: string;
-  role: string;
-}, override?: { displayName: string; position: string; email: string } | null): SignatureFields {
+export function fieldsForUser(
+  user: { name: string; role: string },
+  override?: { displayName: string; position: string } | null,
+): SignatureFields {
   if (override) return override;
   return {
     displayName: user.name,
     position: user.role === "admin" ? "Administrator" : "Kundenservice",
-    email: user.email,
   };
 }
 
-/**
- * Loads the rendered signature HTML for a user. Returns null if userId not
- * provided (e.g. system-sent auto-ack). Auto-creates a Signature row on
- * first use so the user has something to edit later.
- */
 export async function loadSignatureHtmlForUser(userId: string | null): Promise<string | null> {
   if (!userId) return null;
   const user = await prisma.user.findUnique({
@@ -90,13 +82,9 @@ export async function loadSignatureHtmlForUser(userId: string | null): Promise<s
   });
   if (!user) return null;
   const fields = fieldsForUser(
-    { name: user.name, email: user.email, role: user.role },
+    { name: user.name, role: user.role },
     user.signature
-      ? {
-          displayName: user.signature.displayName,
-          position: user.signature.position,
-          email: user.signature.email,
-        }
+      ? { displayName: user.signature.displayName, position: user.signature.position }
       : null,
   );
   return renderSignatureHtml(fields);
