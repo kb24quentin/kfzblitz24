@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { TicketDetail } from "./ticket-detail";
+import { fieldsForUser, renderSignatureHtml } from "@/lib/signature";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,25 @@ export default async function TicketDetailPage({
 }) {
   const { id } = await params;
   const session = await auth();
-  const currentUserSignature = session?.user?.email
-    ? await prisma.signature.findFirst({
-        where: { user: { email: session.user.email } },
-        select: { html: true },
+  const currentUser = session?.user?.email
+    ? await prisma.user.findUnique({
+        where: { email: session.user.email },
+        include: { signature: true },
       })
+    : null;
+  const currentUserSignatureHtml = currentUser
+    ? renderSignatureHtml(
+        fieldsForUser(
+          { name: currentUser.name, email: currentUser.email, role: currentUser.role },
+          currentUser.signature
+            ? {
+                displayName: currentUser.signature.displayName,
+                position: currentUser.signature.position,
+                email: currentUser.signature.email,
+              }
+            : null,
+        ),
+      )
     : null;
 
   const [ticket, users, templates] = await Promise.all([
@@ -106,7 +121,7 @@ export default async function TicketDetailPage({
       }}
       users={users}
       templates={templates}
-      signatureHtml={currentUserSignature?.html || null}
+      signatureHtml={currentUserSignatureHtml}
     />
   );
 }
