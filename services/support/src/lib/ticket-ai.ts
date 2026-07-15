@@ -3,6 +3,7 @@ import { classifyAndDraft, isAiConfigured, aiModel } from "@/lib/ai";
 import { calculateCost } from "@/lib/ai-pricing";
 import { sendMailAndPersist } from "@/lib/resend-send";
 import { getAutoSendCategories, getAutoSendMinConfidence } from "@/lib/settings";
+import { summarizeBeleg, type Beleg } from "@/lib/webisco-lookup";
 
 /**
  * Generates an AI draft for the newest inbound message on a ticket.
@@ -25,6 +26,10 @@ export async function generateDraftForTicket(
     include: {
       contact: true,
       messages: { orderBy: { createdAt: "asc" } },
+      orders: {
+        where: { emailMatched: true },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
   if (!ticket) return;
@@ -60,6 +65,18 @@ export async function generateDraftForTicket(
     },
   });
 
+  const linkedOrders = ticket.orders
+    .filter((o) => o.webiscoData)
+    .map((o) => {
+      try {
+        const beleg = JSON.parse(o.webiscoData as string) as Beleg;
+        return { ref: o.ref, summary: summarizeBeleg(beleg) };
+      } catch {
+        return null;
+      }
+    })
+    .filter((x): x is { ref: string; summary: string } => x !== null);
+
   const result = await classifyAndDraft({
     subject: ticket.subject,
     fromEmail: ticket.contact.email,
@@ -74,6 +91,7 @@ export async function generateDraftForTicket(
       bodyText: m.bodyText || m.bodyHtml.replace(/<[^>]+>/g, ""),
       createdAt: m.createdAt,
     })),
+    linkedOrders,
   });
 
   const [autoSendCats, minConf] = await Promise.all([

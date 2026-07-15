@@ -93,7 +93,14 @@ export default async function TicketDetailPage({
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
         orders: ticket.orders.map((o) => ({
-          ...o,
+          id: o.id,
+          ref: o.ref,
+          note: o.note,
+          source: o.source,
+          emailMatched: o.emailMatched,
+          status: o.status,
+          totalBrutto: o.totalBrutto,
+          fetchedAt: o.fetchedAt?.toISOString() || null,
           createdAt: o.createdAt.toISOString(),
         })),
         messages: ticket.messages.map((m) => ({

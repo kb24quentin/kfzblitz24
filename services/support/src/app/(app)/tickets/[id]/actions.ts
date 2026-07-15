@@ -232,19 +232,94 @@ export async function addOrderAction(formData: FormData) {
   const note = String(formData.get("note") || "").trim() || null;
   if (!ticketId || !ref) return;
 
-  await prisma.ticketOrder.create({
-    data: { ticketId, ref, note },
+  await prisma.ticketOrder.upsert({
+    where: { ticketId_ref: { ticketId, ref } },
+    create: { ticketId, ref, note, source: "manual" },
+    update: { note },
   });
   await prisma.ticketEvent.create({
     data: {
       ticketId,
       userId: user.id,
       type: "order_added",
-      meta: JSON.stringify({ ref }),
+      meta: JSON.stringify({ ref, source: "manual" }),
     },
   });
 
+  // Auto-enrich: agent added it manually, so we trust them — fetch from Webisco
+  // even if the email doesn't match (agent may know the customer used another
+  // address). emailMatched still reflects reality so the AI treats it correctly.
+  try {
+    const { lookupOrder, belegEmailMatches } = await import("@/lib/webisco-lookup");
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { contact: { select: { email: true } } },
+    });
+    const result = await lookupOrder(ref);
+    if (result.ok && ticket) {
+      const matched = belegEmailMatches(result.beleg, ticket.contact.email);
+      await prisma.ticketOrder.update({
+        where: { ticketId_ref: { ticketId, ref } },
+        data: {
+          emailMatched: matched,
+          status: result.beleg.status ?? null,
+          totalBrutto: result.beleg.endpreis_brutto ?? null,
+          webiscoData: JSON.stringify(result.beleg),
+          fetchedAt: new Date(),
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("[addOrder] webisco enrich failed:", err instanceof Error ? err.message : err);
+  }
+
   revalidatePath(`/tickets/${ticketId}`);
+}
+
+export async function refreshOrderAction(orderId: string) {
+  const user = await requireUser();
+  const existing = await prisma.ticketOrder.findUnique({
+    where: { id: orderId },
+    include: { ticket: { select: { contact: { select: { email: true } } } } },
+  });
+  if (!existing) return;
+
+  const { lookupOrder, belegEmailMatches } = await import("@/lib/webisco-lookup");
+  const result = await lookupOrder(existing.ref);
+  if (!result.ok) {
+    await prisma.ticketEvent.create({
+      data: {
+        ticketId: existing.ticketId,
+        userId: user.id,
+        type: "order_refresh_failed",
+        meta: JSON.stringify({ ref: existing.ref, error: result.error }),
+      },
+    });
+    revalidatePath(`/tickets/${existing.ticketId}`);
+    return;
+  }
+
+  const matched = belegEmailMatches(result.beleg, existing.ticket.contact.email);
+  await prisma.ticketOrder.update({
+    where: { id: orderId },
+    data: {
+      emailMatched: matched,
+      status: result.beleg.status ?? null,
+      totalBrutto: result.beleg.endpreis_brutto ?? null,
+      webiscoData: JSON.stringify(result.beleg),
+      fetchedAt: new Date(),
+    },
+  });
+  await prisma.ticketEvent.create({
+    data: {
+      ticketId: existing.ticketId,
+      userId: user.id,
+      type: "order_refreshed",
+      meta: JSON.stringify({ ref: existing.ref, emailMatched: matched }),
+    },
+  });
+
+  revalidatePath(`/tickets/${existing.ticketId}`);
 }
 
 export async function removeOrderAction(orderId: string) {

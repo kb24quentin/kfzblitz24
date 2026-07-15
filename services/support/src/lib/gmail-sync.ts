@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { gmail, isGmailConfigured, getGmailUserEmail } from "@/lib/gmail";
 import { generateDraftForTicket } from "@/lib/ticket-ai";
+import { linkOrdersFromMessage } from "@/lib/order-detection";
 import { splitName } from "@/lib/name-parse";
 import { computeSlaDeadlines } from "@/lib/settings";
 import { shouldReopenOnCustomerReply } from "@/lib/status";
@@ -351,6 +352,11 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
   } catch (err) {
     console.warn("[gmail-sync] label/read update failed:", err instanceof Error ? err.message : err);
   }
+
+  // Order-detection runs BEFORE AI draft so the AI can use the resolved
+  // TicketOrders. Awaited (not fire-and-forget) so lookup+persist finish
+  // before we build the AI prompt. Errors are swallowed inside the helper.
+  await linkOrdersFromMessage(ticketId, parsed.bodyText || "");
 
   // Fire and forget: AI draft generation
   generateDraftForTicket(ticketId).catch((err) =>

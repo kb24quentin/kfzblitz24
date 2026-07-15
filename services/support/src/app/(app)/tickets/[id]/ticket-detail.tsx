@@ -20,6 +20,10 @@ import {
   Trash2,
   Plus,
   BellOff,
+  RefreshCw,
+  ShieldCheck,
+  ShieldAlert,
+  CheckCircle2,
 } from "lucide-react";
 import { RichTextEditor, type RichTextEditorHandle, type ShortcodeChoice } from "@/components/rich-text-editor";
 import { useMemo } from "react";
@@ -35,6 +39,7 @@ import {
   wakeTicketAction,
   addOrderAction,
   removeOrderAction,
+  refreshOrderAction,
   resendMessageAction,
   regenerateDraftAction,
 } from "./actions";
@@ -98,6 +103,11 @@ type Order = {
   id: string;
   ref: string;
   note: string | null;
+  source: string;
+  emailMatched: boolean;
+  status: string | null;
+  totalBrutto: number | null;
+  fetchedAt: string | null;
   createdAt: string;
 };
 
@@ -180,6 +190,9 @@ const EVENT_LABEL: Record<string, string> = {
   reopened_by_customer: "Auto-reopen (Kundenantwort)",
   order_added: "Bestellung verknüpft",
   order_removed: "Bestellung entfernt",
+  order_linked: "Bestellung automatisch verknüpft",
+  order_refreshed: "Bestellung aus Webisco aktualisiert",
+  order_refresh_failed: "Webisco-Refresh fehlgeschlagen",
 };
 
 function slaColor(dueAt: string, resolved: boolean) {
@@ -222,13 +235,19 @@ export function TicketDetail({
     const c = ticket.contact;
     const first = c.firstName || c.name?.split(" ")[0] || "";
     const last = c.lastName || (c.name ? c.name.split(" ").slice(1).join(" ") : "") || "";
+    // Prefer email-matched linked orders (from Webisco). Fall back to the
+    // static contact.orderRef only if no ticket-level order was linked yet.
+    const matchedOrder = ticket.orders.find((o) => o.emailMatched);
+    const anyOrder = matchedOrder ?? ticket.orders[0] ?? null;
+    const orderId = anyOrder?.ref || c.orderRef || "";
     const map: Record<string, string> = {
       "customer.first_name": first,
       "customer.last_name": last,
       "customer.name": [first, last].filter(Boolean).join(" ") || c.name || "",
       "customer.email": c.email,
       "customer.phone": c.phone || "",
-      "order.id": c.orderRef || "",
+      "order.id": orderId,
+      "order.status": anyOrder?.status || "",
       "ticket.code": ticket.code,
       "ticket.number": ticket.code, // legacy alias — always show the code, never the internal number
       "ticket.subject": ticket.subject,
@@ -898,22 +917,64 @@ export function TicketDetail({
               {ticket.orders.map((o) => (
                 <div
                   key={o.id}
-                  className="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-bg-secondary text-sm"
+                  className="border border-border/60 rounded-lg p-2 hover:bg-bg-secondary/40 text-sm"
                 >
-                  <div className="flex-1">
-                    <span className="font-mono text-text">{o.ref}</span>
-                    {o.note && (
-                      <span className="text-xs text-text-light ml-2">— {o.note}</span>
-                    )}
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <span className="font-mono text-text truncate">{o.ref}</span>
+                      {o.fetchedAt && o.emailMatched && (
+                        <span title="Email-Match bestätigt (Webisco)">
+                          <ShieldCheck className="w-3.5 h-3.5 text-success shrink-0" />
+                        </span>
+                      )}
+                      {o.fetchedAt && !o.emailMatched && (
+                        <span title="Bestellung existiert, aber Email stimmt nicht mit Kunde überein">
+                          <ShieldAlert className="w-3.5 h-3.5 text-warning shrink-0" />
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        onClick={() =>
+                          startTransition(() => {
+                            refreshOrderAction(o.id).then(() => router.refresh());
+                          })
+                        }
+                        disabled={pending}
+                        className="p-1 text-text-light hover:text-accent hover:bg-accent/10 rounded transition-colors"
+                        title="Aus Webisco neu laden"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${pending ? "animate-spin" : ""}`} />
+                      </button>
+                      <button
+                        onClick={() => submitRemoveOrder(o.id)}
+                        disabled={pending}
+                        className="p-1 text-text-light hover:text-danger hover:bg-danger/10 rounded transition-colors"
+                        title="Entfernen"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => submitRemoveOrder(o.id)}
-                    disabled={pending}
-                    className="p-1 text-text-light hover:text-danger hover:bg-danger/10 rounded transition-colors"
-                    title="Entfernen"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  {(o.status || o.totalBrutto) && (
+                    <div className="flex items-center gap-2 text-xs text-text-light">
+                      {o.status && <span>{o.status}</span>}
+                      {o.status && o.totalBrutto && <span>·</span>}
+                      {o.totalBrutto !== null && (
+                        <span className="tabular-nums">
+                          {o.totalBrutto.toFixed(2).replace(".", ",")} €
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {!o.fetchedAt && (
+                    <div className="text-xs text-text-light italic">
+                      Noch nicht aus Webisco geladen
+                    </div>
+                  )}
+                  {o.note && (
+                    <div className="text-xs text-text-light mt-0.5">— {o.note}</div>
+                  )}
                 </div>
               ))}
             </div>

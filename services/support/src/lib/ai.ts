@@ -140,6 +140,7 @@ export async function classifyAndDraft(input: {
   ticketCode: string;
   templates: TemplateForPrompt[];
   previousMessages?: Array<{ direction: string; bodyText: string; createdAt: Date }>;
+  linkedOrders?: Array<{ ref: string; summary: string }>;
 }): Promise<AiResult> {
   const c = client();
 
@@ -158,6 +159,17 @@ export async function classifyAndDraft(input: {
     ? `Guten Tag ${input.customerFirstName},`
     : "Guten Tag,";
 
+  const orderBlock =
+    input.linkedOrders && input.linkedOrders.length > 0
+      ? `--- Verifizierte Bestellungen dieses Kunden (Webisco, Email-Match bestätigt) ---
+${input.linkedOrders
+  .map((o) => `[${o.ref}]\n${o.summary}`)
+  .join("\n\n")}
+
+Du DARFST diese konkreten Bestelldaten (Status, Positionen, Adresse, Bestelldatum) in deiner Antwort verwenden — sie sind verifiziert. Bestellnummer im Template durch {{order.id}} → wird vom System ersetzt.
+`
+      : "";
+
   const userMsg = [
     `Ticket-Referenz: #${input.ticketCode}`,
     `Kunde: ${displayName} <${input.fromEmail}>`,
@@ -168,6 +180,7 @@ export async function classifyAndDraft(input: {
     `--- Aktuelle Nachricht des Kunden ---`,
     input.bodyText.slice(0, 4000),
     ``,
+    orderBlock,
     `--- Verfügbare Templates (nutze das best-passende!) ---`,
     formatTemplatesForPrompt(input.templates),
   ]
