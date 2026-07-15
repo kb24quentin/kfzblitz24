@@ -263,12 +263,14 @@ export async function fetchBelegByNumber(
   const typ =
     input.kind === "id" ? options.typ ?? "auftrag" : "auftrag";
 
-  // Webisco requires von/bis for non-id searches and caps the range at
-  // 365 days. We send a ~360-day window which is effectively "all recent
-  // belege" for a retouren portal.
+  // Webisco requires von/bis for non-id searches. Angebliche 365-Tage-Kappe
+  // scheint in aktuellen Protokoll-Versionen (56/57) aufgeweicht — wir
+  // versuchen 730 Tage weil Support-Fälle auch mal an alte Aufträge
+  // rankommen müssen (Gewährleistung §437 = 2 Jahre). Wenn Webisco
+  // strengthens, gibt's einen ehrlichen Fehler zurück und wir sehen's.
   const bis = new Date();
   const von = new Date();
-  von.setDate(von.getDate() - 360);
+  von.setDate(von.getDate() - 730);
 
   const attrs = [`typ="${typ}"`];
   if (input.kind === "id") {

@@ -510,6 +510,19 @@ export async function refreshOrderAction(orderId: string) {
   const { lookupOrder, belegEmailMatches } = await import("@/lib/webisco-lookup");
   const result = await lookupOrder(existing.ref);
   if (!result.ok) {
+    // Clear any stale snapshot — sonst zeigt die UI ewig falsche daten
+    // (bekanntes problem beim wechsel des lookup-verhaltens). Fetch war
+    // erfolglos → daten weg, sidebar zeigt 'Noch nicht geladen'.
+    await prisma.ticketOrder.update({
+      where: { id: orderId },
+      data: {
+        webiscoData: null,
+        status: null,
+        totalBrutto: null,
+        fetchedAt: null,
+        emailMatched: false,
+      },
+    });
     await prisma.ticketEvent.create({
       data: {
         ticketId: existing.ticketId,

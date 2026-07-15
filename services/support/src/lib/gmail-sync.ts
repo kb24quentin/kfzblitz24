@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { gmail, isGmailConfigured, getGmailUserEmail } from "@/lib/gmail";
 import { generateDraftForTicket } from "@/lib/ticket-ai";
 import { linkOrdersFromMessage } from "@/lib/order-detection";
+import { stripQuotedHistoryHtml, stripQuotedHistoryText } from "@/lib/quote-stripper";
 import { splitName } from "@/lib/name-parse";
 import { computeSlaDeadlines } from "@/lib/settings";
 import { shouldReopenOnCustomerReply } from "@/lib/status";
@@ -370,9 +371,14 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
 
   const { ticketId, isNew } = await findOrCreateTicket(parsed);
 
-  // Save the message first with the RAW bodyHtml — cid: refs will be rewritten
-  // to /api/attachments/<id>/inline in a post-processing pass once the
-  // Attachment rows have IDs.
+  // Strip quoted history so each ticket-message shows only the NEW content.
+  // Applied ONLY to inbound (customer replies quote our previous message).
+  const strippedHtml = stripQuotedHistoryHtml(parsed.bodyHtml);
+  const strippedText = stripQuotedHistoryText(parsed.bodyText);
+
+  // Save the message first with the STRIPPED bodyHtml — cid: refs will be
+  // rewritten to /api/attachments/<id>/inline in a post-processing pass once
+  // the Attachment rows have IDs.
   const message = await prisma.message.create({
     data: {
       ticketId,
@@ -380,8 +386,8 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
       fromEmail: parsed.fromEmail,
       toEmail: parsed.toEmail,
       subject: parsed.subject,
-      bodyHtml: parsed.bodyHtml,
-      bodyText: parsed.bodyText,
+      bodyHtml: strippedHtml,
+      bodyText: strippedText,
       gmailMessageId: parsed.gmailMessageId,
       messageIdHeader: parsed.messageIdHeader,
       inReplyTo: parsed.inReplyTo,
@@ -412,9 +418,10 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
 
   // Rewrite cid: refs → /api/attachments/<id>/inline so inline images render
   // in the ticket thread. Both src="cid:xxx" and src='cid:xxx' and
-  // src=cid:xxx (unquoted) are covered.
+  // src=cid:xxx (unquoted) are covered. Runs on the STRIPPED html so inline
+  // images that were in the (now removed) quoted section aren't referenced.
   if (cidToAttachmentId.size > 0) {
-    let rewritten = parsed.bodyHtml;
+    let rewritten = strippedHtml;
     for (const [cid, attId] of cidToAttachmentId) {
       const escapedCid = cid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       rewritten = rewritten.replace(
@@ -422,7 +429,7 @@ export async function ingestMessage(id: string): Promise<{ ticketId: string; isN
         `src=$1/api/attachments/${attId}/inline$1`,
       );
     }
-    if (rewritten !== parsed.bodyHtml) {
+    if (rewritten !== strippedHtml) {
       await prisma.message.update({
         where: { id: message.id },
         data: { bodyHtml: rewritten },
