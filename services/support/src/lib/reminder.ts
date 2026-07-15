@@ -58,7 +58,7 @@ export async function sendReminderIfNeeded(): Promise<number> {
     const last = t.messages[0];
     if (!last || last.direction !== "outbound" || last.createdAt > fiveDaysAgo) continue;
 
-    const firstName = t.contact.firstName || fullNameOf(t.contact).split(" ")[0] || "";
+    const firstName = t.contact.firstName || (fullNameOf(t.contact) || "").split(" ")[0] || "";
     const salutation = firstName ? `Guten Tag ${firstName},` : "Guten Tag,";
     const bodyHtml = [
       `<p>${salutation}</p>`,
