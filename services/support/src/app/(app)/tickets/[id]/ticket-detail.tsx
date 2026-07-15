@@ -1077,6 +1077,7 @@ export function TicketDetail({
       </div>
 
       <RetoureDialog
+        key={retoureOrder?.id ?? "closed"}
         order={retoureOrder}
         isAdmin={isAdmin}
         onClose={() => setRetoureOrderId(null)}

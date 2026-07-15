@@ -17,10 +17,12 @@ const QUOTE_HEADER_PATTERNS: RegExp[] = [
   // Deutsche Zitat-Header
   /Am\s+\d{1,2}\.\s*\d{1,2}\.\s*\d{2,4}(\s+um\s+\d{1,2}:\d{2})?\s+schrieb\s+.+?:/i,
   /Am\s+.+?,\s+.+?\s+schrieb\s+.+?:/i,
-  /Von:\s.+?[\r\n]+.*Gesendet:\s.+?[\r\n]+.*An:\s/i,
+  // Outlook (Desktop): Von: ... Gesendet: ... An: ...
+  // Outlook (Mobile) + Apple Mail: Von: ... Datum: ... An: ... Betreff: ...
+  /Von:\s.+?[\r\n]+.*(?:Gesendet|Datum):\s.+?[\r\n]+.*An:\s/i,
   // English
   /On\s+.+?,\s+.+?\s+wrote:/i,
-  /From:\s.+?[\r\n]+.*Sent:\s.+?[\r\n]+.*To:\s/i,
+  /From:\s.+?[\r\n]+.*(?:Sent|Date):\s.+?[\r\n]+.*To:\s/i,
   // Support-System (unser eigenes X-KB24-Ticket-Marker + footer)
   /<!--\s*TICKET-REF:[\w]+\s*-->/i,
 ];
@@ -29,11 +31,14 @@ const QUOTE_CONTAINERS: RegExp[] = [
   // Gmail
   /<div[^>]*class="[^"]*gmail_quote[^"]*"[^>]*>[\s\S]*?<\/div>\s*(?=<\/(?:body|div|html)|$)/gi,
   /<div[^>]*class="[^"]*gmail_attr[^"]*"[^>]*>[\s\S]*/i,
-  // Outlook
+  // Outlook Desktop
   /<div[^>]*id="appendonsend"[^>]*>[\s\S]*/i,
   /<hr[^>]*id="stopSpelling"[^>]*>[\s\S]*/i,
   /<div[^>]*class="[^"]*OutlookMessageHeader[^"]*"[^>]*>[\s\S]*/i,
   /<div[^>]*id="divRplyFwdMsg"[^>]*>[\s\S]*/i,
+  // Outlook Mobile (iOS/Android web-outlook): container + reference-message class
+  /<div[^>]*id="mail-editor-reference-message-container"[^>]*>[\s\S]*/i,
+  /<div[^>]*class="[^"]*ms-outlook-mobile-reference-message[^"]*"[^>]*>[\s\S]*/i,
   // Thunderbird / Apple Mail
   /<blockquote[^>]*type=["']cite["'][^>]*>[\s\S]*?<\/blockquote>/gi,
   /<div[^>]*class="[^"]*moz-cite-prefix[^"]*"[^>]*>[\s\S]*/i,
