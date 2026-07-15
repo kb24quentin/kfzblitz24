@@ -199,6 +199,7 @@ type Ticket = {
     notes: string | null;
   };
   assignee: UserLite | null;
+  contactTicketCount: number;
   orders: Order[];
   messages: Message[];
   notes: Note[];
@@ -220,7 +221,6 @@ const STATUSES: [string, string][] = [
   ["open", STATUS_LABEL.open],
   ["pending", STATUS_LABEL.pending],
   ["on_hold", STATUS_LABEL.on_hold],
-  ["resolved", STATUS_LABEL.resolved],
   ["closed", STATUS_LABEL.closed],
 ];
 
@@ -253,6 +253,7 @@ const EVENT_LABEL: Record<string, string> = {
   order_refresh_failed: "Webisco-Refresh fehlgeschlagen",
   retoure_created: "Kundenretoure angelegt",
   retoure_create_failed: "Retoure-Anlage fehlgeschlagen",
+  auto_closed_no_response: "Auto-geschlossen (7 Tage keine Kunden-Antwort)",
 };
 
 function slaColor(dueAt: string, resolved: boolean) {
@@ -714,10 +715,9 @@ export function TicketDetail({
                   className="text-sm border border-border rounded px-2 py-1.5 bg-white"
                 >
                   <option value="keep">— unverändert —</option>
-                  <option value="pending">Warten auf Kunde</option>
-                  <option value="on_hold">Pausiert</option>
+                  <option value="pending">Warte auf Kunde</option>
+                  <option value="on_hold">Pausiert & Wiedervorlage</option>
                   <option value="open">Offen</option>
-                  <option value="resolved">Gelöst</option>
                   <option value="closed">Geschlossen</option>
                 </select>
                 <button
@@ -931,7 +931,19 @@ export function TicketDetail({
           </div>
 
           <div className="bg-bg-card border border-border rounded-xl p-5">
-            <h3 className="font-semibold text-text mb-3">Kunde</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-text">Kunde</h3>
+              <Link
+                href={`/contacts/${ticket.contact.id}`}
+                className="text-xs text-accent hover:underline flex items-center gap-1"
+                title={`Alle ${ticket.contactTicketCount} Tickets + Notizen dieses Kunden`}
+              >
+                {ticket.contactTicketCount === 1
+                  ? "1 Ticket gesamt"
+                  : `${ticket.contactTicketCount} Tickets gesamt`}
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
             <details>
               <summary className="cursor-pointer list-none">
                 <div className="space-y-1 text-sm">
@@ -1093,7 +1105,7 @@ export function TicketDetail({
           const attachOrderId = retoureOrderId;
           setRetoureOrderId(null);
           setReplyHtml(result.composerText);
-          setReplyStatus("resolved");
+          setReplyStatus("closed");
           if (attachOrderId) {
             setPendingRetoureAttach((prev) =>
               prev.includes(attachOrderId) ? prev : [...prev, attachOrderId],

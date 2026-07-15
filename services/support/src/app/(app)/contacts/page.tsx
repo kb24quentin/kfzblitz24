@@ -42,29 +42,38 @@ export default async function ContactsPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {contacts.map((c) => (
-                <tr key={c.id} className="hover:bg-bg-secondary/50">
+                <tr
+                  key={c.id}
+                  className="hover:bg-bg-secondary/50 cursor-pointer transition-colors"
+                >
                   <td className="px-4 py-3">
-                    <div className="text-text font-medium">
-                      {fullNameOf(c) || "—"}
-                    </div>
-                    <div className="text-xs text-text-light">{c.email}</div>
-                    {c.phone && (
-                      <div className="text-xs text-text-light">☎ {c.phone}</div>
-                    )}
+                    <Link href={`/contacts/${c.id}`} className="block">
+                      <div className="text-text font-medium hover:text-accent">
+                        {fullNameOf(c) || "—"}
+                      </div>
+                      <div className="text-xs text-text-light">{c.email}</div>
+                      {c.phone && (
+                        <div className="text-xs text-text-light">☎ {c.phone}</div>
+                      )}
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-text-light font-mono text-xs">
-                    {c.orderRef || "—"}
+                    <Link href={`/contacts/${c.id}`} className="block">
+                      {c.orderRef || "—"}
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
                     <Link
-                      href={`/tickets?contact=${c.id}`}
-                      className="text-accent hover:underline"
+                      href={`/contacts/${c.id}`}
+                      className="text-accent hover:underline font-medium"
                     >
                       {c._count.tickets}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-text-light">
-                    {formatDistanceToNow(c.updatedAt, { locale: de, addSuffix: true })}
+                    <Link href={`/contacts/${c.id}`} className="block">
+                      {formatDistanceToNow(c.updatedAt, { locale: de, addSuffix: true })}
+                    </Link>
                   </td>
                 </tr>
               ))}

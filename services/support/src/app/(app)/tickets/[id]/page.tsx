@@ -37,7 +37,9 @@ export default async function TicketDetailPage({
     prisma.ticket.findUnique({
       where: { id },
       include: {
-        contact: true,
+        contact: {
+          include: { _count: { select: { tickets: true } } },
+        },
         assignee: true,
         orders: { orderBy: { createdAt: "asc" } },
         messages: {
@@ -104,6 +106,7 @@ export default async function TicketDetailPage({
         snoozedUntil: ticket.snoozedUntil?.toISOString() || null,
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
+        contactTicketCount: ticket.contact._count.tickets,
         orders: ticket.orders.map((o) => {
           let beleg: ReturnType<typeof safeParseBeleg> = null;
           if (o.webiscoData) beleg = safeParseBeleg(o.webiscoData);

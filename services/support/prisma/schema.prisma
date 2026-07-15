@@ -24,6 +24,7 @@ model User {
   reviewedDrafts  AiDraft[]     @relation("ReviewedBy")
   events          TicketEvent[]
   signature       Signature?
+  contactNotes    ContactNote[]
 }
 
 model Signature {
@@ -49,7 +50,27 @@ model Contact {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tickets Ticket[]
+  tickets      Ticket[]
+  contactNotes ContactNote[]
+}
+
+/**
+ * Kundeninterne Notizen — nicht ticket-scoped. Für infos die für ALLE
+ * zukünftigen tickets dieses Kunden relevant sind ("VIP", "spricht nur
+ * schlecht Deutsch", "hat Firmenkonto", "früher schon defekte batterie
+ * reklamiert" etc).
+ */
+model ContactNote {
+  id        String   @id @default(cuid())
+  contactId String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([contactId])
 }
 
 model Ticket {

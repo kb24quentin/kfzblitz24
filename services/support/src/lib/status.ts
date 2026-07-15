@@ -2,7 +2,6 @@ export const TICKET_STATUSES = [
   "open",
   "pending",
   "on_hold",
-  "resolved",
   "closed",
 ] as const;
 
@@ -10,10 +9,12 @@ export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
 export const STATUS_LABEL: Record<string, string> = {
   open: "Offen",
-  pending: "Warten auf Kunde",
-  on_hold: "Pausiert",
-  resolved: "Gelöst",
+  pending: "Warte auf Kunde",
+  on_hold: "Pausiert & Wiedervorlage",
   closed: "Geschlossen",
+  // Legacy — falls tickets aus alter migration noch 'resolved' haben.
+  // Fallback im UI damit die nicht als 'unknown' erscheinen.
+  resolved: "Geschlossen",
 };
 
 export const PRIORITY_LABEL: Record<string, string> = {
@@ -31,7 +32,7 @@ export const PRIORITY_CLASSES: Record<string, string> = {
 };
 
 /** Statuses considered "done" — hidden from the main ticket list, shown in archive */
-export const TERMINAL_STATUSES: readonly TicketStatus[] = ["resolved", "closed"];
+export const TERMINAL_STATUSES: readonly string[] = ["closed", "resolved"];
 
 /**
  * Reopen-on-customer-reply: any customer reply reopens the ticket,
@@ -39,7 +40,7 @@ export const TERMINAL_STATUSES: readonly TicketStatus[] = ["resolved", "closed"]
  * would silently disappear in an already-terminal ticket.
  *
  * - open → stays open (no-op)
- * - pending / on_hold / resolved / closed → all become open
+ * - pending / on_hold / closed → all become open
  */
 export function shouldReopenOnCustomerReply(status: string): boolean {
   return status !== "open";
