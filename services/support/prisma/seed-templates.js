@@ -348,9 +348,21 @@ Bomhardstraße 7<br>
   },
 ];
 
+/**
+ * Alle Templates enden mit "Mit freundlichen Grüßen" (Leerzeile davor kommt
+ * durch das eigene <p>-Tag). Die Signatur (Name/Position/Logo) hängt der
+ * Send-Worker separat an. Wir normalisieren hier statt es in jedem Template
+ * einzeln zu pflegen — Änderungen am Grußformular sind so ein Einzeiler.
+ */
+function ensureClosing(bodyHtml) {
+  if (/[Mm]it freundlichen/.test(bodyHtml)) return bodyHtml;
+  return `${bodyHtml}\n<p>Mit freundlichen Grüßen</p>`;
+}
+
 async function main() {
   let created = 0;
   for (const t of TEMPLATES) {
+    t.bodyHtml = ensureClosing(t.bodyHtml);
     const variables = Array.from(
       new Set(
         [t.subject, t.bodyHtml]

@@ -493,6 +493,7 @@ function buildRetoureReplyBody(opts: {
       : "",
     `<p>Bitte packen Sie die Artikel möglichst originalverpackt und gepolstert ins Paket. Sobald die Ware bei uns eingegangen ist, prüfen wir den Zustand und erstatten Ihnen den entsprechenden Betrag.</p>`,
     `<p>Bei Fragen antworten Sie einfach auf diese E-Mail — wir helfen gerne weiter.</p>`,
+    `<p>Mit freundlichen Grüßen</p>`,
   ]
     .filter(Boolean)
     .join("\n");

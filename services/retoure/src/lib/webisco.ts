@@ -229,24 +229,17 @@ function classifyInput(
 ): { kind: "id" | "bestellnummer" | "auftragsnummer"; value: string } {
   const trimmed = s.trim();
   // "AW243775607" → Abisco-Auftragsnummer. Webisco akzeptiert die nur als
-  // explizites `auftragsnummer="..."` Attribut, NICHT als id ohne Prefix
-  // (das wäre eine Belegnummer, anderes Konzept). Customer-Portal-Lookup
-  // mit nur bestellnummer="KB24-..." liefert leere Belegliste — Webisco
-  // matched die external order numbers offenbar nicht zuverlässig, daher
-  // ist der auftragsnummer-Pfad der zuverlässige.
+  // explizites `auftragsnummer="..."` Attribut.
   if (/^AW\d+$/i.test(trimmed)) {
     return { kind: "auftragsnummer", value: trimmed };
   }
-  // Nur A-prefix ("A243775523") oder R-prefix ("R123456") oder pure Ziffern
-  // → interne Beleg-ID. Andere Buchstaben-Prefixe wie "W..." sind
-  // Marketplace-/Shopware-Bestellnummern und dürfen NICHT als id gesendet
-  // werden — sonst matched Webisco irrtümlich einen anderen Beleg mit
-  // demselben Zahlensuffix.
-  if (/^[AR]?\d+$/.test(trimmed)) {
-    return { kind: "id", value: trimmed.replace(/^[AR]/, "") };
-  }
-  // Anything else (contains "-", other letter-prefixes like "W...", letters
-  // mid-string, etc.) → external bestellnummer
+  // Default: bestellnummer. Externe Bestellnummern (KB24-*, W*, Marketplace-
+  // Codes etc.) matchen laut Praxis 1:1 in Webisco und liefern GENAU den
+  // richtigen Beleg. Auf id-Lookup (nach Ziffern-Suffix) haben wir früher
+  // gewechselt weil bestellnummer angeblich unzuverlässig war — inzwischen
+  // widerlegt: id-Lookup findet fälschlicherweise fremde Belege mit dem-
+  // selben Zahlen-Teil (z. B. W36183210526 matched einen Fremd-Beleg mit
+  // interner id 36183210526). Bestellnummer ist der einzige exakte Match.
   return { kind: "bestellnummer", value: trimmed };
 }
 

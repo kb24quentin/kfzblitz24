@@ -50,7 +50,7 @@ const DEFAULT_ACK_BODY = `<p>Guten Tag {{customer.first_name}},</p>
 <p>vielen Dank für Ihre Nachricht. Wir haben Ihre Anfrage erhalten und unter der Referenz <strong>#{{ticket.code}}</strong> vorgemerkt.</p>
 <p>Sie erhalten innerhalb von {{sla.first_response_hours}} Stunden eine Antwort von unserem Team.</p>
 <p style="font-size:12px;color:#8a93a0;margin-top:24px">Wichtig: Bei Antworten bitte den Betreff unverändert lassen — die Referenz <strong>#{{ticket.code}}</strong> hilft uns bei der Zuordnung.</p>
-<p>Mit freundlichen Grüßen<br>Ihr kfzBlitz24 Support</p>`;
+<p>Mit freundlichen Grüßen</p>`;
 
 function parseHoursOrDefault(raw: string | undefined | null, def: number): number {
   if (!raw) return def;
