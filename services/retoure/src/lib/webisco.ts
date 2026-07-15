@@ -111,7 +111,13 @@ function xmlEscape(s: string): string {
 }
 
 function buildEnvelope(cfg: WebiscoConfig, innerXml: string): string {
-  const version = cfg.version ?? 21;
+  // Protokoll-Version: Abisco lehnt seit 2026-07 (Server-Version 57)
+  // alles unter 31 mit "Der Client ist veraltet" ab. Wir setzen den
+  // Default auf 56 — die letzte offiziell dokumentierte Version
+  // (Webisco_Schnittstellenbeschreibung_56.pdf, Stand 10.04.2026).
+  // Neuere Features aus Server-Version 57 ignorieren wir bewusst weil
+  // wir sie noch nicht implementieren können ohne Doku.
+  const version = cfg.version ?? 56;
   const attrs: string[] = [
     `version="${version}"`,
     `username="${xmlEscape(cfg.username)}"`,

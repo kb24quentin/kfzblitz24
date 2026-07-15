@@ -103,7 +103,7 @@ ssh ... 'docker exec grantingb2b_db_staging psql -U grantingb2b -d grantingb2b -
 - Host: `http://45.11.228.203:8228`
 - Customer-Nummer (username): `10005` (Sammelkunde)
 - Admin-ID: in `.env.staging` als `WEBISCO_ADMIN_ID` (Name: "retloesung")
-- Protokoll-Version 21, Doku als PDF: `/Users/quentinleopold/Downloads/Webisco_Schnittstellenbeschreibung_56.pdf`
+- Protokoll-Version **56** (Server ist auf 57, min. 31 nötig — 21 wurde 2026-07 abgelehnt). Doku als PDF: `/Users/quentinleopold/Downloads/Webisco_Schnittstellenbeschreibung_56.pdf`, Stand 10.04.2026
 - License-Caveat: nur Client-Implementierungen erlaubt; Server-Use braucht "Abisco-Connect" — mit Abisco zu klären
 - **Lessons learned:**
   - `bestellnummer`-Suche funktioniert nur mit `typ="auftrag"`
