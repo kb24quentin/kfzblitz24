@@ -213,3 +213,77 @@ export async function saveAiAutosendDelayAction(formData: FormData) {
   await saveAiAutosendDelayRange({ min, max });
   revalidatePath("/settings");
 }
+
+/**
+ * Preview vor dem endgültigen Löschen: zeigt was alles wegwandert damit
+ * admin bewusst confirmed statt blind reinzuklicken.
+ */
+export async function previewTicketDeleteAction(
+  rawCode: string,
+): Promise<
+  | { ok: true; ticket: { id: string; code: string; subject: string; customerEmail: string; status: string; messages: number; notes: number; drafts: number; attachments: number; orders: number } }
+  | { ok: false; error: string }
+> {
+  await requireAdmin();
+  const code = rawCode.replace(/^#/, "").trim().toUpperCase();
+  if (!code) return { ok: false, error: "Ticket-Code fehlt" };
+  const t = await prisma.ticket.findUnique({
+    where: { code },
+    select: {
+      id: true,
+      code: true,
+      subject: true,
+      status: true,
+      contact: { select: { email: true } },
+      _count: { select: { messages: true, notes: true, drafts: true, events: true, orders: true } },
+      messages: { select: { _count: { select: { attachments: true } } } },
+    },
+  });
+  if (!t) return { ok: false, error: `Kein Ticket mit Code ${code} gefunden` };
+  const attachments = t.messages.reduce((sum, m) => sum + m._count.attachments, 0);
+  return {
+    ok: true,
+    ticket: {
+      id: t.id,
+      code: t.code,
+      subject: t.subject,
+      customerEmail: t.contact.email,
+      status: t.status,
+      messages: t._count.messages,
+      notes: t._count.notes,
+      drafts: t._count.drafts,
+      attachments,
+      orders: t._count.orders,
+    },
+  };
+}
+
+/**
+ * HART LÖSCHEN — kein Soft-Delete, kein Archiv, DB-Cascade räumt Messages,
+ * Attachments (inkl. content), Notes, Drafts, Events, Orders mit weg.
+ * Confirm-code muss exact matchen damit nicht aus versehen.
+ */
+export async function hardDeleteTicketAction(formData: FormData): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  const admin = await requireAdmin();
+  const code = String(formData.get("code") || "").replace(/^#/, "").trim().toUpperCase();
+  const confirmCode = String(formData.get("confirmCode") || "").replace(/^#/, "").trim().toUpperCase();
+  if (!code) return { ok: false, error: "Code fehlt" };
+  if (code !== confirmCode) return { ok: false, error: "Bestätigungs-Code stimmt nicht überein" };
+
+  const t = await prisma.ticket.findUnique({
+    where: { code },
+    select: { id: true, code: true, subject: true, contact: { select: { email: true } } },
+  });
+  if (!t) return { ok: false, error: `Kein Ticket mit Code ${code} gefunden` };
+
+  await prisma.ticket.delete({ where: { id: t.id } });
+  // Audit-log als console (bewusst — der ticket ist ja weg, TicketEvent
+  // wäre selbstbezüglich weg). Log-persist kann später separate table werden.
+  console.log(
+    `[admin-delete] user=${admin.email} deleted ticket #${t.code} '${t.subject}' (${t.contact.email})`,
+  );
+
+  revalidatePath("/settings");
+  revalidatePath("/tickets");
+  return { ok: true, code: t.code };
+}

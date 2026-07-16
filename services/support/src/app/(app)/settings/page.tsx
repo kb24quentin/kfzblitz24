@@ -8,6 +8,7 @@ import { AutoAckEditor } from "./auto-ack-editor";
 import { AiAutopilotSection } from "./ai-autopilot";
 import { AiCostsSection } from "./ai-costs";
 import { AiTeamSection } from "./ai-team";
+import { AdminDeleteSection } from "./admin-delete";
 import { CategoriesManager } from "./categories-manager";
 import { BusinessHoursEditor } from "./business-hours";
 import { fieldsForUser, signatureEmail } from "@/lib/signature";
@@ -337,6 +338,13 @@ export default async function SettingsPage({
         </div>
         <ArrowRight className="w-5 h-5 text-text-light group-hover:text-accent transition-colors" />
       </a>
+
+      {currentUser?.role === "admin" && (
+        <>
+          <SectionHeader title="Danger Zone (Admin)" />
+          <AdminDeleteSection />
+        </>
+      )}
     </div>
   );
 }
