@@ -355,7 +355,7 @@ export async function sendMailAndPersist({
           storageKey: "",
           contentId: null,
           inline: false,
-          content: att.bytes,
+          content: new Uint8Array(att.bytes),
         },
       });
     } catch (e) {
