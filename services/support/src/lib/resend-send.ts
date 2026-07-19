@@ -48,6 +48,12 @@ type SendArgs = {
    * Nur für AI-autosend — bei manuellen sends bleibt user-signatur.
    */
   aiPersona?: { name: string; position: string } | null;
+  /**
+   * Vom Agent manuell hochgeladene Dateien (Bilder, PDFs, etc.). Gehen
+   * als Resend-Attachment raus UND werden als Attachment-DB-record am
+   * outbound-Message persistiert.
+   */
+  manualAttachments?: Array<{ filename: string; contentType: string; bytes: Uint8Array }>;
 };
 
 /**
@@ -183,6 +189,7 @@ export async function sendMailAndPersist({
   countsAsFirstResponse = true,
   attachRetoureOrderIds = [],
   aiPersona = null,
+  manualAttachments = [],
 }: SendArgs) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -246,7 +253,12 @@ export async function sendMailAndPersist({
   const from = getFromAddress();
   const replyTo = getReplyToAddress();
 
-  const attachments = await fetchRetoureAttachments(attachRetoureOrderIds);
+  const retoureAttachments = await fetchRetoureAttachments(attachRetoureOrderIds);
+  const manualAttachmentsPayload = manualAttachments.map((a) => ({
+    filename: a.filename,
+    content: Buffer.from(a.bytes).toString("base64"),
+  }));
+  const attachments = [...retoureAttachments, ...manualAttachmentsPayload];
 
   const res = await client().emails.send({
     from,
@@ -329,6 +341,27 @@ export async function sendMailAndPersist({
   }
 
   await Promise.all(updates);
+
+  // Manuelle Anhänge persistieren damit sie im Ticket-Thread als Download-
+  // Chip erscheinen und ein evtl. resend sie mitschicken kann.
+  for (const att of manualAttachments) {
+    try {
+      await prisma.attachment.create({
+        data: {
+          messageId: message.id,
+          filename: att.filename,
+          contentType: att.contentType,
+          size: att.bytes.length,
+          storageKey: "",
+          contentId: null,
+          inline: false,
+          content: att.bytes,
+        },
+      });
+    } catch (e) {
+      console.warn("[send] manualAttachment persist failed:", e instanceof Error ? e.message : e);
+    }
+  }
 
   // Best-effort: mirror into Gmail Sent so agents see the thread in Gmail.
   // Fails silently — Gmail may not be configured yet.

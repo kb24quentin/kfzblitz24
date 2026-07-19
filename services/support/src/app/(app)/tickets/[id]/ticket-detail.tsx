@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   CheckCircle2,
+  Paperclip,
 } from "lucide-react";
 import { RichTextEditor, type RichTextEditorHandle, type ShortcodeChoice } from "@/components/rich-text-editor";
 import { OrderCard } from "./order-card";
@@ -354,6 +355,8 @@ export function TicketDetail({
   };
 
   const [pendingRetoureAttach, setPendingRetoureAttach] = useState<string[]>([]);
+  const [manualFiles, setManualFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const submitReply = () => {
     if (!replyHtml.trim() || pending) return;
@@ -366,11 +369,16 @@ export function TicketDetail({
     if (pendingRetoureAttach.length > 0) {
       fd.set("attachRetoureOrderIds", pendingRetoureAttach.join(","));
     }
+    for (const f of manualFiles) {
+      fd.append("attach", f);
+    }
     startTransition(async () => {
       await sendReplyAction(fd);
       setReplyHtml("");
       setDraftIdApplied(null);
       setPendingRetoureAttach([]);
+      setManualFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       router.refresh();
     });
   };
@@ -660,33 +668,79 @@ export function TicketDetail({
                 minHeight={180}
               />
 
-              {pendingRetoureAttach.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {pendingRetoureAttach.map((orderId) => {
-                    const o = ticket.orders.find((x) => x.id === orderId);
-                    if (!o) return null;
-                    return (
-                      <span
-                        key={orderId}
-                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-accent/10 border border-accent/30 text-accent rounded text-xs"
+              <div className="flex flex-wrap gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={pending}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 border border-border rounded text-xs text-text-light hover:text-text hover:bg-bg-secondary transition-colors"
+                  title="Datei anhängen (Bilder, PDFs, Word, Excel …)"
+                >
+                  <Paperclip className="w-3.5 h-3.5" /> Anhang hinzufügen
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) {
+                      setManualFiles((prev) => [...prev, ...files]);
+                    }
+                    // Reset so selecting same file again works
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                />
+
+                {pendingRetoureAttach.map((orderId) => {
+                  const o = ticket.orders.find((x) => x.id === orderId);
+                  if (!o) return null;
+                  return (
+                    <span
+                      key={orderId}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 bg-accent/10 border border-accent/30 text-accent rounded text-xs"
+                    >
+                      <Package className="w-3 h-3" />
+                      Retourenschein-{o.ref}.pdf
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPendingRetoureAttach((prev) => prev.filter((id) => id !== orderId))
+                        }
+                        className="ml-1 opacity-60 hover:opacity-100"
+                        title="Nicht anhängen"
                       >
-                        <Package className="w-3 h-3" />
-                        Retourenschein-{o.ref}.pdf
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPendingRetoureAttach((prev) => prev.filter((id) => id !== orderId))
-                          }
-                          className="ml-1 opacity-60 hover:opacity-100"
-                          title="Nicht anhängen"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+
+                {manualFiles.map((f, i) => (
+                  <span
+                    key={`${f.name}-${i}`}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 bg-info/10 border border-info/30 text-info rounded text-xs"
+                    title={`${f.name} (${(f.size / 1024).toFixed(0)} KB)`}
+                  >
+                    <Paperclip className="w-3 h-3" />
+                    <span className="max-w-[180px] truncate">{f.name}</span>
+                    <span className="tabular-nums opacity-70">
+                      {f.size < 1024 * 1024
+                        ? `${(f.size / 1024).toFixed(0)} KB`
+                        : `${(f.size / (1024 * 1024)).toFixed(1)} MB`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setManualFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="ml-1 opacity-60 hover:opacity-100"
+                      title="Entfernen"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
 
               {signatureHtml ? (
                 <details className="border border-border rounded-lg bg-bg-secondary/40">

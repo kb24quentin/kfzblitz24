@@ -44,6 +44,33 @@ export async function sendReplyAction(formData: FormData) {
 
   if (!ticketId || !bodyHtml) throw new Error("Ticket-ID + Body erforderlich");
 
+  // Manuelle Datei-Anhänge aus dem formData ziehen (feld-name 'attach').
+  // Größe pro Datei auf 20 MB kappen — resend + mail-provider akzeptieren
+  // meist 25 MB total, wir gehen ~24 MB brutto als weichen limit.
+  const MAX_BYTES_PER_FILE = 20 * 1024 * 1024;
+  const MAX_TOTAL_BYTES = 24 * 1024 * 1024;
+  const manualAttachments: Array<{ filename: string; contentType: string; bytes: Uint8Array }> = [];
+  let totalBytes = 0;
+  const rawFiles = formData.getAll("attach");
+  for (const f of rawFiles) {
+    if (typeof f === "string") continue;
+    const file = f as File;
+    if (file.size === 0) continue;
+    if (file.size > MAX_BYTES_PER_FILE) {
+      throw new Error(`Anhang '${file.name}' ist zu groß (max 20 MB pro Datei)`);
+    }
+    totalBytes += file.size;
+    if (totalBytes > MAX_TOTAL_BYTES) {
+      throw new Error("Anhänge zusammen zu groß (max 24 MB pro Mail)");
+    }
+    const buf = new Uint8Array(await file.arrayBuffer());
+    manualAttachments.push({
+      filename: file.name || "attachment",
+      contentType: file.type || "application/octet-stream",
+      bytes: buf,
+    });
+  }
+
   await sendMailAndPersist({
     ticketId,
     subject,
@@ -52,6 +79,7 @@ export async function sendReplyAction(formData: FormData) {
     aiGenerated: !!draftId,
     approvedDraftId: draftId,
     attachRetoureOrderIds,
+    manualAttachments,
   });
 
   if (
