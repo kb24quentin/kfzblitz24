@@ -95,14 +95,33 @@ export async function submitRetoure(payload: RetoureSubmitPayload): Promise<Reto
   }
 
   if (!response.ok) {
-    const err = (json as { error?: string; errors?: unknown })?.error || "unknown_error";
+    const j = json as {
+      error?: string;
+      reason?: string;
+      errors?: unknown;
+      existingCases?: Array<{ id: string; status: string; createdAt: string }>;
+    };
+    const err = j?.error || "unknown_error";
+    // Ehrliche menschen-lesbare übersetzung häufiger reasons
+    const humanReason: Record<string, string> = {
+      not_eligible: "Retoure aktuell nicht möglich",
+      already_open_case: "Für diese Bestellnummer existiert bereits ein offener Retoure-Case im RMA-System",
+      frist_abgelaufen: "14-Tage-Widerrufsfrist ist abgelaufen (ab Zustellungsdatum)",
+      order_not_found: "Bestellnummer nicht gefunden",
+      no_delivery_yet: "Bestellung wurde noch nicht ausgeliefert",
+      b2b_no_widerruf: "B2B-Kunden haben kein Widerrufsrecht — Gewährleistungs-Retoure verwenden",
+      validation_failed: "Validierungsfehler in den übergebenen Item-Daten",
+    };
+    const reason = j.reason || err;
+    const label = humanReason[reason] ?? reason;
+    const extra = j.existingCases && j.existingCases.length > 0
+      ? ` (offener Case: ${j.existingCases[0].id}, angelegt ${new Date(j.existingCases[0].createdAt).toLocaleString("de-DE")})`
+      : "";
     return {
       ok: false,
       status: response.status,
-      error: `${err}${
-        (json as { errors?: unknown })?.errors
-          ? ` — ${JSON.stringify((json as { errors: unknown }).errors)}`
-          : ""
+      error: `${label}${extra}${
+        j.errors ? ` — Details: ${JSON.stringify(j.errors)}` : ""
       }`,
     };
   }
