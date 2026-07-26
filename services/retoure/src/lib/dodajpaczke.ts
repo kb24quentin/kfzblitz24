@@ -94,13 +94,26 @@ async function authedFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
-  const token = await getToken(cfg);
-  const headers = new Headers(init?.headers);
-  // ⚠ dodajpaczke erwartet den Token RAW im Authorization-Header, OHNE
-  // "Bearer"-Prefix. Anders als bei den meisten REST-APIs üblich, sonst 403.
-  headers.set("Authorization", token);
-  if (!headers.has("Accept")) headers.set("Accept", "application/json");
-  return fetch(`${cfg.baseUrl}${path}`, { ...init, headers, cache: "no-store" });
+  const doFetch = async (): Promise<Response> => {
+    const token = await getToken(cfg);
+    const headers = new Headers(init?.headers);
+    // ⚠ dodajpaczke erwartet den Token RAW im Authorization-Header, OHNE
+    // "Bearer"-Prefix. Anders als bei den meisten REST-APIs üblich, sonst 403.
+    headers.set("Authorization", token);
+    if (!headers.has("Accept")) headers.set("Accept", "application/json");
+    return fetch(`${cfg.baseUrl}${path}`, { ...init, headers, cache: "no-store" });
+  };
+  let res = await doFetch();
+  // Cache-Invalidation on 401/403: dodajpaczke rotiert Tokens server-seitig
+  // (z.B. bei ihrer eigenen Passwort-Rotation, oder wenn ein 2. Client mit
+  // gleichem Login einen neuen Token holt und den alten damit killt).
+  // Unser lokaler cachedToken.expiresAt merkt das nicht. Bei 401/403 den
+  // Cache leeren, EINMAL neu authentifizieren, EINMAL retry.
+  if (res.status === 401 || res.status === 403) {
+    cachedToken = null;
+    res = await doFetch();
+  }
+  return res;
 }
 
 /**
