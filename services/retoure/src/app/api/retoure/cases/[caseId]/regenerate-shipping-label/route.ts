@@ -1,5 +1,5 @@
 /**
- * POST /api/admin/cases/{caseId}/regenerate-shipping-label
+ * POST /api/retoure/cases/{caseId}/regenerate-shipping-label
  *
  * Erzeugt nachträglich ein DHL-Retoure-Label für einen bereits existierenden
  * Case und schreibt shipmentId + trackingNumber in die DB.
@@ -16,6 +16,11 @@
  * die alte ID landet in `dhlShipmentIdPrevious` im Event-Log.
  *
  * Auth: NextAuth-Session (Admin-UI) ODER Bearer (Shop-API).
+ *
+ * Pfad-Wahl: /api/retoure/ statt /api/admin/ weil die host-aware
+ * middleware.ts auf /api/admin/* per default zur Login-Seite redirected
+ * (Bearer wird davor nicht geprüft). /api/retoure/ läuft auf beiden Hosts
+ * und der Endpoint selbst hat den kompletten Bearer/Session-Check.
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
