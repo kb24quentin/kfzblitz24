@@ -11,10 +11,13 @@ model User {
   id        String   @id @default(cuid())
   name      String
   email     String   @unique
-  password  String
+  password  String? // nullable — SSO-users haben kein password
+  googleId  String?  @unique // Google-Workspace sub-claim
+  imageUrl  String? // Profil-Foto von Google
   role      String   @default("user") // admin, user
-  active    Boolean  @default(true)
+  active    Boolean  @default(true) // false = pending, wartet auf freigabe im intranet
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   activities       Activity[]
   reminders        Reminder[]

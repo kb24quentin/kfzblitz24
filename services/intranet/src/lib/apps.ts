@@ -75,21 +75,22 @@ export const APPS: AppDef[] = [
     key: "crm",
     label: "CRM",
     description: "Kontakte, Kampagnen, Cold Outreach",
-    url: "https://crm.staging.kfzblitz24-group.com",
+    url: "https://crm.kfzblitz24-group.com",
     icon: "Users",
     color: "#0e2742",
+    syncApi: process.env.CRM_INTERNAL_URL || "http://crm:3000",
     roles: [
       {
         key: "user",
         label: "User",
         description:
-          "Kontakte anlegen, Kampagnen fahren, Templates nutzen. Auto-Provisioning noch nicht angebunden.",
+          "Kontakte anlegen, Kampagnen fahren, Templates nutzen, Signaturen bearbeiten.",
       },
       {
         key: "admin",
         label: "Admin",
         description:
-          "Wie User + Team-Verwaltung, Signaturen, Systemeinstellungen. Auto-Provisioning noch nicht angebunden.",
+          "Wie User + Systemeinstellungen. Team-Verwaltung bleibt zentral im Intranet.",
       },
     ],
   },

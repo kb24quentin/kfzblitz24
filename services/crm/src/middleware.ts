@@ -3,20 +3,24 @@ import { auth } from "@/lib/auth";
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const isLoginPage = req.nextUrl.pathname === "/login";
+  const isPendingPage = req.nextUrl.pathname === "/pending";
   const isApiAuth = req.nextUrl.pathname.startsWith("/api/auth");
   const isWebhook = req.nextUrl.pathname.startsWith("/api/webhook");
   const isSendApi = req.nextUrl.pathname === "/api/send";
+  const isInternal = req.nextUrl.pathname.startsWith("/api/internal");
+  const isHealth = req.nextUrl.pathname === "/api/health";
 
-  // Allow auth API, webhooks, and send API without login
-  if (isApiAuth || isWebhook || isSendApi) return;
+  // Allow auth API, webhooks, send API, internal-sync, health
+  if (isApiAuth || isWebhook || isSendApi || isInternal || isHealth) return;
 
   // Redirect logged-in users away from login page
   if (isLoginPage && isLoggedIn) {
     return Response.redirect(new URL("/", req.nextUrl));
   }
 
-  // Redirect unauthenticated users to login
-  if (!isLoggedIn && !isLoginPage) {
+  // Redirect unauthenticated users to login (but let /pending be reachable
+  // when session was created but user is inactive)
+  if (!isLoggedIn && !isLoginPage && !isPendingPage) {
     return Response.redirect(new URL("/login", req.nextUrl));
   }
 });
