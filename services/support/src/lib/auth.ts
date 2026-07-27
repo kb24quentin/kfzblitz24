@@ -1,8 +1,6 @@
 import NextAuth from "next-auth";
 import type { NextAuthConfig } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
-import bcrypt from "bcryptjs";
 import { prisma } from "./db";
 import { notifyAdmins } from "./notify-admins";
 
@@ -22,29 +20,6 @@ const config: NextAuthConfig = {
         },
       },
     }),
-    Credentials({
-      name: "Login",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Passwort", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
-
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        });
-        if (!user || !user.active || !user.password) return null;
-
-        const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user.password
-        );
-        if (!isValid) return null;
-
-        return { id: user.id, name: user.name, email: user.email };
-      },
-    }),
   ],
   pages: {
     signIn: "/login",
@@ -54,8 +29,7 @@ const config: NextAuthConfig = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      // Credentials path is already validated in authorize()
-      if (account?.provider !== "google") return true;
+      if (account?.provider !== "google") return false;
 
       const email = (user.email || "").toLowerCase();
       if (!email) return false;
