@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import {
@@ -75,20 +74,17 @@ export async function createUserAction(formData: FormData) {
   await requireAdmin();
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
-  const password = String(formData.get("password") || "");
   const role = String(formData.get("role") || "agent");
 
-  if (!name || !email || !password || password.length < 6) {
-    throw new Error("Name + Email + Passwort (min. 6 Zeichen) erforderlich");
-  }
+  if (!name || !email) throw new Error("Name + Email erforderlich");
   if (!["admin", "agent"].includes(role)) throw new Error("Ungültige Rolle");
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new Error("Email ist bereits vergeben");
 
-  const hashed = await bcrypt.hash(password, 12);
+  // Passwort ist obsolet — login läuft ausschließlich via Google SSO.
   await prisma.user.create({
-    data: { name, email, password: hashed, role },
+    data: { name, email, role },
   });
   revalidatePath("/settings");
 }
@@ -99,23 +95,14 @@ export async function updateUserAction(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const role = String(formData.get("role") || "agent");
-  const password = String(formData.get("password") || "");
 
   if (!id || !name || !email) throw new Error("ID + Name + Email erforderlich");
   if (!["admin", "agent"].includes(role)) throw new Error("Ungültige Rolle");
 
-  const data: {
-    name: string;
-    email: string;
-    role: string;
-    password?: string;
-  } = { name, email, role };
-
-  if (password && password.length >= 6) {
-    data.password = await bcrypt.hash(password, 12);
-  }
-
-  await prisma.user.update({ where: { id }, data });
+  await prisma.user.update({
+    where: { id },
+    data: { name, email, role },
+  });
   revalidatePath("/settings");
 }
 

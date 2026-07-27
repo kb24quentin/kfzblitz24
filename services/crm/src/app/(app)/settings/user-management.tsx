@@ -54,18 +54,15 @@ export function UserManagement({ users }: { users: UserData[] }) {
               <input name="email" type="email" required className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50" placeholder="max@kfzblitz24.de" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-text-light mb-1">Passwort *</label>
-              <input name="password" type="password" required minLength={6} className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50" placeholder="Mind. 6 Zeichen" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-light mb-1">Rolle</label>
-              <select name="role" className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50">
-                <option value="user">Benutzer</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-text-light mb-1">Rolle</label>
+            <select name="role" className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50">
+              <option value="user">Benutzer</option>
+              <option value="admin">Admin</option>
+            </select>
+            <p className="text-xs text-text-light mt-1">
+              Login läuft nur über Google SSO (@kfzblitz24.de). Kein Passwort nötig.
+            </p>
           </div>
           <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-light transition-colors">
             <Save className="w-4 h-4" /> Benutzer erstellen

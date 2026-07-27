@@ -96,29 +96,19 @@ export function UserManagement({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-text-light mb-1">Passwort *</label>
-              <input
-                name="password"
-                type="password"
-                required
-                minLength={6}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/50"
-                placeholder="Mind. 6 Zeichen"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-light mb-1">Rolle</label>
-              <select
-                name="role"
-                defaultValue="agent"
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/50"
-              >
-                <option value="agent">Agent (Tickets bearbeiten)</option>
-                <option value="admin">Admin (alles inkl. Team-Verwaltung)</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-text-light mb-1">Rolle</label>
+            <select
+              name="role"
+              defaultValue="agent"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              <option value="agent">Agent (Tickets bearbeiten)</option>
+              <option value="admin">Admin (alles inkl. Team-Verwaltung)</option>
+            </select>
+            <p className="text-xs text-text-light mt-1">
+              Login läuft nur über Google SSO (@kfzblitz24.de). Kein Passwort nötig.
+            </p>
           </div>
           <button
             type="submit"
@@ -178,36 +168,22 @@ export function UserManagement({
                             />
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium text-text-light mb-1">Rolle</label>
-                            <select
-                              name="role"
-                              defaultValue={user.role}
-                              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white disabled:bg-bg-secondary"
-                              disabled={isSelf}
-                            >
-                              <option value="agent">Agent</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                            {isSelf && (
-                              <p className="text-xs text-text-light mt-1">
-                                Eigene Rolle kann nicht geändert werden.
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-text-light mb-1">
-                              Neues Passwort (optional)
-                            </label>
-                            <input
-                              name="password"
-                              type="password"
-                              minLength={6}
-                              placeholder="leer = unverändert"
-                              className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white"
-                            />
-                          </div>
+                        <div>
+                          <label className="block text-xs font-medium text-text-light mb-1">Rolle</label>
+                          <select
+                            name="role"
+                            defaultValue={user.role}
+                            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-white disabled:bg-bg-secondary"
+                            disabled={isSelf}
+                          >
+                            <option value="agent">Agent</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                          {isSelf && (
+                            <p className="text-xs text-text-light mt-1">
+                              Eigene Rolle kann nicht geändert werden.
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-2">
                           <button
@@ -288,7 +264,7 @@ export function UserManagement({
                               setShowForm(false);
                             }}
                             className="p-2 text-text-light hover:text-text hover:bg-bg-secondary rounded"
-                            title="Bearbeiten / Passwort ändern"
+                            title="Bearbeiten"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
