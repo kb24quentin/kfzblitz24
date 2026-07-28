@@ -37,7 +37,7 @@ const config: NextAuthConfig = {
         if (!credentials?.email || !credentials?.password) return null;
         const email = (credentials.email as string).trim().toLowerCase();
         const user = await prisma.workshopUser.findUnique({ where: { email } });
-        if (!user || !user.active) return null;
+        if (!user || !user.active || !user.password) return null;
         const ok = await bcrypt.compare(credentials.password as string, user.password);
         if (!ok) return null;
         // Custom shape so jwt-callback erkennt es als workshop-user.
