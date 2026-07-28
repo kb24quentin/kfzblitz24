@@ -40,16 +40,16 @@ const config: NextAuthConfig = {
         if (!user || !user.active) return null;
         const ok = await bcrypt.compare(credentials.password as string, user.password);
         if (!ok) return null;
-        // Custom shape so jwt-callback erkennt es als workshop-user
+        // Custom shape so jwt-callback erkennt es als workshop-user.
+        // Cast to any weil NextAuth-User-type unsere zusatzfelder nicht kennt.
         return {
           id: user.id,
           email: user.email,
           name: user.name,
-          // @ts-expect-error — augment session-user shape below
           audience: "workshop",
           workshopId: user.workshopId,
           role: user.role,
-        };
+        } as unknown as { id: string; email: string; name: string };
       },
     }),
   ],
