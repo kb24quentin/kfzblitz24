@@ -5,9 +5,10 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireWorkshopUser } from "@/lib/admin-guard";
 import { nextInvoiceNumber } from "@/lib/invoice-number";
-import { calcPosition, parseEurToCent, sumPositions, type InvoicePosition, type PositionKind } from "@/lib/money";
+import { sumPositions, type InvoicePosition } from "@/lib/money";
 import { buildInvoicePdf } from "@/lib/invoice-pdf";
 import { embedZugferdXml } from "@/lib/zugferd";
+import { positionsFromFormData } from "@/lib/positions-parse";
 import { Resend } from "resend";
 
 function str(v: FormDataEntryValue | null) {
@@ -23,39 +24,6 @@ type PositionInput = {
   netPriceEur: string;
   vatPercent: number;
 };
-
-export function positionsFromFormData(formData: FormData): InvoicePosition[] {
-  const kinds = formData.getAll("pos_kind").map(String);
-  const names = formData.getAll("pos_name").map(String);
-  const descs = formData.getAll("pos_description").map(String);
-  const qtys = formData.getAll("pos_quantity").map(String);
-  const units = formData.getAll("pos_unit").map(String);
-  const prices = formData.getAll("pos_netPrice").map(String);
-  const vats = formData.getAll("pos_vatPercent").map(String);
-  const out: InvoicePosition[] = [];
-  for (let i = 0; i < names.length; i++) {
-    const name = (names[i] || "").trim();
-    if (!name) continue;
-    const kind: PositionKind = kinds[i] === "part" ? "part" : "labor";
-    const quantity = parseFloat((qtys[i] || "1").replace(",", "."));
-    const netPriceCent = parseEurToCent(prices[i] || "0");
-    const vatPercent = parseInt(vats[i] || "19", 10);
-    const { netTotalCent, vatTotalCent, grossTotalCent } = calcPosition(quantity, netPriceCent, vatPercent);
-    out.push({
-      kind,
-      name,
-      description: (descs[i] || "").trim() || undefined,
-      quantity,
-      unit: units[i] || (kind === "labor" ? "Std" : "Stk"),
-      netPriceCent,
-      vatPercent,
-      netTotalCent,
-      vatTotalCent,
-      grossTotalCent,
-    });
-  }
-  return out;
-}
 
 export async function createInvoiceAction(formData: FormData) {
   const ctx = await requireWorkshopUser();

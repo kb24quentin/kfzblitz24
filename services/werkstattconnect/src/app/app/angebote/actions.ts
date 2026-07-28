@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireWorkshopUser } from "@/lib/admin-guard";
 import { nextInvoiceNumber, nextQuoteNumber } from "@/lib/invoice-number";
 import { sumPositions, type InvoicePosition } from "@/lib/money";
-import { positionsFromFormData } from "../rechnungen/actions";
+import { positionsFromFormData } from "@/lib/positions-parse";
 import { buildQuotePdf } from "@/lib/invoice-pdf";
 import { Resend } from "resend";
 
