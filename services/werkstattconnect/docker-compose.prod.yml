@@ -55,6 +55,30 @@ services:
       - traefik.http.routers.werkstattconnect-prod.tls.certresolver=letsencrypt
       - traefik.http.services.werkstattconnect-prod.loadbalancer.server.port=3000
 
+  werkstattconnect-cron:
+    image: curlimages/curl:latest
+    container_name: werkstattconnect_cron_prod
+    restart: unless-stopped
+    depends_on:
+      - werkstattconnect
+    environment:
+      TZ: Europe/Berlin
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+    networks:
+      - prod_internal
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        while true; do
+          NOW=$$(date +%H:%M)
+          if [ "$$NOW" = "07:00" ]; then
+            echo "[$$(date)] reminder-cron running…"
+            curl -sf -X POST -H "Authorization: Bearer $${INTERNAL_API_TOKEN}" http://werkstattconnect:3000/api/cron/reminders || echo "[$$(date)] reminder-cron failed"
+          fi
+          sleep 55
+        done
+
 networks:
   prod_internal:
     external: true

@@ -14,7 +14,7 @@ datasource db {
 model Workshop {
   id           String   @id @default(cuid())
   name         String
-  slug         String   @unique // z.B. "meier-automobile-muenchen" für URLs
+  slug         String   @unique
   contactEmail String
   contactPhone String?
   street       String?
@@ -22,67 +22,276 @@ model Workshop {
   city         String?
   country      String   @default("DEU")
   taxId        String? // USt-IdNr
-  ownerEmail   String // wer die werkstatt angelegt hat = initial admin
-  // Freemium-plan — MVP nur 'free'. Später via Stripe erweitert:
-  //   free — kunden/fahrzeuge/rechnungen/kalender (basis)
-  //   pro  — + kunden-erinnerungen + benachrichtigungen
+  ownerEmail   String
   plan         String   @default("free")
   active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 
-  users     WorkshopUser[]
-  customers Customer[]
+  // Briefpapier / Corporate Identity (Phase 5)
+  letterheadLogo     Bytes? // optionales logo für PDFs
+  letterheadLogoMime String?
+  brandPrimary       String? // hex-color für PDF-akzente
+  brandFooterText    String? // freitext-footer auf rechnung
+  iban               String?
+  bic                String?
+  bankName           String?
+
+  // Rechnungs-nummerierung (GoBD: gapless sequence pro workshop+jahr)
+  invoicePrefix      String  @default("RE-")
+  invoiceNumberYear  Int?
+  invoiceNumberLast  Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        WorkshopUser[]
+  customers    Customer[]
+  vehicles     Vehicle[]
+  appointments Appointment[]
+  reminders    Reminder[]
+  services     ServiceItem[]
+  invoices     Invoice[]
+  invoiceJournal InvoiceJournalEntry[]
 }
 
 /**
- * Werkstatt-Mitarbeiter — separate identität von KB24-Admin (die Google-SSO-basiert
- * sind). Werkstatt-User loggen mit email+passwort ein — ihre kontaktemail kann
- * beliebige domäne sein (nicht @kfzblitz24.de).
+ * Werkstatt-Mitarbeiter — passwort-basiert (kein SSO). Email kann beliebige domäne.
  */
 model WorkshopUser {
   id                   String    @id @default(cuid())
   workshopId           String
   email                String    @unique
   name                 String
-  password             String? // bcrypt-hash — null bis Setup-Mail benutzt wurde
-  role                 String    @default("mitarbeiter") // 'owner' | 'admin' | 'mitarbeiter'
+  password             String?
+  role                 String    @default("mitarbeiter")
   active               Boolean   @default(true)
-  passwordSetupToken   String?   @unique // random-hex, wird in setup-mail versendet
+  passwordSetupToken   String?   @unique
   passwordSetupExpires DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  workshop     Workshop      @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  appointments Appointment[] @relation("MechanicAppointments")
+  invoices     Invoice[]     @relation("InvoiceCreator")
 
   @@index([workshopId])
 }
 
 /**
- * KB24-Admin — Google-SSO-User, sieht alle werkstätten, kann sie anlegen +
- * verwalten. Analog zu Support/Intranet-User.
+ * KB24-Admin — Google-SSO, verwaltet werkstätten. Analog Support/Intranet.
  */
 model KbAdmin {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String
-  role      String   @default("admin") // reserviert für zukünftige differenzierung ('admin' | 'agent')
+  role      String   @default("admin")
   googleId  String?  @unique
   imageUrl  String?
-  active    Boolean  @default(false) // pending — bestehender KB24-admin muss aktivieren
+  active    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 /**
- * MVP-placeholder — kommt in phase 3. Hier nur damit workshopId FK-target existiert.
+ * Kunde der Werkstatt (b2c oder b2b).
  */
 model Customer {
-  id         String   @id @default(cuid())
-  workshopId String
-  createdAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  workshopId   String
+  type         String   @default("b2c") // 'b2c' | 'b2b'
+  companyName  String?
+  firstName    String?
+  lastName     String?
+  email        String?
+  phone        String?
+  street       String?
+  zip          String?
+  city         String?
+  country      String   @default("DEU")
+  taxId        String? // USt-IdNr für b2b
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workshop     Workshop      @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  vehicles     Vehicle[]
+  appointments Appointment[]
+  reminders    Reminder[]
+  invoices     Invoice[]
+
+  @@index([workshopId])
+  @@index([workshopId, lastName])
+}
+
+/**
+ * Fahrzeug eines kunden. Optional aber praktisch die basis für kalender+rechnungen.
+ */
+model Vehicle {
+  id                 String    @id @default(cuid())
+  workshopId         String
+  customerId         String
+  licensePlate       String? // kennzeichen
+  vin                String? // FIN
+  brand              String? // hersteller
+  model              String?
+  variant            String?
+  year               Int?
+  hsn                String? // herstellerschlüssel
+  tsn                String? // typschlüssel
+  fuelType           String? // benzin|diesel|hybrid|elektro|gas
+  transmission       String? // schaltung|automatik
+  power              Int? // kW
+  color              String?
+  firstRegistration  DateTime?
+  mileage            Int? // aktueller km-stand
+  mileageUpdatedAt   DateTime?
+  nextTuev           DateTime? // HU-fällig
+  nextInspection     DateTime? // wartung fällig
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workshop     Workshop      @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  reminders    Reminder[]
+  invoices     Invoice[]
+
+  @@index([workshopId])
+  @@index([customerId])
+  @@index([workshopId, licensePlate])
+}
+
+/**
+ * Termin im Werkstatt-Kalender. mechanicId = welcher mitarbeiter macht es.
+ */
+model Appointment {
+  id          String    @id @default(cuid())
+  workshopId  String
+  customerId  String
+  vehicleId   String?
+  mechanicId  String?
+  title       String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime
+  status      String    @default("scheduled") // 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workshop Workshop      @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vehicle  Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  mechanic WorkshopUser? @relation("MechanicAppointments", fields: [mechanicId], references: [id], onDelete: SetNull)
+
+  @@index([workshopId, startsAt])
+  @@index([workshopId, mechanicId, startsAt])
+}
+
+/**
+ * Kunden-Erinnerung (TÜV/Inspection/frei). Cron scannt täglich und
+ * sendet mails wenn dueDate <= today + notifyDaysBefore.
+ */
+model Reminder {
+  id                 String    @id @default(cuid())
+  workshopId         String
+  customerId         String
+  vehicleId          String?
+  type               String // 'tuev' | 'inspection' | 'oil_change' | 'custom'
+  title              String
+  note               String?
+  dueDate            DateTime
+  notifyDaysBefore   Int       @default(30)
+  status             String    @default("pending") // 'pending' | 'sent' | 'dismissed'
+  sentAt             DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vehicle  Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@index([workshopId, status, dueDate])
+}
+
+/**
+ * Service-Katalog der Werkstatt (Ölwechsel, HU, Räderwechsel, ...).
+ * netPrice in cent gespeichert um float-fehler zu vermeiden.
+ */
+model ServiceItem {
+  id           String   @id @default(cuid())
+  workshopId   String
+  name         String
+  description  String?
+  netPriceCent Int // preis in cent
+  vatPercent   Int      @default(19) // 19 oder 7
+  unit         String   @default("Stk") // 'Stk' | 'Std' | 'Pauschal'
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
 
-  @@index([workshopId])
+  @@index([workshopId, active])
+}
+
+/**
+ * Rechnung. GoBD-conform:
+ *  - invoiceNumber gapless pro workshop+jahr (Workshop.invoiceNumberLast)
+ *  - positions als JSON-snapshot (preise zum zeitpunkt eingefroren)
+ *  - status transitions immutable-logged in InvoiceJournalEntry
+ *  - draft ist noch löschbar/änderbar, ab status='sent' → nur noch storno via cancellationInvoice
+ *  - cancelledById: verweist auf storno-rechnung (negative summen)
+ */
+model Invoice {
+  id              String    @id @default(cuid())
+  workshopId      String
+  invoiceNumber   String    @unique
+  customerId      String
+  vehicleId       String?
+  issuedAt        DateTime  @default(now())
+  dueAt           DateTime?
+  positions       Json // [{ name, description?, quantity, unit, netPriceCent, vatPercent, netTotalCent, vatTotalCent, grossTotalCent }]
+  subtotalNetCent Int
+  totalVatCent    Int
+  totalGrossCent  Int
+  status          String    @default("draft") // 'draft' | 'sent' | 'paid' | 'cancelled'
+  paidAt          DateTime?
+  cancelledAt     DateTime?
+  cancelledById   String? // FK auf Invoice.id (storno-rechnung)
+  notes           String?
+  createdBy       String?
+  pdfBytes        Bytes? // gecachte pdf für re-download (revisionssicher)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workshop      Workshop              @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer      Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  vehicle       Vehicle?              @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  creator       WorkshopUser?         @relation("InvoiceCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  journalEntries InvoiceJournalEntry[]
+
+  @@index([workshopId, issuedAt])
+  @@index([workshopId, status])
+}
+
+/**
+ * GoBD-audit-trail. Immutable. Kein UPDATE/DELETE erlaubt (nur INSERT).
+ */
+model InvoiceJournalEntry {
+  id            String   @id @default(cuid())
+  workshopId    String
+  invoiceId     String
+  invoiceNumber String
+  event         String // 'created' | 'sent' | 'paid' | 'cancelled' | 'note'
+  actorId       String? // WorkshopUser.id
+  actorEmail    String?
+  actorName     String?
+  payload       Json // snapshot der änderung / body
+  createdAt     DateTime @default(now())
+
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([workshopId, invoiceId])
+  @@index([invoiceNumber])
 }
