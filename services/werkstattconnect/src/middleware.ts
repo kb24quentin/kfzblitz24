@@ -27,7 +27,9 @@ export default auth((req) => {
   if (isPublic) return;
 
   const isAdminArea = path === "/admin" || path.startsWith("/admin/");
-  const isWorkshopArea = path === "/app" || path.startsWith("/app/");
+  const isWorkshopArea =
+    path === "/app" || path.startsWith("/app/") ||
+    path === "/werkstatt" || path.startsWith("/werkstatt/");
 
   if (isAdminArea) {
     if (!isLoggedIn) return Response.redirect(new URL("/admin/login", req.nextUrl));

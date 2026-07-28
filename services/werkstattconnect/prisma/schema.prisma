@@ -189,6 +189,8 @@ model Vehicle {
 
 /**
  * Termin im Werkstatt-Kalender. mechanicId = welcher mitarbeiter macht es.
+ * Mit Live-Zeit-Tracking (actualStartedAt/actualEndedAt) und Mechaniker-
+ * Protokoll (workLog) für die Werkstatt→Büro-Kommunikation.
  */
 model Appointment {
   id          String    @id @default(cuid())
@@ -200,17 +202,56 @@ model Appointment {
   description String?
   startsAt    DateTime
   endsAt      DateTime
-  status      String    @default("scheduled") // 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  status      String    @default("scheduled") // 'scheduled' | 'in_progress' | 'awaiting_approval' | 'approved' | 'completed' | 'cancelled'
+
+  // Live-Zeit-Tracking (Mechaniker startet/stoppt am tablet)
+  actualStartedAt DateTime?
+  actualEndedAt   DateTime?
+
+  // Auftrags-Freigabe durch Kunden (Bar/vor Ort)
+  customerApprovalRequested Boolean   @default(false) // "Auftrag bereit für Freigabe"
+  approvedAmountCent        Int? // Kunde hat freigegeben bis zu … EUR
+  approvedAt                DateTime?
+  approvalSignatureSvg      String? // SVG-path-string der unterschrift
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  workshop Workshop      @relation(fields: [workshopId], references: [id], onDelete: Cascade)
-  customer Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  vehicle  Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  mechanic WorkshopUser? @relation("MechanicAppointments", fields: [mechanicId], references: [id], onDelete: SetNull)
+  workshop  Workshop        @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer  Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vehicle   Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  mechanic  WorkshopUser?   @relation("MechanicAppointments", fields: [mechanicId], references: [id], onDelete: SetNull)
+  workLog   AppointmentWorkLog[]
 
   @@index([workshopId, startsAt])
   @@index([workshopId, mechanicId, startsAt])
+  @@index([workshopId, status])
+}
+
+/**
+ * Mechaniker-Protokoll pro Auftrag. Statt Zettel: der Mechaniker klickt
+ * am tablet was er gemacht hat. Büro sieht sofort was passiert ist und
+ * kann daraus die Rechnung aufbauen.
+ *
+ * kind='labor': ServiceItem-referenz oder freitext + geschätzte std
+ * kind='part':  teile-name + menge (aus katalog oder frei-getippt)
+ * kind='note':  freie notiz vom mechaniker ("Achtung: Undichtigkeit hinten")
+ */
+model AppointmentWorkLog {
+  id            String   @id @default(cuid())
+  appointmentId String
+  createdBy     String? // WorkshopUser.id (mechaniker)
+  kind          String // 'labor' | 'part' | 'note'
+  name          String
+  quantity      Float    @default(1)
+  unit          String   @default("Stk") // 'Std' bei labor, 'Stk'/'l'/'Pauschal' bei part
+  serviceItemId String? // referenz falls aus katalog
+  note          String?
+  createdAt     DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId, createdAt])
 }
 
 /**

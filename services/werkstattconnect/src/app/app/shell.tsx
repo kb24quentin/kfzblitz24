@@ -12,6 +12,7 @@ import {
   Settings,
   ListTree,
   LogOut,
+  HardHat,
 } from "lucide-react";
 import { signOutWorkshopAction } from "../actions/auth";
 
@@ -78,6 +79,14 @@ export async function WorkshopShell({
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/werkstatt"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 shadow"
+              title="Zum Mechaniker-Modus (Tablet/Handy)"
+            >
+              <HardHat className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Werkstatt-Modus</span>
+            </Link>
             <div className="text-xs text-slate-500 hidden sm:block" title={u?.email ?? ""}>
               <span className="font-medium text-slate-900">{displayName}</span>
             </div>
