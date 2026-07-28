@@ -14,14 +14,16 @@ export default async function AdminHome() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-black">
-              <span className="text-slate-900">W</span>
-              <span className="text-orange-600">C</span>
+        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img
+              src="/werkstattconnect-logo.svg"
+              alt="WerkstattConnect"
+              className="h-8 w-auto"
+            />
+            <span className="text-xs uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+              KB24-Admin
             </span>
-            <span className="text-slate-300">|</span>
-            <span className="text-sm font-semibold text-slate-900">KB24-Admin</span>
           </div>
           <div className="text-xs text-slate-500">
             Angemeldet als <span className="font-medium text-slate-900">{session?.user?.email}</span>

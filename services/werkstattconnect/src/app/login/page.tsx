@@ -9,14 +9,11 @@ export default function WorkshopLoginPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <span className="text-2xl font-black tracking-tight">
-              <span className="text-slate-900">W</span>
-              <span className="text-orange-600">C</span>
-              <span className="hidden sm:inline text-slate-300 mx-2">|</span>
-              <span className="hidden sm:inline text-slate-900">
-                Werkstatt<span className="text-orange-600">Connect</span>
-              </span>
-            </span>
+            <img
+              src="/werkstattconnect-logo.svg"
+              alt="WerkstattConnect"
+              className="h-12 w-auto mx-auto"
+            />
           </Link>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">

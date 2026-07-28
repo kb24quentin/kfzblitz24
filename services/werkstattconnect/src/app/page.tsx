@@ -142,15 +142,10 @@ function Feature({ icon, title, body }: { icon: React.ReactNode; title: string; 
 
 function WcLogo() {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xl font-black tracking-tight">
-        <span className="text-slate-900">W</span>
-        <span className="text-orange-600">C</span>
-      </span>
-      <span className="hidden sm:inline w-px h-6 bg-slate-300" />
-      <span className="hidden sm:inline text-sm font-semibold text-slate-900">
-        Werkstatt<span className="text-orange-600">Connect</span>
-      </span>
-    </div>
+    <img
+      src="/werkstattconnect-logo.svg"
+      alt="WerkstattConnect"
+      className="h-9 w-auto"
+    />
   );
 }

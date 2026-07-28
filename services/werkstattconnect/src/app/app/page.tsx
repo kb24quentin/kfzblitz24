@@ -14,13 +14,14 @@ export default async function WorkshopHome() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-black">
-              <span className="text-slate-900">W</span>
-              <span className="text-orange-600">C</span>
-            </span>
-            <span className="text-slate-300">|</span>
+        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img
+              src="/werkstattconnect-logo.svg"
+              alt="WerkstattConnect"
+              className="h-8 w-auto"
+            />
+            <span className="text-sm text-slate-400">|</span>
             <span className="text-sm font-semibold text-slate-900">
               {workshop?.name ?? "Werkstatt"}
             </span>
