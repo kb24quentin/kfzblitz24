@@ -39,7 +39,9 @@ export async function GET(
       workshop: inv.workshop,
     });
     bytes = pdf;
-    await prisma.invoice.update({ where: { id }, data: { pdfBytes: new Uint8Array(pdf) } });
+    const pdfCopy = new Uint8Array(new ArrayBuffer(pdf.byteLength));
+    pdfCopy.set(new Uint8Array(pdf.buffer, pdf.byteOffset, pdf.byteLength));
+    await prisma.invoice.update({ where: { id }, data: { pdfBytes: pdfCopy } });
   }
 
   return new NextResponse(new Uint8Array(bytes), {

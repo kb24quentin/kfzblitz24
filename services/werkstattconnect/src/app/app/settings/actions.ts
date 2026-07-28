@@ -42,12 +42,14 @@ export async function updateBrandingAction(formData: FormData) {
   const ctx = await requireWorkshopAdmin();
 
   const file = formData.get("letterheadLogo") as File | null;
-  let logoBytes: Uint8Array | undefined;
+  let logoBytes: Uint8Array<ArrayBuffer> | undefined;
   let logoMime: string | undefined;
   if (file && typeof file === "object" && file.size > 0) {
     if (file.size > 500_000) throw new Error("Logo zu groß (max 500 KB)");
     const buf = await file.arrayBuffer();
-    logoBytes = new Uint8Array(buf);
+    const out = new Uint8Array(new ArrayBuffer(buf.byteLength));
+    out.set(new Uint8Array(buf));
+    logoBytes = out;
     logoMime = file.type || "image/png";
   }
 

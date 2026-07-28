@@ -129,9 +129,11 @@ async function generateAndCachePdf(invoiceId: string) {
     vehicle: inv.vehicle,
     workshop: inv.workshop,
   });
+  const pdfCopy = new Uint8Array(new ArrayBuffer(pdf.byteLength));
+  pdfCopy.set(new Uint8Array(pdf.buffer, pdf.byteOffset, pdf.byteLength));
   await prisma.invoice.update({
     where: { id: invoiceId },
-    data: { pdfBytes: new Uint8Array(pdf) },
+    data: { pdfBytes: pdfCopy },
   });
   return { pdf, inv };
 }
