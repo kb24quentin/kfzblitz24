@@ -18,6 +18,7 @@ export default auth((req) => {
     path === "/login" ||
     path === "/admin/login" ||
     path === "/admin/pending" ||
+    path.startsWith("/setup/") ||
     path.startsWith("/api/auth") ||
     path.startsWith("/api/webhook") ||
     path === "/api/health";

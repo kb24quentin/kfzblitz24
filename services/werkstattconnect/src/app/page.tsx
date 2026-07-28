@@ -145,7 +145,7 @@ function WcLogo() {
     <img
       src="/werkstattconnect-logo.svg"
       alt="WerkstattConnect"
-      className="h-9 w-auto"
+      className="h-11 w-auto"
     />
   );
 }

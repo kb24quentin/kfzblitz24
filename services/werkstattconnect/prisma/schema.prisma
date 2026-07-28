@@ -41,15 +41,17 @@ model Workshop {
  * beliebige domäne sein (nicht @kfzblitz24.de).
  */
 model WorkshopUser {
-  id         String   @id @default(cuid())
-  workshopId String
-  email      String   @unique
-  name       String
-  password   String // bcrypt-hash — kein SSO für werkstatt-user
-  role       String   @default("mitarbeiter") // 'owner' | 'admin' | 'mitarbeiter'
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  workshopId           String
+  email                String    @unique
+  name                 String
+  password             String? // bcrypt-hash — null bis Setup-Mail benutzt wurde
+  role                 String    @default("mitarbeiter") // 'owner' | 'admin' | 'mitarbeiter'
+  active               Boolean   @default(true)
+  passwordSetupToken   String?   @unique // random-hex, wird in setup-mail versendet
+  passwordSetupExpires DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
 

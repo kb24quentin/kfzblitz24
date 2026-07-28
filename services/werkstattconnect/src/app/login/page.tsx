@@ -12,7 +12,7 @@ export default function WorkshopLoginPage() {
             <img
               src="/werkstattconnect-logo.svg"
               alt="WerkstattConnect"
-              className="h-12 w-auto mx-auto"
+              className="h-16 w-auto mx-auto"
             />
           </Link>
         </div>
