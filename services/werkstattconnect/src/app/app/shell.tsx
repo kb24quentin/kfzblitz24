@@ -11,7 +11,9 @@ import {
   FileCheck,
   Settings,
   ListTree,
+  LogOut,
 } from "lucide-react";
+import { signOutWorkshopAction } from "../actions/auth";
 
 type NavKey =
   | "home"
@@ -72,8 +74,20 @@ export async function WorkshopShell({
               {workshop?.name ?? "Werkstatt"}
             </span>
           </div>
-          <div className="text-xs text-slate-500">
-            <span className="font-medium text-slate-900">{u?.email}</span>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-slate-500 hidden sm:block">
+              <span className="font-medium text-slate-900">{u?.email}</span>
+            </div>
+            <form action={signOutWorkshopAction}>
+              <button
+                type="submit"
+                title="Abmelden"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-red-600 border border-slate-200 hover:border-red-300 rounded-lg transition"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Abmelden</span>
+              </button>
+            </form>
           </div>
         </div>
         <nav className="max-w-7xl mx-auto px-6 flex gap-1 -mb-px overflow-x-auto">

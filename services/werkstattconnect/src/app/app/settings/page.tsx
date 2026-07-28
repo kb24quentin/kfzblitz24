@@ -247,8 +247,6 @@ export default async function SettingsPage() {
               templates={TEMPLATES}
               currentTemplate={w.letterheadTemplate}
               primary={w.brandPrimary ?? "#fe6503"}
-              logoDataUrl={logoDataUrl}
-              workshopName={w.name}
             />
           </div>
 

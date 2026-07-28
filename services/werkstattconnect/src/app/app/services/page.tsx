@@ -49,14 +49,12 @@ export default async function ServicesPage() {
             Stundenbasierte Leistungen werden mit deinem Stundensatz ({formatEur(hourlyRateCent)}/Std) verrechnet.
           </p>
         </div>
-        {items.length === 0 && (
-          <form action={seedStandardCatalogAction}>
-            <button className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800">
-              <Sparkles className="w-4 h-4" />
-              Standard-Katalog laden (50+ Leistungen)
-            </button>
-          </form>
-        )}
+        <form action={seedStandardCatalogAction}>
+          <button className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800">
+            <Sparkles className="w-4 h-4" />
+            Standard-Katalog nachladen
+          </button>
+        </form>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

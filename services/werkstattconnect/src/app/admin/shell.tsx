@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { Home, Wrench } from "lucide-react";
+import { Home, Wrench, LogOut } from "lucide-react";
+import { signOutAdminAction } from "../actions/auth";
 
 type NavKey = "home" | "workshops";
 
@@ -38,9 +39,20 @@ export async function AdminShell({
               KB24-Admin
             </span>
           </div>
-          <div className="text-xs text-slate-500">
-            Angemeldet als{" "}
-            <span className="font-medium text-slate-900">{session?.user?.email}</span>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-slate-500 hidden sm:block">
+              <span className="font-medium text-slate-900">{session?.user?.email}</span>
+            </div>
+            <form action={signOutAdminAction}>
+              <button
+                type="submit"
+                title="Abmelden"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-600 hover:text-red-600 border border-slate-200 hover:border-red-300 rounded-lg transition"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Abmelden</span>
+              </button>
+            </form>
           </div>
         </div>
         <nav className="max-w-6xl mx-auto px-6 flex gap-1 -mb-px">
