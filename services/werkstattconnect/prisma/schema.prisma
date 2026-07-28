@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * Workshop = Mandant. Alle domänen-entitäten haben workshopId FK.
+ * Middleware scoped alle Queries auf session.workshopId (außer für KB24-Admin).
+ */
+model Workshop {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique // z.B. "meier-automobile-muenchen" für URLs
+  contactEmail String
+  contactPhone String?
+  street       String?
+  zip          String?
+  city         String?
+  country      String   @default("DEU")
+  taxId        String? // USt-IdNr
+  ownerEmail   String // wer die werkstatt angelegt hat = initial admin
+  // Freemium-plan — MVP nur 'free'. Später via Stripe erweitert:
+  //   free — kunden/fahrzeuge/rechnungen/kalender (basis)
+  //   pro  — + kunden-erinnerungen + benachrichtigungen
+  plan         String   @default("free")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users     WorkshopUser[]
+  customers Customer[]
+}
+
+/**
+ * Werkstatt-Mitarbeiter — separate identität von KB24-Admin (die Google-SSO-basiert
+ * sind). Werkstatt-User loggen mit email+passwort ein — ihre kontaktemail kann
+ * beliebige domäne sein (nicht @kfzblitz24.de).
+ */
+model WorkshopUser {
+  id         String   @id @default(cuid())
+  workshopId String
+  email      String   @unique
+  name       String
+  password   String // bcrypt-hash — kein SSO für werkstatt-user
+  role       String   @default("mitarbeiter") // 'owner' | 'admin' | 'mitarbeiter'
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+
+  @@index([workshopId])
+}
+
+/**
+ * KB24-Admin — Google-SSO-User, sieht alle werkstätten, kann sie anlegen +
+ * verwalten. Analog zu Support/Intranet-User.
+ */
+model KbAdmin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  googleId  String?  @unique
+  imageUrl  String?
+  active    Boolean  @default(false) // pending — bestehender KB24-admin muss aktivieren
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/**
+ * MVP-placeholder — kommt in phase 3. Hier nur damit workshopId FK-target existiert.
+ */
+model Customer {
+  id         String   @id @default(cuid())
+  workshopId String
+  createdAt  DateTime @default(now())
+
+  workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+
+  @@index([workshopId])
+}
