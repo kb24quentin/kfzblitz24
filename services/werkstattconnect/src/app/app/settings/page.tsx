@@ -82,6 +82,32 @@ export default async function SettingsPage() {
                 Im Rechnungs-Composer: Einkaufspreis eingeben, mit einem Klick automatisch aufschlagen.
               </p>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Rechnung Fällig (Tage)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="365"
+                  name="invoicePaymentTermDays"
+                  defaultValue={w.invoicePaymentTermDays}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+                <p className="text-xs text-slate-500 mt-1">Standard-Zahlungsziel</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Angebot Gültig (Tage)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="365"
+                  name="quoteValidityDays"
+                  defaultValue={w.quoteValidityDays}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+                <p className="text-xs text-slate-500 mt-1">Default-Gültigkeit</p>
+              </div>
+            </div>
             <button type="submit" className="w-full px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700">
               Speichern
             </button>

@@ -57,6 +57,8 @@ export async function GET(req: Request) {
     notes: "Vielen Dank für Ihren Auftrag. Bei Rückfragen sind wir gerne für Sie da.",
     mileageAtIssue: 84500,
     creatorName: "Max Muster (Mechaniker)",
+    paymentMethod: "bank_transfer",
+    paidAt: null,
     customer: {
       type: "b2c",
       companyName: null,

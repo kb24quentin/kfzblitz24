@@ -191,6 +191,8 @@ function mkPdfDoc(input: WartungsheftInput): PdfDoc {
     notes: null,
     mileageAtIssue: null,
     creatorName: null,
+    paymentMethod: null,
+    paidAt: null,
     customer: input.customer,
     vehicle: null,
     workshop: input.workshop,

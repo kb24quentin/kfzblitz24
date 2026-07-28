@@ -28,6 +28,10 @@ export function lighter(color: RGB, by = 0.7): RGB {
 }
 
 /** Ersetzt problematische unicode-glyphen die Helvetica-WinAnsi nicht kann. */
+export function paymentMethodLabel(m: string): string {
+  return { bank_transfer: "Überweisung", cash: "Barzahlung", card: "EC-/Kartenzahlung", sepa: "SEPA-Lastschrift" }[m] ?? m;
+}
+
 export function s(str: string | null | undefined): string {
   if (!str) return "";
   return String(str)
@@ -158,24 +162,49 @@ export function drawPaymentInfo(
   fonts: Fonts,
   color: RGB = GRAY
 ): number {
-  const { body } = pickFonts(fonts, doc.workshop.brandFontFamily);
+  const { body, bold } = pickFonts(fonts, doc.workshop.brandFontFamily);
   let ry = y;
   if (doc.kind === "invoice") {
-    if (doc.dueAt) {
-      page.drawText(s(`Bitte begleichen Sie den Betrag bis ${doc.dueAt.toLocaleDateString("de-DE")}:`), { x, y: ry, size: 9, font: body, color });
-    } else {
-      page.drawText("Bitte überweisen Sie den Betrag auf folgendes Konto:", { x, y: ry, size: 9, font: body, color });
-    }
-    ry -= 12;
-    if (doc.workshop.iban) {
+    const pm = doc.paymentMethod || "bank_transfer";
+    const paid = doc.paidAt != null;
+    if (paid) {
+      // Bezahlt → grüne info-line
       page.drawText(
-        s(`${doc.workshop.bankName ?? "Bank"} - IBAN: ${doc.workshop.iban}${doc.workshop.bic ? ` - BIC: ${doc.workshop.bic}` : ""}`),
-        { x, y: ry, size: 9, font: body, color }
+        s(`Betrag wurde am ${doc.paidAt!.toLocaleDateString("de-DE")} bezahlt (${paymentMethodLabel(pm)}). Diese Rechnung dient als Nachweis.`),
+        { x, y: ry, size: 9, font: bold, color: rgb(0.12, 0.55, 0.24) }
       );
+      ry -= 14;
+    } else if (pm === "cash") {
+      page.drawText("Zahlungsart: Barzahlung vor Ort", { x, y: ry, size: 9, font: bold, color });
+      ry -= 12;
+    } else if (pm === "card") {
+      page.drawText("Zahlungsart: EC-/Kartenzahlung vor Ort", { x, y: ry, size: 9, font: bold, color });
+      ry -= 12;
+    } else if (pm === "sepa") {
+      page.drawText("Zahlungsart: SEPA-Lastschrift (Mandat liegt vor)", { x, y: ry, size: 9, font: bold, color });
+      ry -= 12;
+      if (doc.dueAt) {
+        page.drawText(s(`Einzug erfolgt am ${doc.dueAt.toLocaleDateString("de-DE")}.`), { x, y: ry, size: 9, font: body, color });
+        ry -= 12;
+      }
+    } else {
+      // bank_transfer default
+      if (doc.dueAt) {
+        page.drawText(s(`Bitte begleichen Sie den Betrag bis ${doc.dueAt.toLocaleDateString("de-DE")}:`), { x, y: ry, size: 9, font: body, color });
+      } else {
+        page.drawText("Bitte überweisen Sie den Betrag auf folgendes Konto:", { x, y: ry, size: 9, font: body, color });
+      }
+      ry -= 12;
+      if (doc.workshop.iban) {
+        page.drawText(
+          s(`${doc.workshop.bankName ?? "Bank"} - IBAN: ${doc.workshop.iban}${doc.workshop.bic ? ` - BIC: ${doc.workshop.bic}` : ""}`),
+          { x, y: ry, size: 9, font: body, color }
+        );
+        ry -= 12;
+      }
+      page.drawText(s(`Verwendungszweck: ${doc.number}`), { x, y: ry, size: 9, font: body, color });
       ry -= 12;
     }
-    page.drawText(s(`Verwendungszweck: ${doc.number}`), { x, y: ry, size: 9, font: body, color });
-    ry -= 12;
   } else {
     if (doc.dueAt) {
       page.drawText(s(`Dieses Angebot ist gültig bis ${doc.dueAt.toLocaleDateString("de-DE")}.`), { x, y: ry, size: 9, font: body, color });

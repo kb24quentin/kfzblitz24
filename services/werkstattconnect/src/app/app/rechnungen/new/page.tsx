@@ -32,7 +32,7 @@ export default async function NewInvoicePage({
     }),
     prisma.workshop.findUnique({
       where: { id: ctx.workshopId },
-      select: { hourlyRateCent: true, partsMarkupPercent: true },
+      select: { hourlyRateCent: true, partsMarkupPercent: true, invoicePaymentTermDays: true },
     }),
   ]);
 
@@ -67,6 +67,7 @@ export default async function NewInvoicePage({
         partsMarkupPercent={workshop?.partsMarkupPercent ?? 15}
         defaultCustomerId={customerId ?? ""}
         defaultVehicleId={vehicleId ?? ""}
+        defaultDueDays={workshop?.invoicePaymentTermDays ?? 14}
       />
     </WorkshopShell>
   );

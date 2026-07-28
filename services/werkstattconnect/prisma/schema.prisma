@@ -58,6 +58,10 @@ model Workshop {
   hourlyRateCent     Int     @default(9500) // stundenlohn in cent (95€ default)
   partsMarkupPercent Int     @default(15) // aufschlag auf einkaufspreise für teile (in %)
 
+  // Default-Fristen
+  invoicePaymentTermDays Int @default(14) // "fällig in X tagen" beim rechnung-anlegen
+  quoteValidityDays      Int @default(14) // "gültig für X tage" beim angebot-anlegen
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -291,6 +295,7 @@ model Invoice {
   totalVatCent    Int
   totalGrossCent  Int
   status          String    @default("draft") // 'draft' | 'sent' | 'paid' | 'cancelled'
+  paymentMethod   String    @default("bank_transfer") // 'bank_transfer' | 'cash' | 'card' | 'sepa'
   paidAt          DateTime?
   cancelledAt     DateTime?
   cancelledById   String? // FK auf Invoice.id (storno-rechnung)

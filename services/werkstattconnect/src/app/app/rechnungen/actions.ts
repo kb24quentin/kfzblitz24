@@ -32,6 +32,8 @@ export async function createInvoiceAction(formData: FormData) {
   const dueAtStr = str(formData.get("dueAt"));
   const notes = str(formData.get("notes"));
   const asDraft = String(formData.get("action") || "draft") === "draft";
+  const paymentMethod = String(formData.get("paymentMethod") || "bank_transfer");
+  const markPaid = String(formData.get("markPaid") || "") === "true";
   if (!customerId) throw new Error("Kunde fehlt");
   const cust = await prisma.customer.findUnique({ where: { id: customerId }, select: { workshopId: true } });
   if (!cust || cust.workshopId !== ctx.workshopId) throw new Error("Nicht erlaubt");
@@ -57,7 +59,9 @@ export async function createInvoiceAction(formData: FormData) {
       subtotalNetCent: totals.subtotalNetCent,
       totalVatCent: totals.totalVatCent,
       totalGrossCent: totals.totalGrossCent,
-      status: asDraft ? "draft" : "sent",
+      status: markPaid ? "paid" : asDraft ? "draft" : "sent",
+      paidAt: markPaid ? new Date() : null,
+      paymentMethod: ["bank_transfer", "cash", "card", "sepa"].includes(paymentMethod) ? paymentMethod : "bank_transfer",
       notes,
       createdBy: ctx.userId,
     },
@@ -114,6 +118,8 @@ async function generateAndCachePdf(invoiceId: string) {
     notes: inv.notes,
     mileageAtIssue: inv.mileageAtIssue,
     creatorName: inv.creator?.name ?? null,
+    paymentMethod: inv.paymentMethod,
+    paidAt: inv.paidAt,
     customer: inv.customer,
     vehicle: inv.vehicle,
     workshop: inv.workshop,
@@ -132,6 +138,8 @@ async function generateAndCachePdf(invoiceId: string) {
     notes: inv.notes,
     mileageAtIssue: inv.mileageAtIssue,
     creatorName: inv.creator?.name ?? null,
+    paymentMethod: inv.paymentMethod,
+    paidAt: inv.paidAt,
     customer: inv.customer,
     vehicle: inv.vehicle,
     workshop: inv.workshop,

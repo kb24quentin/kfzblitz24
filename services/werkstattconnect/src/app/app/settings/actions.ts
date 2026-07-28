@@ -81,9 +81,16 @@ export async function updatePricingAction(formData: FormData) {
   const rateStr = String(formData.get("hourlyRate") || "95,00");
   const rateCent = Math.max(0, Math.round(parseFloat(rateStr.replace(",", ".")) * 100 || 0));
   const markup = Math.max(0, Math.min(500, parseInt(String(formData.get("partsMarkupPercent") || "15"), 10)));
+  const paymentTerm = Math.max(0, Math.min(365, parseInt(String(formData.get("invoicePaymentTermDays") || "14"), 10)));
+  const quoteValidity = Math.max(0, Math.min(365, parseInt(String(formData.get("quoteValidityDays") || "14"), 10)));
   await prisma.workshop.update({
     where: { id: ctx.workshopId },
-    data: { hourlyRateCent: rateCent, partsMarkupPercent: markup },
+    data: {
+      hourlyRateCent: rateCent,
+      partsMarkupPercent: markup,
+      invoicePaymentTermDays: paymentTerm,
+      quoteValidityDays: quoteValidity,
+    },
   });
   revalidatePath("/app/settings");
 }

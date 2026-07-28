@@ -14,7 +14,9 @@ export type PdfDoc = {
   totalGrossCent: number;
   notes: string | null;
   mileageAtIssue: number | null;
-  creatorName: string | null; // wird nur angezeigt wenn workshop.showCreatorOnDocs === true
+  creatorName: string | null;
+  paymentMethod: string | null; // 'bank_transfer'|'cash'|'card'|'sepa'|null (nur bei invoice)
+  paidAt: Date | null;
   customer: {
     type: string;
     companyName: string | null;

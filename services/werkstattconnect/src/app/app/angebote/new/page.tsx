@@ -32,7 +32,7 @@ export default async function NewQuotePage({
     }),
     prisma.workshop.findUnique({
       where: { id: ctx.workshopId },
-      select: { hourlyRateCent: true, partsMarkupPercent: true },
+      select: { hourlyRateCent: true, partsMarkupPercent: true, quoteValidityDays: true },
     }),
   ]);
 
@@ -65,6 +65,7 @@ export default async function NewQuotePage({
         partsMarkupPercent={workshop?.partsMarkupPercent ?? 15}
         defaultCustomerId={customerId ?? ""}
         defaultVehicleId={vehicleId ?? ""}
+        defaultDueDays={workshop?.quoteValidityDays ?? 14}
       />
     </WorkshopShell>
   );

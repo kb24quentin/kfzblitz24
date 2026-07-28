@@ -54,7 +54,7 @@ function empty(kind: "labor" | "part"): Position {
 }
 
 export function DocComposer({
-  kind, // 'invoice' | 'quote' — nur cosmetic für labels
+  kind,
   action,
   customers,
   services,
@@ -62,6 +62,7 @@ export function DocComposer({
   partsMarkupPercent,
   defaultCustomerId,
   defaultVehicleId,
+  defaultDueDays,
 }: {
   kind: "invoice" | "quote";
   action: (fd: FormData) => Promise<void>;
@@ -71,13 +72,21 @@ export function DocComposer({
   partsMarkupPercent: number;
   defaultCustomerId: string;
   defaultVehicleId: string;
+  defaultDueDays?: number; // wenn gesetzt: due-at default = heute + N tage
 }) {
   const [customerId, setCustomerId] = useState(defaultCustomerId);
   const [vehicleId, setVehicleId] = useState(defaultVehicleId);
   const [mileageAtIssue, setMileageAtIssue] = useState("");
   const [positions, setPositions] = useState<Position[]>([]);
   const [notes, setNotes] = useState("");
-  const [dueAt, setDueAt] = useState("");
+  const [dueAt, setDueAt] = useState(() => {
+    if (!defaultDueDays) return "";
+    const d = new Date();
+    d.setDate(d.getDate() + defaultDueDays);
+    return d.toISOString().slice(0, 10);
+  });
+  const [paymentMethod, setPaymentMethod] = useState("bank_transfer");
+  const [markPaid, setMarkPaid] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
@@ -336,6 +345,53 @@ export function DocComposer({
         <h2 className="text-sm font-semibold text-slate-900 mb-4">
           {kind === "invoice" ? "Zahlung & Notizen" : "Gültigkeit & Notizen"}
         </h2>
+        <input type="hidden" name="paymentMethod" value={paymentMethod} />
+        <input type="hidden" name="markPaid" value={markPaid ? "true" : "false"} />
+
+        {kind === "invoice" && (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-slate-700 mb-1">Zahlungsart</label>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { value: "bank_transfer", label: "Überweisung", desc: "Standard, Fällig-Datum unten" },
+                { value: "cash", label: "Bar (vor Ort)", desc: "Direkt bezahlt" },
+                { value: "card", label: "EC / Karte", desc: "Direkt bezahlt" },
+                { value: "sepa", label: "SEPA-Lastschrift", desc: "Kunde hat Mandat" },
+              ].map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod(m.value);
+                    // Bar/Karte → default markPaid=true
+                    setMarkPaid(m.value === "cash" || m.value === "card");
+                  }}
+                  className={`p-2 text-left rounded-lg border ${
+                    paymentMethod === m.value
+                      ? "border-orange-500 bg-orange-50"
+                      : "border-slate-200 hover:border-slate-400"
+                  }`}
+                >
+                  <div className="text-xs font-semibold text-slate-900">{m.label}</div>
+                  <div className="text-[10px] text-slate-500">{m.desc}</div>
+                </button>
+              ))}
+            </div>
+            {(paymentMethod === "cash" || paymentMethod === "card") && (
+              <label className="flex items-center gap-2 mt-3 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs">
+                <input
+                  type="checkbox"
+                  checked={markPaid}
+                  onChange={(e) => setMarkPaid(e.target.checked)}
+                />
+                <span className="text-emerald-900">
+                  <strong>Bereits bezahlt</strong> — Rechnung dient nur als Nachweis, Status direkt „bezahlt"
+                </span>
+              </label>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -346,8 +402,12 @@ export function DocComposer({
               name={kind === "invoice" ? "dueAt" : "validUntil"}
               value={dueAt}
               onChange={(e) => setDueAt(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              disabled={markPaid}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100 disabled:text-slate-400"
             />
+            {defaultDueDays != null && !markPaid && (
+              <p className="text-xs text-slate-400 mt-1">Default: {defaultDueDays} Tage (in Einstellungen anpassen)</p>
+            )}
           </div>
         </div>
         <div className="mt-4">
