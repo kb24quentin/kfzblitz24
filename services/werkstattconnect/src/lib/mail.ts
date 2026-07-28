@@ -1,6 +1,14 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY || "");
+let _resend: Resend | null = null;
+function resend() {
+  if (!_resend) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error("RESEND_API_KEY nicht gesetzt");
+    _resend = new Resend(key);
+  }
+  return _resend;
+}
 
 const FROM_EMAIL = process.env.FROM_EMAIL || "service@kfzblitz24.de";
 const FROM_NAME = process.env.FROM_NAME || "WerkstattConnect";
@@ -53,7 +61,7 @@ export async function sendPasswordSetupMail({
     `Der Link ist 7 Tage gültig.`,
   ].join("\n");
 
-  return resend.emails.send({
+  return resend().emails.send({
     from: `${FROM_NAME} <${FROM_EMAIL}>`,
     to: [to],
     subject,
