@@ -50,8 +50,14 @@ export default async function KalenderPage({
     }),
     prisma.customer.findMany({
       where: { workshopId: ctx.workshopId },
-      select: { id: true, type: true, companyName: true, firstName: true, lastName: true },
-      include: { vehicles: { select: { id: true, brand: true, model: true, licensePlate: true } } },
+      select: {
+        id: true,
+        type: true,
+        companyName: true,
+        firstName: true,
+        lastName: true,
+        vehicles: { select: { id: true, brand: true, model: true, licensePlate: true } },
+      },
       orderBy: [{ lastName: "asc" }, { companyName: "asc" }],
       take: 500,
     }),
