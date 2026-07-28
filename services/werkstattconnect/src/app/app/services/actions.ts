@@ -106,5 +106,4 @@ export async function seedStandardCatalogAction() {
     await prisma.serviceItem.createMany({ data: toCreate });
   }
   revalidatePath("/app/services");
-  return { added: toCreate.length };
 }
