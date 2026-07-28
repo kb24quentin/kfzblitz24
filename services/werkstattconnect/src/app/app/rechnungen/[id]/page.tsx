@@ -112,50 +112,28 @@ export default async function InvoiceDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium">Position</th>
-                  <th className="text-right px-4 py-3 font-medium">Menge</th>
-                  <th className="text-right px-4 py-3 font-medium">Netto/Einh.</th>
-                  <th className="text-right px-4 py-3 font-medium">MwSt</th>
-                  <th className="text-right px-4 py-3 font-medium">Summe netto</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {positions.map((p, idx) => (
-                  <tr key={idx}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{p.name}</div>
-                      {p.description && <div className="text-xs text-slate-500 mt-0.5">{p.description}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm tabular-nums">
-                      {p.quantity.toLocaleString("de-DE")} {p.unit}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm tabular-nums">{formatEur(p.netPriceCent)}</td>
-                    <td className="px-4 py-3 text-right text-sm">{p.vatPercent} %</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatEur(p.netTotalCent)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-slate-200">
-                <tr>
-                  <td className="px-4 py-2 text-right text-sm text-slate-500" colSpan={4}>Zwischensumme netto</td>
-                  <td className="px-4 py-2 text-right font-medium tabular-nums">{formatEur(inv.subtotalNetCent)}</td>
-                </tr>
-                <tr>
-                  <td className="px-4 py-2 text-right text-sm text-slate-500" colSpan={4}>MwSt gesamt</td>
-                  <td className="px-4 py-2 text-right font-medium tabular-nums">{formatEur(inv.totalVatCent)}</td>
-                </tr>
-                <tr className="bg-orange-50">
-                  <td className="px-4 py-3 text-right text-sm font-semibold text-slate-700" colSpan={4}>Gesamtbetrag</td>
-                  <td className="px-4 py-3 text-right text-lg font-bold text-orange-700 tabular-nums">
-                    {formatEur(inv.totalGrossCent)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+          {(() => {
+            const labor = positions.filter((p) => p.kind === "labor");
+            const parts = positions.filter((p) => p.kind === "part");
+            return (
+              <>
+                {labor.length > 0 && <PositionsTable title="Arbeitsleistung" positions={labor} />}
+                {parts.length > 0 && <PositionsTable title="Ersatzteile / Material" positions={parts} />}
+                {labor.length === 0 && parts.length === 0 && positions.length > 0 && (
+                  <PositionsTable title="Positionen" positions={positions} />
+                )}
+              </>
+            );
+          })()}
+          <section className="bg-white border border-slate-200 rounded-xl p-6">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div />
+              <div className="text-right space-y-1">
+                <div><span className="text-slate-500">Netto:</span> <span className="font-medium ml-2 tabular-nums">{formatEur(inv.subtotalNetCent)}</span></div>
+                <div><span className="text-slate-500">MwSt:</span> <span className="font-medium ml-2 tabular-nums">{formatEur(inv.totalVatCent)}</span></div>
+                <div className="text-lg pt-1 border-t border-slate-200"><span className="text-slate-500">Brutto:</span> <span className="font-bold ml-2 text-orange-600 tabular-nums">{formatEur(inv.totalGrossCent)}</span></div>
+              </div>
+            </div>
           </section>
 
           {inv.notes && (
@@ -256,6 +234,32 @@ export default async function InvoiceDetailPage({
         </div>
       </div>
     </WorkshopShell>
+  );
+}
+
+function PositionsTable({ title, positions }: { title: string; positions: InvoicePosition[] }) {
+  return (
+    <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <header className="px-6 py-3 border-b border-slate-200 bg-slate-50">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+      </header>
+      <table className="w-full text-sm">
+        <tbody className="divide-y divide-slate-100">
+          {positions.map((p, idx) => (
+            <tr key={idx}>
+              <td className="px-4 py-3">
+                <div className="font-medium text-slate-900">{p.name}</div>
+                {p.description && <div className="text-xs text-slate-500 mt-0.5">{p.description}</div>}
+              </td>
+              <td className="px-4 py-3 text-right text-sm tabular-nums w-20">{p.quantity} {p.unit}</td>
+              <td className="px-4 py-3 text-right text-sm tabular-nums w-24">{formatEur(p.netPriceCent)}</td>
+              <td className="px-4 py-3 text-right text-sm w-14">{p.vatPercent}%</td>
+              <td className="px-4 py-3 text-right font-semibold text-sm tabular-nums w-24">{formatEur(p.netTotalCent)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 

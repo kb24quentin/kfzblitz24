@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Bell,
   FileText,
+  FileCheck,
   Settings,
   ListTree,
 } from "lucide-react";
@@ -17,6 +18,7 @@ type NavKey =
   | "kunden"
   | "kalender"
   | "reminders"
+  | "angebote"
   | "rechnungen"
   | "services"
   | "team"
@@ -46,6 +48,7 @@ export async function WorkshopShell({
     { key: "kunden", label: "Kunden", href: "/app/kunden", icon: <UserRound className="w-4 h-4" />, show: true },
     { key: "kalender", label: "Kalender", href: "/app/kalender", icon: <CalendarDays className="w-4 h-4" />, show: true },
     { key: "reminders", label: "Erinnerungen", href: "/app/reminders", icon: <Bell className="w-4 h-4" />, show: true },
+    { key: "angebote", label: "Angebote", href: "/app/angebote", icon: <FileCheck className="w-4 h-4" />, show: true },
     { key: "rechnungen", label: "Rechnungen", href: "/app/rechnungen", icon: <FileText className="w-4 h-4" />, show: true },
     { key: "services", label: "Leistungen", href: "/app/services", icon: <ListTree className="w-4 h-4" />, show: isAdmin },
     { key: "team", label: "Team", href: "/app/team", icon: <Users className="w-4 h-4" />, show: isAdmin },

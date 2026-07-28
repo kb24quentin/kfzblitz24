@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { buildInvoicePdf } from "@/lib/invoice-pdf";
+import { embedZugferdXml } from "@/lib/zugferd";
 import type { InvoicePosition } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function GET(
   let bytes: Uint8Array | Buffer | null = inv.pdfBytes;
   if (!bytes || bytes.length === 0) {
     const positions = inv.positions as unknown as InvoicePosition[];
-    const pdf = await buildInvoicePdf({
+    const raw = await buildInvoicePdf({
       invoiceNumber: inv.invoiceNumber,
       issuedAt: inv.issuedAt,
       dueAt: inv.dueAt,
@@ -34,6 +35,23 @@ export async function GET(
       totalVatCent: inv.totalVatCent,
       totalGrossCent: inv.totalGrossCent,
       notes: inv.notes,
+      mileageAtIssue: inv.mileageAtIssue,
+      customer: inv.customer,
+      vehicle: inv.vehicle,
+      workshop: inv.workshop,
+    });
+    const pdf = await embedZugferdXml(raw, {
+      kind: "invoice",
+      number: inv.invoiceNumber,
+      title: "Rechnung",
+      issuedAt: inv.issuedAt,
+      dueAt: inv.dueAt,
+      positions,
+      subtotalNetCent: inv.subtotalNetCent,
+      totalVatCent: inv.totalVatCent,
+      totalGrossCent: inv.totalGrossCent,
+      notes: inv.notes,
+      mileageAtIssue: inv.mileageAtIssue,
       customer: inv.customer,
       vehicle: inv.vehicle,
       workshop: inv.workshop,

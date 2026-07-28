@@ -23,6 +23,11 @@ function toDateInput(d?: Date | null) {
   return new Date(d).toISOString().slice(0, 10);
 }
 
+function toMonthInput(d?: Date | null) {
+  if (!d) return "";
+  return new Date(d).toISOString().slice(0, 7);
+}
+
 export function VehicleFormFields({ init }: { init?: Init }) {
   return (
     <div className="space-y-3">
@@ -70,8 +75,8 @@ export function VehicleFormFields({ init }: { init?: Init }) {
         <Field label="km-Stand" name="mileage" type="number" defaultValue={init?.mileage ?? ""} placeholder="42000" />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Nächste HU" name="nextTuev" type="date" defaultValue={toDateInput(init?.nextTuev)} />
-        <Field label="Nächste Wartung" name="nextInspection" type="date" defaultValue={toDateInput(init?.nextInspection)} />
+        <Field label="Nächste HU (Monat/Jahr)" name="nextTuev" type="month" defaultValue={toMonthInput(init?.nextTuev)} />
+        <Field label="Nächste Wartung (Monat/Jahr)" name="nextInspection" type="month" defaultValue={toMonthInput(init?.nextInspection)} />
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Notizen</label>

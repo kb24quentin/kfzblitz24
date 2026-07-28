@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { customerDisplayName } from "@/lib/customer-name";
+import { SearchableSelect } from "@/components/searchable-select";
 import { createReminderAction } from "./actions";
 
 type CustomerOpt = {
@@ -16,8 +17,20 @@ type CustomerOpt = {
 
 export function ReminderCreateButton({ customers }: { customers: CustomerOpt[] }) {
   const [open, setOpen] = useState(false);
-  const [selectedCustomerId, setSelectedCustomerId] = useState("");
-  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+  const [customerId, setCustomerId] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const selectedCustomer = customers.find((c) => c.id === customerId);
+
+  const customerOptions = customers.map((c) => ({
+    value: c.id,
+    label: customerDisplayName(c),
+    sublabel: c.type === "b2b" ? "B2B" : "B2C",
+  }));
+  const vehicleOptions = (selectedCustomer?.vehicles ?? []).map((v) => ({
+    value: v.id,
+    label: [v.brand, v.model].filter(Boolean).join(" ") || "Fahrzeug",
+    sublabel: v.licensePlate ?? undefined,
+  }));
 
   return (
     <>
@@ -39,32 +52,27 @@ export function ReminderCreateButton({ customers }: { customers: CustomerOpt[] }
               </button>
             </header>
             <form action={createReminderAction} className="p-5 space-y-3">
+              <input type="hidden" name="customerId" value={customerId} required />
+              <input type="hidden" name="vehicleId" value={vehicleId} />
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">Kunde *</label>
-                <select
-                  name="customerId"
+                <SearchableSelect
+                  options={customerOptions}
+                  value={customerId}
+                  onChange={(v) => { setCustomerId(v); setVehicleId(""); }}
+                  placeholder="Kunde suchen…"
                   required
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                >
-                  <option value="">Bitte wählen…</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>{customerDisplayName(c)}</option>
-                  ))}
-                </select>
+                />
               </div>
               {selectedCustomer && selectedCustomer.vehicles.length > 0 && (
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">Fahrzeug (optional)</label>
-                  <select name="vehicleId" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                    <option value="">—</option>
-                    {selectedCustomer.vehicles.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {[v.brand, v.model].filter(Boolean).join(" ")} {v.licensePlate ? `(${v.licensePlate})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    options={vehicleOptions}
+                    value={vehicleId}
+                    onChange={setVehicleId}
+                    placeholder="Fahrzeug suchen…"
+                  />
                 </div>
               )}
               <div>

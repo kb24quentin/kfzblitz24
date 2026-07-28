@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Car, Trash2 } from "lucide-react";
+import { ArrowLeft, Car, Trash2, BookOpenCheck, FileText, FileCheck } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireWorkshopUser } from "@/lib/admin-guard";
 import { customerDisplayName, vehicleDisplayName } from "@/lib/customer-name";
@@ -43,10 +43,36 @@ export default async function VehicleDetailPage({
           <ArrowLeft className="w-3.5 h-3.5" />
           {customerDisplayName(vehicle.customer)}
         </Link>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-          <Car className="w-6 h-6 text-orange-600" />
-          {vehicleDisplayName(vehicle)}
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+            <Car className="w-6 h-6 text-orange-600" />
+            {vehicleDisplayName(vehicle)}
+          </h1>
+          <div className="flex flex-wrap gap-2 justify-end">
+            <a
+              href={`/app/kunden/${id}/fahrzeuge/${vid}/wartungsheft`}
+              target="_blank"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-50"
+            >
+              <BookOpenCheck className="w-3.5 h-3.5" />
+              Wartungsheft-PDF
+            </a>
+            <Link
+              href={`/app/angebote/new?customerId=${id}&vehicleId=${vid}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-50"
+            >
+              <FileCheck className="w-3.5 h-3.5" />
+              Angebot
+            </Link>
+            <Link
+              href={`/app/rechnungen/new?customerId=${id}&vehicleId=${vid}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-semibold hover:bg-orange-700"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Rechnung
+            </Link>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -111,13 +137,13 @@ export default async function VehicleDetailPage({
               {vehicle.nextTuev && (
                 <div>
                   <dt className="text-xs text-slate-500">Nächste HU</dt>
-                  <dd className={overdueClass(vehicle.nextTuev)}>{vehicle.nextTuev.toLocaleDateString("de-DE")}</dd>
+                  <dd className={overdueClass(vehicle.nextTuev)}>{vehicle.nextTuev.toLocaleDateString("de-DE", { month: "2-digit", year: "numeric" })}</dd>
                 </div>
               )}
               {vehicle.nextInspection && (
                 <div>
                   <dt className="text-xs text-slate-500">Nächste Wartung</dt>
-                  <dd className={overdueClass(vehicle.nextInspection)}>{vehicle.nextInspection.toLocaleDateString("de-DE")}</dd>
+                  <dd className={overdueClass(vehicle.nextInspection)}>{vehicle.nextInspection.toLocaleDateString("de-DE", { month: "2-digit", year: "numeric" })}</dd>
                 </div>
               )}
             </dl>

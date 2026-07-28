@@ -5,8 +5,9 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireWorkshopUser } from "@/lib/admin-guard";
 import { nextInvoiceNumber } from "@/lib/invoice-number";
-import { calcPosition, parseEurToCent, sumPositions, type InvoicePosition } from "@/lib/money";
+import { calcPosition, parseEurToCent, sumPositions, type InvoicePosition, type PositionKind } from "@/lib/money";
 import { buildInvoicePdf } from "@/lib/invoice-pdf";
+import { embedZugferdXml } from "@/lib/zugferd";
 import { Resend } from "resend";
 
 function str(v: FormDataEntryValue | null) {
@@ -23,7 +24,8 @@ type PositionInput = {
   vatPercent: number;
 };
 
-function positionsFromFormData(formData: FormData): InvoicePosition[] {
+export function positionsFromFormData(formData: FormData): InvoicePosition[] {
+  const kinds = formData.getAll("pos_kind").map(String);
   const names = formData.getAll("pos_name").map(String);
   const descs = formData.getAll("pos_description").map(String);
   const qtys = formData.getAll("pos_quantity").map(String);
@@ -34,15 +36,17 @@ function positionsFromFormData(formData: FormData): InvoicePosition[] {
   for (let i = 0; i < names.length; i++) {
     const name = (names[i] || "").trim();
     if (!name) continue;
+    const kind: PositionKind = kinds[i] === "part" ? "part" : "labor";
     const quantity = parseFloat((qtys[i] || "1").replace(",", "."));
     const netPriceCent = parseEurToCent(prices[i] || "0");
     const vatPercent = parseInt(vats[i] || "19", 10);
     const { netTotalCent, vatTotalCent, grossTotalCent } = calcPosition(quantity, netPriceCent, vatPercent);
     out.push({
+      kind,
       name,
       description: (descs[i] || "").trim() || undefined,
       quantity,
-      unit: units[i] || "Stk",
+      unit: units[i] || (kind === "labor" ? "Std" : "Stk"),
       netPriceCent,
       vatPercent,
       netTotalCent,
@@ -68,6 +72,9 @@ export async function createInvoiceAction(formData: FormData) {
   if (positions.length === 0) throw new Error("Mindestens eine Position erforderlich");
   const totals = sumPositions(positions);
 
+  const mileageRaw = str(formData.get("mileageAtIssue"));
+  const mileageAtIssue = mileageRaw ? parseInt(mileageRaw, 10) : null;
+
   const invoiceNumber = await nextInvoiceNumber(ctx.workshopId);
   const created = await prisma.invoice.create({
     data: {
@@ -75,6 +82,7 @@ export async function createInvoiceAction(formData: FormData) {
       invoiceNumber,
       customerId,
       vehicleId,
+      mileageAtIssue,
       issuedAt: new Date(),
       dueAt: dueAtStr ? new Date(dueAtStr) : null,
       positions: positions as unknown as object[],
@@ -86,6 +94,17 @@ export async function createInvoiceAction(formData: FormData) {
       createdBy: ctx.userId,
     },
   });
+
+  // km auf Vehicle spiegeln wenn höher als bisher
+  if (vehicleId && mileageAtIssue) {
+    const v = await prisma.vehicle.findUnique({ where: { id: vehicleId }, select: { mileage: true } });
+    if (v && (v.mileage == null || mileageAtIssue > v.mileage)) {
+      await prisma.vehicle.update({
+        where: { id: vehicleId },
+        data: { mileage: mileageAtIssue, mileageUpdatedAt: new Date() },
+      });
+    }
+  }
 
   await prisma.invoiceJournalEntry.create({
     data: {
@@ -116,7 +135,7 @@ async function generateAndCachePdf(invoiceId: string) {
   });
   if (!inv) throw new Error("Rechnung nicht gefunden");
   const positions = inv.positions as unknown as InvoicePosition[];
-  const pdf = await buildInvoicePdf({
+  const rawPdf = await buildInvoicePdf({
     invoiceNumber: inv.invoiceNumber,
     issuedAt: inv.issuedAt,
     dueAt: inv.dueAt,
@@ -125,6 +144,24 @@ async function generateAndCachePdf(invoiceId: string) {
     totalVatCent: inv.totalVatCent,
     totalGrossCent: inv.totalGrossCent,
     notes: inv.notes,
+    mileageAtIssue: inv.mileageAtIssue,
+    customer: inv.customer,
+    vehicle: inv.vehicle,
+    workshop: inv.workshop,
+  });
+  // ZUGFeRD-XML einbetten (Factur-X BASIC)
+  const pdf = await embedZugferdXml(rawPdf, {
+    kind: "invoice",
+    number: inv.invoiceNumber,
+    title: "Rechnung",
+    issuedAt: inv.issuedAt,
+    dueAt: inv.dueAt,
+    positions,
+    subtotalNetCent: inv.subtotalNetCent,
+    totalVatCent: inv.totalVatCent,
+    totalGrossCent: inv.totalGrossCent,
+    notes: inv.notes,
+    mileageAtIssue: inv.mileageAtIssue,
     customer: inv.customer,
     vehicle: inv.vehicle,
     workshop: inv.workshop,

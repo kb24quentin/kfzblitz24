@@ -107,7 +107,7 @@ export default async function CustomerDetailPage({
                           {v.fuelType && <span className="capitalize">{v.fuelType}</span>}
                           {v.nextTuev && (
                             <span className={overdueClass(v.nextTuev)}>
-                              HU: {v.nextTuev.toLocaleDateString("de-DE")}
+                              HU: {v.nextTuev.toLocaleDateString("de-DE", { month: "2-digit", year: "numeric" })}
                             </span>
                           )}
                         </div>

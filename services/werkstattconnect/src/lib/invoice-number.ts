@@ -29,3 +29,27 @@ export async function nextInvoiceNumber(workshopId: string): Promise<string> {
     return `${prefix}${yy}-${String(nextSeq).padStart(4, "0")}`;
   });
 }
+
+/**
+ * Gapless quote-number analog invoice-number, aber unter quotePrefix/quoteNumber*.
+ */
+export async function nextQuoteNumber(workshopId: string): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const workshop = await tx.workshop.findUnique({
+      where: { id: workshopId },
+      select: { quotePrefix: true, quoteNumberYear: true, quoteNumberLast: true },
+    });
+    if (!workshop) throw new Error("Werkstatt nicht gefunden");
+    const now = new Date();
+    const year = now.getFullYear();
+    const yy = String(year).slice(-2);
+    const nextSeq =
+      workshop.quoteNumberYear === year ? workshop.quoteNumberLast + 1 : 1;
+    await tx.workshop.update({
+      where: { id: workshopId },
+      data: { quoteNumberYear: year, quoteNumberLast: nextSeq },
+    });
+    const prefix = workshop.quotePrefix || "AN-";
+    return `${prefix}${yy}-${String(nextSeq).padStart(4, "0")}`;
+  });
+}

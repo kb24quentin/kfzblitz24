@@ -26,11 +26,16 @@ model Workshop {
   plan         String   @default("free")
   active       Boolean  @default(true)
 
-  // Briefpapier / Corporate Identity (Phase 5)
+  // Briefpapier / Corporate Identity (Phase 5+6)
   letterheadLogo     Bytes? // optionales logo für PDFs
   letterheadLogoMime String?
   brandPrimary       String? // hex-color für PDF-akzente
-  brandFooterText    String? // freitext-footer auf rechnung
+  brandAccent        String? // sekundär-color (z.B. für sidebar-templates)
+  brandFooterText    String? // legacy freitext-footer (fallback wenn cols leer)
+  footerCol1         String? // spalte 1 im 3-spalten-footer (z.B. firma+adresse)
+  footerCol2         String? // spalte 2 (z.B. kontakt: tel/email/web)
+  footerCol3         String? // spalte 3 (z.B. bank: iban/bic/inhaber)
+  letterheadTemplate String  @default("modern-orange")
   iban               String?
   bic                String?
   bankName           String?
@@ -39,6 +44,14 @@ model Workshop {
   invoicePrefix      String  @default("RE-")
   invoiceNumberYear  Int?
   invoiceNumberLast  Int     @default(0)
+  // Angebots-nummerierung (nicht GoBD-relevant — trotzdem gapless für ordnung)
+  quotePrefix        String  @default("AN-")
+  quoteNumberYear    Int?
+  quoteNumberLast    Int     @default(0)
+
+  // Preis-basics
+  hourlyRateCent     Int     @default(9500) // stundenlohn in cent (95€ default)
+  partsMarkupPercent Int     @default(15) // aufschlag auf einkaufspreise für teile (in %)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -51,6 +64,7 @@ model Workshop {
   services     ServiceItem[]
   invoices     Invoice[]
   invoiceJournal InvoiceJournalEntry[]
+  quotes       Quote[]
 }
 
 /**
@@ -72,6 +86,7 @@ model WorkshopUser {
   workshop     Workshop      @relation(fields: [workshopId], references: [id], onDelete: Cascade)
   appointments Appointment[] @relation("MechanicAppointments")
   invoices     Invoice[]     @relation("InvoiceCreator")
+  quotes       Quote[]       @relation("QuoteCreator")
 
   @@index([workshopId])
 }
@@ -117,6 +132,7 @@ model Customer {
   appointments Appointment[]
   reminders    Reminder[]
   invoices     Invoice[]
+  quotes       Quote[]
 
   @@index([workshopId])
   @@index([workshopId, lastName])
@@ -155,6 +171,7 @@ model Vehicle {
   appointments Appointment[]
   reminders    Reminder[]
   invoices     Invoice[]
+  quotes       Quote[]
 
   @@index([workshopId])
   @@index([customerId])
@@ -217,13 +234,24 @@ model Reminder {
  * Service-Katalog der Werkstatt (Ölwechsel, HU, Räderwechsel, ...).
  * netPrice in cent gespeichert um float-fehler zu vermeiden.
  */
+/**
+ * Service-Katalog. Zwei benutzungsmodi:
+ *  1. Klassisch: fester nettoPreis wird direkt genommen (netPriceCent gesetzt)
+ *  2. Stundenbasiert (default für Werkstatt-arbeiten): laborHours × workshop.hourlyRate
+ *     wird zur laufzeit berechnet (laborHours gesetzt, netPriceCent = 0/null-ähnlich)
+ *
+ * Die default-liste (siehe prisma/seed.js catalog-section) füllt für jede neue
+ * werkstatt ~50 standard-Kfz-arbeiten mit laborHours ein.
+ */
 model ServiceItem {
   id           String   @id @default(cuid())
   workshopId   String
+  category     String?  // z.B. 'Wartung' | 'Bremsen' | 'Reifen' | 'Öl/Filter' | 'Diagnose' | 'Elektrik'
   name         String
   description  String?
-  netPriceCent Int // preis in cent
-  vatPercent   Int      @default(19) // 19 oder 7
+  laborHours   Float? // arbeitsstunden — wenn gesetzt → netPrice = laborHours × hourlyRate
+  netPriceCent Int      @default(0) // fester nettopreis, wenn laborHours=null
+  vatPercent   Int      @default(19)
   unit         String   @default("Stk") // 'Stk' | 'Std' | 'Pauschal'
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -232,6 +260,7 @@ model ServiceItem {
   workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
 
   @@index([workshopId, active])
+  @@index([workshopId, category])
 }
 
 /**
@@ -248,6 +277,7 @@ model Invoice {
   invoiceNumber   String    @unique
   customerId      String
   vehicleId       String?
+  mileageAtIssue  Int? // km-stand zum rechnungszeitpunkt (wird auf vehicle.mileage gespiegelt)
   issuedAt        DateTime  @default(now())
   dueAt           DateTime?
   positions       Json // [{ name, description?, quantity, unit, netPriceCent, vatPercent, netTotalCent, vatTotalCent, grossTotalCent }]
@@ -269,6 +299,45 @@ model Invoice {
   vehicle       Vehicle?              @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   creator       WorkshopUser?         @relation("InvoiceCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   journalEntries InvoiceJournalEntry[]
+  fromQuotes    Quote[]               @relation("QuoteConvertedToInvoice")
+
+  @@index([workshopId, issuedAt])
+  @@index([workshopId, status])
+}
+
+/**
+ * Angebot — vor-rechnung, kein GoBD-zwang aber gapless-numbering für ordnung.
+ * Kann in eine rechnung "convertiert" werden (via convertedToInvoiceId ref).
+ */
+model Quote {
+  id                    String    @id @default(cuid())
+  workshopId            String
+  quoteNumber           String    @unique
+  customerId            String
+  vehicleId             String?
+  mileageAtIssue        Int?
+  issuedAt              DateTime  @default(now())
+  validUntil            DateTime?
+  positions             Json
+  subtotalNetCent       Int
+  totalVatCent          Int
+  totalGrossCent        Int
+  status                String    @default("draft") // 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted' | 'expired'
+  acceptedAt            DateTime?
+  rejectedAt            DateTime?
+  convertedAt           DateTime?
+  convertedToInvoiceId  String?
+  notes                 String?
+  createdBy             String?
+  pdfBytes              Bytes?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  workshop            Workshop      @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer            Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  vehicle             Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  creator             WorkshopUser? @relation("QuoteCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  convertedToInvoice  Invoice?      @relation("QuoteConvertedToInvoice", fields: [convertedToInvoiceId], references: [id], onDelete: SetNull)
 
   @@index([workshopId, issuedAt])
   @@index([workshopId, status])

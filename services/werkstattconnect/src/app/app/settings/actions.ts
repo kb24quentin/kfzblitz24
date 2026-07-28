@@ -59,7 +59,12 @@ export async function updateBrandingAction(formData: FormData) {
     where: { id: ctx.workshopId },
     data: {
       brandPrimary: str(formData.get("brandPrimary")),
+      brandAccent: str(formData.get("brandAccent")),
       brandFooterText: str(formData.get("brandFooterText")),
+      footerCol1: str(formData.get("footerCol1")),
+      footerCol2: str(formData.get("footerCol2")),
+      footerCol3: str(formData.get("footerCol3")),
+      letterheadTemplate: String(formData.get("letterheadTemplate") || "modern-orange"),
       ...(clearLogo
         ? { letterheadLogo: null, letterheadLogoMime: null }
         : logoBytes
@@ -67,6 +72,25 @@ export async function updateBrandingAction(formData: FormData) {
           : {}),
     },
   });
+  revalidatePath("/app/settings");
+}
+
+export async function updatePricingAction(formData: FormData) {
+  const ctx = await requireWorkshopAdmin();
+  const rateStr = String(formData.get("hourlyRate") || "95,00");
+  const rateCent = Math.max(0, Math.round(parseFloat(rateStr.replace(",", ".")) * 100 || 0));
+  const markup = Math.max(0, Math.min(500, parseInt(String(formData.get("partsMarkupPercent") || "15"), 10)));
+  await prisma.workshop.update({
+    where: { id: ctx.workshopId },
+    data: { hourlyRateCent: rateCent, partsMarkupPercent: markup },
+  });
+  revalidatePath("/app/settings");
+}
+
+export async function updateQuotePrefixAction(formData: FormData) {
+  const ctx = await requireWorkshopAdmin();
+  const prefix = String(formData.get("quotePrefix") || "AN-").trim().slice(0, 8) || "AN-";
+  await prisma.workshop.update({ where: { id: ctx.workshopId }, data: { quotePrefix: prefix } });
   revalidatePath("/app/settings");
 }
 

@@ -1,13 +1,28 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarClock, Trash2 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireWorkshopUser } from "@/lib/admin-guard";
 import { customerDisplayName, vehicleDisplayName } from "@/lib/customer-name";
 import { WorkshopShell } from "../../shell";
-import { deleteAppointmentAction, updateAppointmentStatusAction } from "../actions";
+import {
+  deleteAppointmentAction,
+  rescheduleAppointmentAction,
+  updateAppointmentDetailsAction,
+  updateAppointmentStatusAction,
+} from "../actions";
 
 export const dynamic = "force-dynamic";
+
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+function toDateStr(d: Date) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function toTimeStr(d: Date) {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default async function AppointmentDetailPage({
   params,
@@ -16,10 +31,17 @@ export default async function AppointmentDetailPage({
 }) {
   const ctx = await requireWorkshopUser();
   const { id } = await params;
-  const a = await prisma.appointment.findUnique({
-    where: { id },
-    include: { customer: true, vehicle: true, mechanic: true },
-  });
+  const [a, mechanics] = await Promise.all([
+    prisma.appointment.findUnique({
+      where: { id },
+      include: { customer: true, vehicle: true, mechanic: true },
+    }),
+    prisma.workshopUser.findMany({
+      where: { workshopId: ctx.workshopId, active: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
   if (!a || a.workshopId !== ctx.workshopId) notFound();
 
   return (
@@ -39,10 +61,57 @@ export default async function AppointmentDetailPage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <section className="bg-white border border-slate-200 rounded-xl p-6">
-            <h2 className="text-sm font-semibold text-slate-900 mb-3">Beschreibung</h2>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap">
-              {a.description || <span className="text-slate-400">Keine Beschreibung</span>}
-            </p>
+            <h2 className="text-sm font-semibold text-slate-900 mb-4">Bearbeiten</h2>
+            <form action={updateAppointmentDetailsAction} className="space-y-3">
+              <input type="hidden" name="id" value={a.id} />
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Titel</label>
+                <input name="title" defaultValue={a.title} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Beschreibung</label>
+                <textarea name="description" rows={3} defaultValue={a.description ?? ""} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Mechaniker</label>
+                <select name="mechanicId" defaultValue={a.mechanicId ?? ""} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                  <option value="">—</option>
+                  {mechanics.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button type="submit" className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700">
+                Speichern
+              </button>
+            </form>
+          </section>
+
+          <section className="bg-white border border-slate-200 rounded-xl p-6">
+            <h2 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <CalendarClock className="w-4 h-4" />
+              Termin verschieben
+            </h2>
+            <form action={rescheduleAppointmentAction} className="grid grid-cols-3 gap-3">
+              <input type="hidden" name="id" value={a.id} />
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Datum</label>
+                <input type="date" name="date" required defaultValue={toDateStr(a.startsAt)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Start</label>
+                <input type="time" name="startTime" required defaultValue={toTimeStr(a.startsAt)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Ende</label>
+                <input type="time" name="endTime" required defaultValue={toTimeStr(a.endsAt)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              </div>
+              <div className="col-span-3">
+                <button type="submit" className="w-full px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800">
+                  Termin verschieben
+                </button>
+              </div>
+            </form>
           </section>
 
           <section className="bg-white border border-slate-200 rounded-xl p-6">
@@ -88,16 +157,8 @@ export default async function AppointmentDetailPage({
                 {vehicleDisplayName(a.vehicle)}
               </Link>
               {a.vehicle.mileage != null && (
-                <div className="text-xs text-slate-500 mt-1">
-                  km: {a.vehicle.mileage.toLocaleString("de-DE")}
-                </div>
+                <div className="text-xs text-slate-500 mt-1">km: {a.vehicle.mileage.toLocaleString("de-DE")}</div>
               )}
-            </section>
-          )}
-          {a.mechanic && (
-            <section className="bg-white border border-slate-200 rounded-xl p-5">
-              <h2 className="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">Mechaniker</h2>
-              <div className="text-sm font-medium text-slate-900">{a.mechanic.name}</div>
             </section>
           )}
           <details className="bg-white border border-red-200 rounded-xl">

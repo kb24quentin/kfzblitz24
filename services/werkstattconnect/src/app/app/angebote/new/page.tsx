@@ -4,11 +4,11 @@ import { prisma } from "@/lib/db";
 import { requireWorkshopUser } from "@/lib/admin-guard";
 import { WorkshopShell } from "../../shell";
 import { DocComposer } from "@/components/doc-composer";
-import { createInvoiceAction } from "../actions";
+import { createQuoteAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewInvoicePage({
+export default async function NewQuotePage({
   searchParams,
 }: {
   searchParams: Promise<{ customerId?: string; vehicleId?: string }>;
@@ -37,20 +37,18 @@ export default async function NewInvoicePage({
   ]);
 
   return (
-    <WorkshopShell current="rechnungen">
+    <WorkshopShell current="angebote">
       <div className="mb-6">
-        <Link href="/app/rechnungen" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 mb-2">
+        <Link href="/app/angebote" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900 mb-2">
           <ArrowLeft className="w-3.5 h-3.5" />
           Zurück
         </Link>
-        <h1 className="text-2xl font-bold text-slate-900">Neue Rechnung</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Nach dem Speichern wird eine fortlaufende Rechnungsnummer vergeben (GoBD) + ZUGFeRD-XML ins PDF eingebettet.
-        </p>
+        <h1 className="text-2xl font-bold text-slate-900">Neues Angebot</h1>
+        <p className="text-sm text-slate-500 mt-1">Angebote sind unverbindliche Vorabschätzungen — später mit einem Klick in Rechnung umwandeln.</p>
       </div>
       <DocComposer
-        kind="invoice"
-        action={createInvoiceAction}
+        kind="quote"
+        action={createQuoteAction}
         customers={customers}
         services={services}
         hourlyRateCent={workshop?.hourlyRateCent ?? 9500}

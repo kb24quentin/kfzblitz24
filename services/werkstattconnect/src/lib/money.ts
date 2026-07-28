@@ -18,7 +18,10 @@ export function centToFloat(cent: number) {
   return cent / 100;
 }
 
+export type PositionKind = "labor" | "part";
+
 export type InvoicePosition = {
+  kind: PositionKind; // 'labor' = arbeitsleistung, 'part' = teil
   name: string;
   description?: string;
   quantity: number;
@@ -39,6 +42,28 @@ export function calcPosition(
   const vatTotalCent = Math.round((netTotalCent * vatPercent) / 100);
   const grossTotalCent = netTotalCent + vatTotalCent;
   return { netTotalCent, vatTotalCent, grossTotalCent };
+}
+
+/**
+ * Berechnet den effektiven netto-preis in cent für eine ServiceItem-position.
+ * Wenn laborHours gesetzt → laborHours × hourlyRate.
+ * Sonst netPriceCent (fester preis).
+ */
+export function serviceItemPriceCent(
+  item: { laborHours: number | null; netPriceCent: number },
+  hourlyRateCent: number
+): number {
+  if (item.laborHours && item.laborHours > 0) {
+    return Math.round(item.laborHours * hourlyRateCent);
+  }
+  return item.netPriceCent;
+}
+
+/**
+ * Wendet parts-markup an: einkaufspreis × (1 + markupPercent/100) → verkaufspreis
+ */
+export function applyPartsMarkup(purchasePriceCent: number, markupPercent: number): number {
+  return Math.round(purchasePriceCent * (1 + markupPercent / 100));
 }
 
 export function sumPositions(positions: InvoicePosition[]) {

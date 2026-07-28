@@ -59,7 +59,7 @@ export default async function KalenderPage({
         vehicles: { select: { id: true, brand: true, model: true, licensePlate: true } },
       },
       orderBy: [{ lastName: "asc" }, { companyName: "asc" }],
-      take: 500,
+      take: 1000,
     }),
     prisma.workshopUser.findMany({
       where: { workshopId: ctx.workshopId, active: true },

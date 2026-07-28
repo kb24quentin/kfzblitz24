@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireKbAdmin } from "@/lib/admin-guard";
 import { uniqueWorkshopSlug } from "@/lib/slug";
 import { sendPasswordSetupMail } from "@/lib/mail";
+import { STANDARD_CATALOG } from "@/lib/service-catalog-seed";
 
 function newToken() {
   return randomBytes(24).toString("hex");
@@ -71,6 +72,25 @@ export async function createWorkshopAction(formData: FormData) {
       },
     },
   });
+
+  // Standard-Katalog auto-seed (kann später via /app/services erweitert werden)
+  try {
+    await prisma.serviceItem.createMany({
+      data: STANDARD_CATALOG.map((c) => ({
+        workshopId: workshop.id,
+        category: c.category,
+        name: c.name,
+        description: c.description ?? null,
+        laborHours: c.laborHours,
+        netPriceCent: 0,
+        vatPercent: 19,
+        unit: "Std",
+        active: true,
+      })),
+    });
+  } catch (e) {
+    console.error("[createWorkshop] catalog-seed failed", e);
+  }
 
   try {
     await sendPasswordSetupMail({

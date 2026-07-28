@@ -1,0 +1,513 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Plus, Trash2, Wrench, Package } from "lucide-react";
+import { SearchableSelect, type Option } from "./searchable-select";
+import { customerDisplayName } from "@/lib/customer-name";
+import { formatEur, calcPosition, parseEurToCent } from "@/lib/money";
+
+export type CustomerOpt = {
+  id: string;
+  type: string;
+  companyName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  vehicles: { id: string; brand: string | null; model: string | null; licensePlate: string | null; mileage: number | null }[];
+};
+
+export type ServiceOpt = {
+  id: string;
+  category: string | null;
+  name: string;
+  description: string | null;
+  laborHours: number | null;
+  netPriceCent: number;
+  vatPercent: number;
+  unit: string;
+};
+
+type Position = {
+  key: string;
+  kind: "labor" | "part";
+  name: string;
+  description: string;
+  quantity: string;
+  unit: string;
+  netPrice: string;
+  vatPercent: number;
+};
+
+function empty(kind: "labor" | "part"): Position {
+  return {
+    key: Math.random().toString(36).slice(2),
+    kind,
+    name: "",
+    description: "",
+    quantity: "1",
+    unit: kind === "labor" ? "Std" : "Stk",
+    netPrice: "0,00",
+    vatPercent: 19,
+  };
+}
+
+export function DocComposer({
+  kind, // 'invoice' | 'quote' — nur cosmetic für labels
+  action,
+  customers,
+  services,
+  hourlyRateCent,
+  partsMarkupPercent,
+  defaultCustomerId,
+  defaultVehicleId,
+}: {
+  kind: "invoice" | "quote";
+  action: (fd: FormData) => Promise<void>;
+  customers: CustomerOpt[];
+  services: ServiceOpt[];
+  hourlyRateCent: number;
+  partsMarkupPercent: number;
+  defaultCustomerId: string;
+  defaultVehicleId: string;
+}) {
+  const [customerId, setCustomerId] = useState(defaultCustomerId);
+  const [vehicleId, setVehicleId] = useState(defaultVehicleId);
+  const [mileageAtIssue, setMileageAtIssue] = useState("");
+  const [positions, setPositions] = useState<Position[]>([empty("labor"), empty("part")]);
+  const [notes, setNotes] = useState("");
+  const [dueAt, setDueAt] = useState("");
+
+  const selectedCustomer = customers.find((c) => c.id === customerId);
+  const selectedVehicle = selectedCustomer?.vehicles.find((v) => v.id === vehicleId);
+
+  const customerOptions: Option[] = customers.map((c) => ({
+    value: c.id,
+    label: customerDisplayName(c),
+    sublabel: [c.type === "b2b" ? "B2B" : "B2C", c.email].filter(Boolean).join(" · "),
+  }));
+  const vehicleOptions: Option[] = (selectedCustomer?.vehicles ?? []).map((v) => ({
+    value: v.id,
+    label: [v.brand, v.model].filter(Boolean).join(" ") || "Fahrzeug",
+    sublabel: [v.licensePlate, v.mileage != null ? `${v.mileage.toLocaleString("de-DE")} km` : null].filter(Boolean).join(" · "),
+  }));
+
+  const laborPositions = positions.filter((p) => p.kind === "labor");
+  const partPositions = positions.filter((p) => p.kind === "part");
+
+  const totals = useMemo(() => {
+    return positions.reduce(
+      (acc, p) => {
+        const qty = parseFloat(p.quantity.replace(",", ".")) || 0;
+        const netCent = parseEurToCent(p.netPrice);
+        const c = calcPosition(qty, netCent, p.vatPercent);
+        return { net: acc.net + c.netTotalCent, vat: acc.vat + c.vatTotalCent, gross: acc.gross + c.grossTotalCent };
+      },
+      { net: 0, vat: 0, gross: 0 }
+    );
+  }, [positions]);
+
+  function addPosition(k: "labor" | "part") {
+    setPositions((p) => [...p, empty(k)]);
+  }
+  function removePosition(key: string) {
+    setPositions((p) => p.filter((x) => x.key !== key));
+  }
+  function update(key: string, patch: Partial<Position>) {
+    setPositions((p) => p.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+  }
+  function loadService(key: string, s: ServiceOpt) {
+    const effectivePriceCent =
+      s.laborHours && s.laborHours > 0 ? Math.round(s.laborHours * hourlyRateCent) : s.netPriceCent;
+    const qtyForLabor = s.laborHours && s.laborHours > 0 ? String(s.laborHours).replace(".", ",") : "1";
+    const isLaborItem = s.laborHours != null && s.laborHours > 0;
+    update(key, {
+      kind: isLaborItem ? "labor" : positions.find((p) => p.key === key)?.kind ?? "labor",
+      name: s.name,
+      description: s.description ?? "",
+      unit: isLaborItem ? "Std" : s.unit,
+      quantity: isLaborItem ? "1" : "1",
+      netPrice: isLaborItem
+        ? (hourlyRateCent / 100).toFixed(2).replace(".", ",")
+        : (s.netPriceCent / 100).toFixed(2).replace(".", ","),
+      vatPercent: s.vatPercent,
+    });
+    // Für Stunden-basierte services setzen wir menge = laborHours
+    if (isLaborItem && s.laborHours) {
+      setPositions((prev) => prev.map((p) => (p.key === key ? { ...p, quantity: String(s.laborHours).replace(".", ",") } : p)));
+    }
+  }
+
+  return (
+    <form action={action} className="space-y-6">
+      <input type="hidden" name="customerId" value={customerId} />
+      <input type="hidden" name="vehicleId" value={vehicleId} />
+      <input type="hidden" name="mileageAtIssue" value={mileageAtIssue} />
+
+      <section className="bg-white border border-slate-200 rounded-xl p-6">
+        <h2 className="text-sm font-semibold text-slate-900 mb-4">Kunde &amp; Fahrzeug</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Kunde *</label>
+            <SearchableSelect
+              options={customerOptions}
+              value={customerId}
+              onChange={(v) => {
+                setCustomerId(v);
+                setVehicleId("");
+                setMileageAtIssue("");
+              }}
+              placeholder="Kunde suchen…"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Fahrzeug</label>
+            <SearchableSelect
+              options={vehicleOptions}
+              value={vehicleId}
+              onChange={(v) => {
+                setVehicleId(v);
+                const veh = selectedCustomer?.vehicles.find((x) => x.id === v);
+                if (veh?.mileage != null) setMileageAtIssue(String(veh.mileage));
+              }}
+              disabled={!selectedCustomer}
+              placeholder={selectedCustomer ? "Fahrzeug suchen…" : "Zuerst Kunde wählen"}
+              emptyText="Kein Fahrzeug beim Kunden"
+            />
+          </div>
+        </div>
+        {selectedVehicle && (
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                km-Stand jetzt (aktualisiert das Fahrzeug automatisch)
+              </label>
+              <input
+                type="number"
+                value={mileageAtIssue}
+                onChange={(e) => setMileageAtIssue(e.target.value)}
+                placeholder={selectedVehicle.mileage != null ? String(selectedVehicle.mileage) : "z.B. 84500"}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              />
+              {selectedVehicle.mileage != null && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Bisher: {selectedVehicle.mileage.toLocaleString("de-DE")} km
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="bg-white border border-slate-200 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Arbeitsleistung</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Stundenlohn: <strong>{formatEur(hourlyRateCent)}/Std</strong> — änderbar in Einstellungen
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => addPosition("labor")}
+            className="inline-flex items-center gap-1 px-2 py-1 border border-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-50"
+          >
+            <Plus className="w-3 h-3" />
+            Arbeit
+          </button>
+        </div>
+        {laborPositions.length === 0 && (
+          <p className="text-xs text-slate-400 italic mb-2">Keine Arbeitsposition.</p>
+        )}
+        {laborPositions.map((p, idx) => (
+          <PositionRow
+            key={p.key}
+            p={p}
+            idx={idx}
+            services={services.filter((s) => s.laborHours != null && s.laborHours > 0)}
+            onChange={(patch) => update(p.key, patch)}
+            onRemove={() => removePosition(p.key)}
+            onLoadService={(s) => loadService(p.key, s)}
+            iconColor="text-blue-500"
+            icon={<Wrench className="w-3 h-3" />}
+          />
+        ))}
+        <input type="hidden" />
+        {laborPositions.map((p) => (
+          <HiddenFields key={`hf-${p.key}`} p={p} />
+        ))}
+      </section>
+
+      <section className="bg-white border border-slate-200 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Ersatzteile / Material</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Einkaufspreis + {partsMarkupPercent}% Aufschlag (änderbar in Einstellungen)
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => addPosition("part")}
+            className="inline-flex items-center gap-1 px-2 py-1 border border-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-50"
+          >
+            <Plus className="w-3 h-3" />
+            Teil
+          </button>
+        </div>
+        {partPositions.length === 0 && (
+          <p className="text-xs text-slate-400 italic mb-2">Keine Teile-Position.</p>
+        )}
+        {partPositions.map((p, idx) => (
+          <PositionRow
+            key={p.key}
+            p={p}
+            idx={idx}
+            services={services.filter((s) => !s.laborHours && s.netPriceCent > 0)}
+            onChange={(patch) => update(p.key, patch)}
+            onRemove={() => removePosition(p.key)}
+            onLoadService={(s) => loadService(p.key, s)}
+            iconColor="text-emerald-500"
+            icon={<Package className="w-3 h-3" />}
+            partsMarkupPercent={partsMarkupPercent}
+          />
+        ))}
+        {partPositions.map((p) => (
+          <HiddenFields key={`hf-${p.key}`} p={p} />
+        ))}
+      </section>
+
+      <section className="bg-white border border-slate-200 rounded-xl p-6">
+        <h2 className="text-sm font-semibold text-slate-900 mb-4">
+          {kind === "invoice" ? "Zahlung & Notizen" : "Gültigkeit & Notizen"}
+        </h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              {kind === "invoice" ? "Fällig am" : "Gültig bis"}
+            </label>
+            <input
+              type="date"
+              name={kind === "invoice" ? "dueAt" : "validUntil"}
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="block text-xs font-medium text-slate-700 mb-1">Notiz</label>
+          <textarea
+            name="notes"
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+          />
+        </div>
+      </section>
+
+      <section className="bg-white border border-slate-200 rounded-xl p-6">
+        <div className="grid grid-cols-2 gap-6">
+          <div />
+          <div className="text-sm text-right space-y-1">
+            <div>
+              <span className="text-slate-500">Netto:</span>{" "}
+              <span className="font-medium ml-2">{formatEur(totals.net)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500">MwSt:</span>{" "}
+              <span className="font-medium ml-2">{formatEur(totals.vat)}</span>
+            </div>
+            <div className="text-lg pt-1 border-t border-slate-200">
+              <span className="text-slate-500">Brutto:</span>{" "}
+              <span className="font-bold ml-2 text-orange-600">{formatEur(totals.gross)}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="flex justify-end gap-3">
+        <button type="submit" name="action" value="draft" className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-50">
+          Als Entwurf speichern
+        </button>
+        <button type="submit" name="action" value="finalize" className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700">
+          {kind === "invoice" ? "Rechnung anlegen" : "Angebot anlegen"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function HiddenFields({ p }: { p: Position }) {
+  return (
+    <>
+      <input type="hidden" name="pos_kind" value={p.kind} />
+      <input type="hidden" name="pos_name" value={p.name} />
+      <input type="hidden" name="pos_description" value={p.description} />
+      <input type="hidden" name="pos_quantity" value={p.quantity} />
+      <input type="hidden" name="pos_unit" value={p.unit} />
+      <input type="hidden" name="pos_netPrice" value={p.netPrice} />
+      <input type="hidden" name="pos_vatPercent" value={String(p.vatPercent)} />
+    </>
+  );
+}
+
+function PositionRow({
+  p,
+  idx,
+  services,
+  onChange,
+  onRemove,
+  onLoadService,
+  icon,
+  iconColor,
+  partsMarkupPercent,
+}: {
+  p: Position;
+  idx: number;
+  services: ServiceOpt[];
+  onChange: (patch: Partial<Position>) => void;
+  onRemove: () => void;
+  onLoadService: (s: ServiceOpt) => void;
+  icon: React.ReactNode;
+  iconColor: string;
+  partsMarkupPercent?: number;
+}) {
+  const qty = parseFloat(p.quantity.replace(",", ".")) || 0;
+  const netCent = parseEurToCent(p.netPrice);
+  const rowTotal = qty * netCent;
+
+  // Group services by category
+  const grouped = useMemo(() => {
+    const map = new Map<string, ServiceOpt[]>();
+    for (const s of services) {
+      const cat = s.category ?? "Andere";
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(s);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [services]);
+
+  const [purchasePrice, setPurchasePrice] = useState("");
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/40 mb-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${iconColor}`}>
+          {icon} #{idx + 1}
+        </span>
+        <div className="flex items-center gap-2">
+          {services.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => {
+                const s = services.find((x) => x.id === e.target.value);
+                if (s) onLoadService(s);
+              }}
+              className="text-xs px-2 py-1 border border-slate-300 rounded max-w-[240px]"
+            >
+              <option value="">↳ aus Katalog…</option>
+              {grouped.map(([cat, items]) => (
+                <optgroup key={cat} label={cat}>
+                  {items.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                      {s.laborHours ? ` (${s.laborHours} Std)` : ` — ${formatEur(s.netPriceCent)}`}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+          <button type="button" onClick={onRemove} className="p-1 text-slate-400 hover:text-red-600">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      <input
+        required
+        value={p.name}
+        onChange={(e) => onChange({ name: e.target.value })}
+        placeholder={p.kind === "labor" ? "Arbeitsleistung, z.B. Bremsbeläge tauschen" : "Ersatzteil, z.B. Bremsbeläge vorne"}
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2"
+      />
+      <textarea
+        value={p.description}
+        onChange={(e) => onChange({ description: e.target.value })}
+        placeholder="Beschreibung (optional, im PDF sichtbar)"
+        rows={2}
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs mb-2"
+      />
+      <div className="grid grid-cols-4 gap-2">
+        <div>
+          <label className="block text-[10px] uppercase text-slate-500 mb-0.5">Menge</label>
+          <input
+            value={p.quantity}
+            onChange={(e) => onChange({ quantity: e.target.value })}
+            className="w-full px-2 py-1 border border-slate-300 rounded text-xs text-right"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase text-slate-500 mb-0.5">Einheit</label>
+          <select
+            value={p.unit}
+            onChange={(e) => onChange({ unit: e.target.value })}
+            className="w-full px-2 py-1 border border-slate-300 rounded text-xs"
+          >
+            <option>Stk</option>
+            <option>Std</option>
+            <option>Pauschal</option>
+            <option>l</option>
+            <option>m</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase text-slate-500 mb-0.5">Netto/Einh. €</label>
+          <input
+            value={p.netPrice}
+            onChange={(e) => onChange({ netPrice: e.target.value })}
+            className="w-full px-2 py-1 border border-slate-300 rounded text-xs text-right"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase text-slate-500 mb-0.5">MwSt</label>
+          <select
+            value={p.vatPercent}
+            onChange={(e) => onChange({ vatPercent: parseInt(e.target.value, 10) })}
+            className="w-full px-2 py-1 border border-slate-300 rounded text-xs"
+          >
+            <option value={19}>19 %</option>
+            <option value={7}>7 %</option>
+          </select>
+        </div>
+      </div>
+      {p.kind === "part" && partsMarkupPercent != null && (
+        <div className="mt-2 flex items-center gap-2 text-xs">
+          <span className="text-slate-500">Einkaufspreis:</span>
+          <input
+            value={purchasePrice}
+            onChange={(e) => setPurchasePrice(e.target.value)}
+            placeholder="0,00"
+            className="w-24 px-2 py-1 border border-slate-300 rounded text-xs text-right"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const pp = parseEurToCent(purchasePrice);
+              if (pp > 0) {
+                const withMarkup = Math.round(pp * (1 + partsMarkupPercent / 100));
+                onChange({ netPrice: (withMarkup / 100).toFixed(2).replace(".", ",") });
+              }
+            }}
+            className="px-2 py-1 bg-slate-900 text-white rounded text-xs font-semibold"
+          >
+            +{partsMarkupPercent}% aufschlagen
+          </button>
+        </div>
+      )}
+      <div className="text-right mt-2 text-sm">
+        <span className="text-slate-500">Summe:</span> <span className="font-semibold">{formatEur(rowTotal)}</span>
+      </div>
+    </div>
+  );
+}

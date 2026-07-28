@@ -63,6 +63,46 @@ export async function updateAppointmentStatusAction(formData: FormData) {
   revalidatePath("/app/kalender");
 }
 
+export async function rescheduleAppointmentAction(formData: FormData) {
+  const ctx = await requireWorkshopUser();
+  const id = String(formData.get("id") || "");
+  const date = String(formData.get("date") || "");
+  const startTime = String(formData.get("startTime") || "");
+  const endTime = String(formData.get("endTime") || "");
+  if (!id || !date || !startTime || !endTime) throw new Error("Datum und Zeiten sind Pflicht");
+
+  const existing = await prisma.appointment.findUnique({ where: { id } });
+  if (!existing || existing.workshopId !== ctx.workshopId) throw new Error("Nicht erlaubt");
+
+  const startsAt = combineDT(date, startTime);
+  const endsAt = combineDT(date, endTime);
+  if (endsAt <= startsAt) throw new Error("Ende muss nach Start liegen");
+
+  await prisma.appointment.update({ where: { id }, data: { startsAt, endsAt } });
+  revalidatePath("/app/kalender");
+  revalidatePath(`/app/kalender/${id}`);
+}
+
+export async function updateAppointmentDetailsAction(formData: FormData) {
+  const ctx = await requireWorkshopUser();
+  const id = String(formData.get("id") || "");
+  if (!id) throw new Error("ID fehlt");
+  const existing = await prisma.appointment.findUnique({ where: { id } });
+  if (!existing || existing.workshopId !== ctx.workshopId) throw new Error("Nicht erlaubt");
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) throw new Error("Titel ist Pflicht");
+  const description = str(formData.get("description"));
+  const mechanicId = str(formData.get("mechanicId"));
+
+  await prisma.appointment.update({
+    where: { id },
+    data: { title, description, mechanicId },
+  });
+  revalidatePath(`/app/kalender/${id}`);
+  revalidatePath("/app/kalender");
+}
+
 export async function deleteAppointmentAction(formData: FormData) {
   const ctx = await requireWorkshopUser();
   const id = String(formData.get("id") || "");
