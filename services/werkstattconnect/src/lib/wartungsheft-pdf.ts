@@ -99,15 +99,15 @@ export async function buildWartungsheftPdf(input: WartungsheftInput): Promise<Bu
   drawCenter(cover, s(`${input.entries.length} dokumentierte Wartungen`), A4.w / 2, 140, fonts.helvBold, 13, brand);
 
   // Ausführende werkstatt-info als kleine card unten
-  const boxY = 60;
-  const boxH = 50;
-  cover.drawRectangle({ x: 60, y: boxY, width: A4.w - 120, height: boxH, borderColor: BORDER, borderWidth: 0.5, color: rgb(0.985, 0.985, 0.985) });
-  cover.drawText("Betreut von:", { x: 75, y: boxY + boxH - 15, size: 8, font: fonts.helv, color: LIGHT });
-  cover.drawText(s(input.workshop.name), { x: 75, y: boxY + boxH - 28, size: 11, font: fonts.helvBold, color: BLACK });
+  const wsBoxY = 60;
+  const wsBoxH = 50;
+  cover.drawRectangle({ x: 60, y: wsBoxY, width: A4.w - 120, height: wsBoxH, borderColor: BORDER, borderWidth: 0.5, color: rgb(0.985, 0.985, 0.985) });
+  cover.drawText("Betreut von:", { x: 75, y: wsBoxY + wsBoxH - 15, size: 8, font: fonts.helv, color: LIGHT });
+  cover.drawText(s(input.workshop.name), { x: 75, y: wsBoxY + wsBoxH - 28, size: 11, font: fonts.helvBold, color: BLACK });
   const wsContact = [input.workshop.street, `${input.workshop.zip ?? ""} ${input.workshop.city ?? ""}`.trim(), input.workshop.contactPhone, input.workshop.contactEmail].filter(Boolean).join(" · ");
-  cover.drawText(s(wsContact), { x: 75, y: boxY + boxH - 42, size: 8, font: fonts.helv, color: GRAY, maxWidth: A4.w - 220 });
+  cover.drawText(s(wsContact), { x: 75, y: wsBoxY + wsBoxH - 42, size: 8, font: fonts.helv, color: GRAY, maxWidth: A4.w - 220 });
   if (workshopLogo) {
-    cover.drawImage(workshopLogo.img, { x: A4.w - 80 - workshopLogo.w, y: boxY + (boxH - workshopLogo.h) / 2, width: workshopLogo.w, height: workshopLogo.h });
+    cover.drawImage(workshopLogo.img, { x: A4.w - 80 - workshopLogo.w, y: wsBoxY + (wsBoxH - workshopLogo.h) / 2, width: workshopLogo.w, height: workshopLogo.h });
   }
   drawCenter(cover, "Bitte bewahren Sie dieses Heft zusammen mit den Fahrzeugpapieren auf.", A4.w / 2, 30, fonts.helvObl, 8, LIGHT);
 
