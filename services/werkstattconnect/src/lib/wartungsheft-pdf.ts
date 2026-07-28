@@ -1,5 +1,5 @@
 import { PDFDocument, rgb } from "pdf-lib";
-import { A4, BLACK, GRAY, LIGHT, BORDER, WHITE, s, fmt, drawRight, drawCenter, hexToRgb, embedLogo, loadFonts, drawFooter, wrap } from "./pdf/helpers";
+import { A4, BLACK, GRAY, LIGHT, BORDER, WHITE, s, fmt, drawRight, drawCenter, hexToRgb, embedLogo, loadFonts, wrap } from "./pdf/helpers";
 import type { InvoicePosition } from "./money";
 import { customerDisplayName, vehicleDisplayName } from "./customer-name";
 import type { PdfDoc } from "./pdf/types";
@@ -47,6 +47,42 @@ export async function buildWartungsheftPdf(input: WartungsheftInput): Promise<Bu
   const brand = rgb(0.996, 0.396, 0.012); // #fe6503
 
   // Workshop-logo (klein, pro entry als "ausführende werkstatt")
+  // Wartungsheft-eigener footer, IMMER Helvetica (nicht workshop-font)
+  function drawWartungsheftFooter(pg: import("pdf-lib").PDFPage) {
+    const w = input.workshop;
+    const cols = [w.footerCol1, w.footerCol2, w.footerCol3];
+    const hasCols = cols.some(Boolean);
+    const topY = 68;
+    pg.drawLine({ start: { x: 50, y: topY }, end: { x: A4.w - 50, y: topY }, thickness: 0.5, color: BORDER });
+    if (!hasCols) {
+      const legacy = w.brandFooterText || `${w.name}${w.taxId ? ` · USt-IdNr. ${w.taxId}` : ""}`;
+      pg.drawText(s(legacy), { x: 50, y: topY - 12, size: 8, font: fonts.helv, color: LIGHT, maxWidth: A4.w - 100 });
+      return;
+    }
+    const contentW = A4.w - 100;
+    const colW = contentW / 3;
+    for (let i = 0; i < 3; i++) {
+      const txt = cols[i] ?? "";
+      if (!txt) continue;
+      const lines = txt.split("\n").filter((l) => l.trim().length > 0);
+      const colX = 50 + i * colW + 5;
+      const maxW = colW - 10;
+      if (lines[0]) {
+        const wrappedHead = wrap(s(lines[0]), maxW, fonts.helvBold, 8, 1);
+        pg.drawText(wrappedHead[0], { x: colX, y: topY - 12, size: 8, font: fonts.helvBold, color: BLACK });
+      }
+      let ly = topY - 24;
+      for (let li = 1; li < lines.length && li < 5; li++) {
+        const wrapped = wrap(s(lines[li]), maxW, fonts.helv, 7.5, 1);
+        pg.drawText(wrapped[0], { x: colX, y: ly, size: 7.5, font: fonts.helv, color: LIGHT });
+        ly -= 10;
+      }
+      if (i < 2) {
+        pg.drawLine({ start: { x: 50 + (i + 1) * colW, y: topY - 6 }, end: { x: 50 + (i + 1) * colW, y: topY - 60 }, thickness: 0.3, color: BORDER });
+      }
+    }
+  }
+
   let workshopLogo = null as null | { img: any; w: number; h: number };
   if (input.workshop.letterheadLogo && input.workshop.letterheadLogo.length > 0) {
     workshopLogo = await embedLogo(pdf, new Uint8Array(input.workshop.letterheadLogo), input.workshop.letterheadLogoMime || "image/png", 60, 30);
@@ -115,7 +151,7 @@ export async function buildWartungsheftPdf(input: WartungsheftInput): Promise<Bu
   if (input.entries.length === 0) {
     const empty = pdf.addPage([A4.w, A4.h]);
     drawCenter(empty, "Noch keine Werkstatt-Einträge vorhanden.", A4.w / 2, A4.h / 2, fonts.helv, 12, GRAY);
-    drawFooter(empty, mkPdfDoc(input), fonts);
+    drawWartungsheftFooter(empty);
     return Buffer.from(await pdf.save());
   }
 
@@ -126,40 +162,45 @@ export async function buildWartungsheftPdf(input: WartungsheftInput): Promise<Bu
     pg.drawRectangle({ x: 0, y: A4.h - 45, width: A4.w, height: 45, color: brand });
     pg.drawText(s(`Wartungshistorie · ${vehicleDisplayName(input.vehicle)}`), { x: 50, y: A4.h - 30, size: 11, font: fonts.helvBold, color: WHITE });
     drawRight(pg, s(input.workshop.name), A4.w - 50, A4.h - 30, fonts.helv, 9, WHITE);
-    drawFooter(pg, mkPdfDoc(input), fonts);
+    drawWartungsheftFooter(pg);
   }
 
   drawPageHeader(page);
   y = A4.h - 75;
 
   for (const entry of input.entries) {
-    const entryHeaderH = 26;
+    // header hat zwei zeilen: obere mit datum+nr+km+betrag, untere mit werkstatt-name
+    const entryHeaderH = 42;
     const positionsH = Math.min(entry.positions.length, 8) * 14 + 20;
     const totalH = entryHeaderH + positionsH + 20;
 
-    if (y - totalH < 90) {
+    if (y - totalH < 110) {
       page = pdf.addPage([A4.w, A4.h]);
       drawPageHeader(page);
       y = A4.h - 75;
     }
 
-    // Datum-badge + Rechnung + Werkstatt-name
+    // Header-Box mit zwei zeilen
     page.drawRectangle({ x: 50, y: y - entryHeaderH, width: A4.w - 100, height: entryHeaderH, color: rgb(0.97, 0.97, 0.97) });
-    page.drawText(s(entry.date.toLocaleDateString("de-DE")), { x: 60, y: y - 18, size: 12, font: fonts.helvBold, color: brand });
-    page.drawText(s(`Rechnung ${entry.invoiceNumber}`), { x: 160, y: y - 18, size: 10, font: fonts.helv, color: BLACK });
+
+    // Obere zeile: Datum · Rechnung · km · Betrag (klar getrennte spalten)
+    page.drawText(s(entry.date.toLocaleDateString("de-DE")), { x: 60, y: y - 16, size: 12, font: fonts.helvBold, color: brand });
+    page.drawText(s(`Rechnung ${entry.invoiceNumber}`), { x: 160, y: y - 16, size: 10, font: fonts.helv, color: BLACK });
     if (entry.mileage != null) {
-      page.drawText(s(`${entry.mileage.toLocaleString("de-DE")} km`), { x: 300, y: y - 18, size: 10, font: fonts.helv, color: GRAY });
+      page.drawText(s(`${entry.mileage.toLocaleString("de-DE")} km`), { x: 310, y: y - 16, size: 10, font: fonts.helv, color: GRAY });
     }
-    // Ausführende werkstatt (immer input.workshop.name, weil aktuell 1 werkstatt/kunde)
-    page.drawText(s(`Werkstatt: ${input.workshop.name}`), { x: 380, y: y - 18, size: 8, font: fonts.helv, color: GRAY });
-    drawRight(page, `${fmt(entry.totalGrossCent)} EUR`, A4.w - 60, y - 18, fonts.helvBold, 10, BLACK);
-    y -= entryHeaderH + 4;
+    drawRight(page, `${fmt(entry.totalGrossCent)} EUR`, A4.w - 60, y - 16, fonts.helvBold, 12, BLACK);
+
+    // Untere zeile: Ausführende Werkstatt (in eigener zeile, damit nichts überlappt)
+    page.drawText(s(`Ausführende Werkstatt: ${input.workshop.name}`), { x: 60, y: y - 32, size: 8, font: fonts.helv, color: GRAY });
+
+    y -= entryHeaderH + 6;
 
     // Positionen
     for (const p of entry.positions.slice(0, 8)) {
       const kindTag = p.kind === "labor" ? "[Arbeit]" : "[Teil]";
       page.drawText(kindTag, { x: 65, y, size: 7, font: fonts.helv, color: LIGHT });
-      const nameLines = wrap(s(p.name), 380, fonts.helv, 9, 1);
+      const nameLines = wrap(s(p.name), 350, fonts.helv, 9, 1);
       page.drawText(nameLines[0] || "", { x: 105, y, size: 9, font: fonts.helv, color: BLACK });
       drawRight(page, `${p.quantity.toLocaleString("de-DE")} ${p.unit}`, A4.w - 130, y, fonts.helv, 9, GRAY);
       drawRight(page, fmt(p.netTotalCent), A4.w - 60, y, fonts.helv, 9, BLACK);
@@ -171,30 +212,10 @@ export async function buildWartungsheftPdf(input: WartungsheftInput): Promise<Bu
     }
     y -= 12;
     page.drawLine({ start: { x: 50, y }, end: { x: A4.w - 50, y }, thickness: 0.4, color: BORDER });
-    y -= 10;
+    y -= 14;
   }
 
   const bytes = await pdf.save();
   return Buffer.from(bytes);
 }
 
-/** wrap workshop for drawFooter helper */
-function mkPdfDoc(input: WartungsheftInput): PdfDoc {
-  return {
-    kind: "invoice",
-    number: "-",
-    title: "Wartungsheft",
-    issuedAt: new Date(),
-    dueAt: null,
-    positions: [],
-    subtotalNetCent: 0, totalVatCent: 0, totalGrossCent: 0,
-    notes: null,
-    mileageAtIssue: null,
-    creatorName: null,
-    paymentMethod: null,
-    paidAt: null,
-    customer: input.customer,
-    vehicle: null,
-    workshop: input.workshop,
-  };
-}
