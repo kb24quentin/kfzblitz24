@@ -547,20 +547,32 @@ export function drawVehicleInfo(page: PDFPage, doc: PdfDoc, fonts: Fonts, x: num
   return y - boxH - 10;
 }
 
+/**
+ * Meta-block oben rechts. Fixe zweispaltige struktur:
+ * - Label-column: x bis x+65 (65pt max — "Rechnungs-Nr." passt genau)
+ * - Value-column: rechts-bündig endend bei x+165 (max 95pt breit)
+ * Bearbeiter-name kann lang sein → eigene full-width-zeile UNTER dem block.
+ */
 export function metaBlock(page: PDFPage, doc: PdfDoc, fonts: Fonts, x: number, y: number, color: RGB = GRAY) {
   const { body, bold } = pickFonts(fonts, doc.workshop.brandFontFamily);
   const labels = doc.kind === "invoice"
     ? [["Rechnungs-Nr.", doc.number], ["Datum", doc.issuedAt.toLocaleDateString("de-DE")]]
     : [["Angebots-Nr.", doc.number], ["Datum", doc.issuedAt.toLocaleDateString("de-DE")]];
   if (doc.dueAt) labels.push([doc.kind === "invoice" ? "Fällig" : "Gültig bis", doc.dueAt.toLocaleDateString("de-DE")]);
-  // Bearbeiter direkt unter Rechnungs/Angebots-Nr. + Datum + Fällig
-  if (doc.workshop.showCreatorOnDocs && doc.creatorName) {
-    labels.push(["Bearbeiter", doc.creatorName]);
-  }
+
+  const valueRightX = x + 165;
   let ry = y;
   for (const [label, val] of labels) {
-    page.drawText(s(label), { x, y: ry, size: 9, font: body, color });
-    drawRight(page, s(val), x + 130, ry, bold, 9, BLACK);
+    page.drawText(s(label), { x, y: ry, size: 9, font: body, color, maxWidth: 65 });
+    drawRight(page, s(val), valueRightX, ry, bold, 9, BLACK);
+    ry -= 14;
+  }
+  // Bearbeiter als eigene full-width-zeile darunter (variable länge, kein overlap-risiko)
+  if (doc.workshop.showCreatorOnDocs && doc.creatorName) {
+    ry -= 4;
+    page.drawText(s("Bearbeiter"), { x, y: ry, size: 9, font: body, color });
+    ry -= 12;
+    page.drawText(s(doc.creatorName), { x, y: ry, size: 9, font: bold, color: BLACK, maxWidth: 165 });
     ry -= 14;
   }
   return ry;

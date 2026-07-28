@@ -222,7 +222,7 @@ const boldSidebar: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   const contact = [doc.workshop.street, `${doc.workshop.zip ?? ""} ${doc.workshop.city ?? ""}`.trim(), doc.workshop.contactPhone, doc.workshop.contactEmail].filter(Boolean);
   for (const line of contact) { page.drawText(s(line as string), { x: 20, y: ry, size: 8, font: body, color: WHITE, maxWidth: 130 }); ry -= 11; }
   drawAddressBlock(page, doc, fonts, 190, 780);
-  metaBlock(page, doc, fonts, 430, 780);
+  metaBlock(page, doc, fonts, 350, 780);
   page.drawText(s(`${doc.title} ${doc.number}`), { x: 190, y: 640, size: 18, font: bold, color: brand });
   let by = drawVehicleInfo(page, doc, fonts, 190, 615);
   by = drawPositionsTable(page, doc, fonts, 190, by - 10, 355, brand);
@@ -447,7 +447,7 @@ const gradientSidebar: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   const contact = [doc.workshop.street, `${doc.workshop.zip ?? ""} ${doc.workshop.city ?? ""}`.trim(), doc.workshop.contactPhone, doc.workshop.contactEmail].filter(Boolean);
   for (const line of contact) { page.drawText(s(line as string), { x: 10, y: ry, size: 7, font: body, color: WHITE, maxWidth: 75 }); ry -= 10; }
   drawAddressBlock(page, doc, fonts, 110, 780);
-  metaBlock(page, doc, fonts, 420, 780);
+  metaBlock(page, doc, fonts, 350, 780);
   page.drawText(s(`${doc.title} ${doc.number}`), { x: 110, y: 640, size: 18, font: bold, color: brand });
   let by = drawVehicleInfo(page, doc, fonts, 110, 615);
   by = drawPositionsTable(page, doc, fonts, 110, by - 10, 435, brand);
@@ -504,7 +504,7 @@ const elegantMargins: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   const contact = [doc.workshop.street, `${doc.workshop.zip ?? ""} ${doc.workshop.city ?? ""}`.trim(), doc.workshop.contactPhone, doc.workshop.contactEmail].filter(Boolean);
   for (const line of contact) { page.drawText(s(line as string), { x: 400, y: ry, size: 9, font: body, color: GRAY }); ry -= 12; }
   drawAddressBlock(page, doc, fonts, 80, 690);
-  metaBlock(page, doc, fonts, 400, 670);
+  metaBlock(page, doc, fonts, 350, 670);
   page.drawText(s(doc.title.toUpperCase()), { x: 80, y: 550, size: 18, font: bold, color: brand });
   page.drawText(s(doc.number), { x: 80, y: 535, size: 11, font: body, color: LIGHT });
   let by = drawVehicleInfo(page, doc, fonts, 80, 510);
