@@ -1,26 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Package,
-  Search,
-  Sparkles,
-  Wrench,
-  X,
-  Check,
-  Plus,
-} from "lucide-react";
+import { ArrowLeft, Search, Sparkles, Wrench, X } from "lucide-react";
 import { formatEur } from "@/lib/money";
 import type { ServiceOpt } from "./doc-composer";
 
-/**
- * Wizard-modal für Katalog-auswahl.
- * Screen 1: Kategorien als kacheln
- * Screen 2 (nach kategorie-klick): Leistungen der kategorie als kacheln
- * Nach klick: suggested-parts als vorschlags-kacheln (multi-select)
- * "Übernehmen" → onSelect(labor, parts) → DocComposer fügt beide ein
- */
 export function CatalogWizard({
   services,
   hourlyRateCent,
@@ -63,7 +47,6 @@ export function CatalogWizard({
       );
   }, [laborServices, selectedCategory, query]);
 
-  // Global search across all categories
   const globalSearchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q || step !== "category") return null;
@@ -76,14 +59,7 @@ export function CatalogWizard({
       .slice(0, 30);
   }, [laborServices, query, step]);
 
-  const suggestedParts = useMemo(() => {
-    if (!selectedService?.suggestedParts) return [];
-    return selectedService.suggestedParts;
-  }, [selectedService]);
-
   function pickService(s: ServiceOpt) {
-    // Immer direkt einfügen — alle vorgeschlagenen teile mit smarter default-menge
-    // Wenn user was ändern will, macht er das in den positionen im composer selbst.
     const partsToAdd = (s.suggestedParts ?? []).map((name) => ({
       name,
       quantity: inferQuantityFromName(name),
@@ -91,13 +67,6 @@ export function CatalogWizard({
     onSelect({ labor: s, partsToAdd });
   }
 
-  /**
-   * Extrahiert menge aus dem teile-namen:
-   *   "Bremsscheiben vorne (Paar)"        → 2
-   *   "Zündkerzen-Satz (4 Stk)"           → 4
-   *   "Motoröl (5L)" / "Kühlflüssigkeit (5L)" → 5
-   *   sonst                                → 1
-   */
   function inferQuantityFromName(name: string): number {
     const lower = name.toLowerCase();
     if (/\bpaar\b/.test(lower)) return 2;
@@ -106,25 +75,6 @@ export function CatalogWizard({
     const litMatch = lower.match(/\((\d+)\s*l\b/);
     if (litMatch) return parseInt(litMatch[1], 10);
     return 1;
-  }
-
-  function toggleFooterPart(name: string) {
-    setSelectedParts((prev) => {
-      const copy = { ...prev };
-      if (name in copy) delete copy[name];
-      else copy[name] = 1;
-      return copy;
-    });
-  }
-
-  function updatePartQty(name: string, qty: number) {
-    setSelectedParts((prev) => ({ ...prev, [name]: Math.max(1, qty) }));
-  }
-
-  function confirm() {
-    if (!selectedService) return;
-    const partsToAdd = Object.entries(selectedParts).map(([name, quantity]) => ({ name, quantity }));
-    onSelect({ labor: selectedService, partsToAdd });
   }
 
   return (
@@ -139,12 +89,9 @@ export function CatalogWizard({
               <button
                 type="button"
                 onClick={() => {
-                  if (step === "parts") setStep("service");
-                  else {
-                    setStep("category");
-                    setSelectedCategory(null);
-                    setQuery("");
-                  }
+                  setStep("category");
+                  setSelectedCategory(null);
+                  setQuery("");
                 }}
                 className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded"
               >
@@ -154,14 +101,12 @@ export function CatalogWizard({
             <div>
               <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-orange-600" />
-                {step === "category" && "Aus Katalog wählen"}
-                {step === "service" && `Leistung wählen — ${selectedCategory}`}
-                {step === "parts" && `Teile für „${selectedService?.name}"`}
+                {step === "category" ? "Aus Katalog wählen" : `Leistung wählen — ${selectedCategory}`}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {step === "category" && `${laborServices.length} Leistungen · ${categories.length} Kategorien`}
-                {step === "service" && `${servicesInCategory.length} Leistungen`}
-                {step === "parts" && `${suggestedParts.length} typische Teile vorgeschlagen — anpassen und übernehmen`}
+                {step === "category"
+                  ? `${laborServices.length} Leistungen · ${categories.length} Kategorien`
+                  : `${servicesInCategory.length} Leistungen — mit Klick werden Teile automatisch mit übernommen`}
               </p>
             </div>
           </div>
@@ -170,20 +115,18 @@ export function CatalogWizard({
           </button>
         </header>
 
-        {(step === "category" || step === "service") && (
-          <div className="px-5 py-3 border-b border-slate-200 shrink-0">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Suche nach Leistung, Kategorie, Beschreibung…"
-                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
-              />
-            </div>
+        <div className="px-5 py-3 border-b border-slate-200 shrink-0">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Suche nach Leistung, Kategorie, Beschreibung…"
+              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+            />
           </div>
-        )}
+        </div>
 
         <div className="flex-1 overflow-y-auto p-5">
           {step === "category" && !globalSearchResults && (
@@ -235,114 +178,7 @@ export function CatalogWizard({
               )}
             </div>
           )}
-
-          {step === "parts" && selectedService && (
-            <div>
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4 flex items-center gap-3">
-                <Wrench className="w-4 h-4 text-orange-600 shrink-0" />
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-slate-900">{selectedService.name}</div>
-                  <div className="text-xs text-slate-600">
-                    {selectedService.laborHours} Std × {formatEur(hourlyRateCent)}/Std ={" "}
-                    <strong>{formatEur(Math.round((selectedService.laborHours ?? 0) * hourlyRateCent))}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
-                <Package className="w-3.5 h-3.5" />
-                Typischerweise benötigte Ersatzteile
-                <span className="ml-auto text-[10px] font-normal normal-case bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                  Später: kfzBlitz24-Artikel-Suche
-                </span>
-              </h3>
-
-              {suggestedParts.length === 0 ? (
-                <div className="text-center text-sm text-slate-400 py-4">
-                  Diese Leistung braucht typischerweise keine Ersatzteile.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
-                  {suggestedParts.map((part) => {
-                    const selected = part in selectedParts;
-                    return (
-                      <button
-                        key={part}
-                        type="button"
-                        onClick={() => toggleFooterPart(part)}
-                        className={`flex items-center gap-3 p-3 border-2 rounded-lg text-left transition ${
-                          selected ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-400 bg-white"
-                        }`}
-                      >
-                        <div
-                          className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${
-                            selected ? "bg-emerald-500 text-white" : "border-2 border-slate-300"
-                          }`}
-                        >
-                          {selected && <Check className="w-3 h-3" />}
-                        </div>
-                        <div className="flex-1 text-sm text-slate-900">{part}</div>
-                        {selected && (
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="number"
-                              min="1"
-                              value={selectedParts[part]}
-                              onChange={(e) => updatePartQty(part, parseInt(e.target.value, 10) || 1)}
-                              className="w-12 px-1 py-0.5 border border-slate-300 rounded text-xs text-right"
-                            />
-                            <span className="text-xs text-slate-500">×</span>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              <p className="text-xs text-slate-500 mb-4">
-                Preise für die Teile setzt du danach im Formular (Einkaufspreis + {" "}
-                <strong>+Aufschlag</strong>-Button).
-              </p>
-            </div>
-          )}
         </div>
-
-        {step === "parts" && selectedService && (
-          <footer className="px-5 py-3 border-t border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
-            <div className="text-xs text-slate-600">
-              {Object.keys(selectedParts).length} von {suggestedParts.length} Teilen ausgewählt
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedParts({})}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900"
-              >
-                Keine
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const all: Record<string, number> = {};
-                  for (const p of suggestedParts) all[p] = 1;
-                  setSelectedParts(all);
-                }}
-                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900"
-              >
-                Alle
-              </button>
-              <button
-                type="button"
-                onClick={confirm}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Übernehmen
-              </button>
-            </div>
-          </footer>
-        )}
       </div>
     </div>
   );
@@ -372,7 +208,7 @@ function ServiceCard({
         )}
         {hasSuggested && (
           <div className="text-[10px] text-blue-700 bg-blue-50 rounded px-1.5 py-0.5 inline-block mt-1.5">
-            + {service.suggestedParts!.length} Teil{service.suggestedParts!.length > 1 ? "e" : ""}
+            + {service.suggestedParts!.length} Teil{service.suggestedParts!.length > 1 ? "e" : ""} auto
           </div>
         )}
       </div>
