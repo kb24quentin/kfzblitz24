@@ -66,6 +66,7 @@ model KbAdmin {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String
+  role      String   @default("admin") // reserviert für zukünftige differenzierung ('admin' | 'agent')
   googleId  String?  @unique
   imageUrl  String?
   active    Boolean  @default(false) // pending — bestehender KB24-admin muss aktivieren

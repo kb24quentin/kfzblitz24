@@ -136,6 +136,29 @@ export const APPS: AppDef[] = [
     ],
   },
   {
+    key: "werkstattconnect",
+    label: "WerkstattConnect",
+    description: "SaaS für Kfz-Werkstätten — KB24-Admin-Panel",
+    url: "https://connect.kfzblitz24-group.com/admin",
+    icon: "Wrench",
+    color: "#fe6503",
+    syncApi: process.env.WERKSTATTCONNECT_INTERNAL_URL || "http://werkstattconnect:3000",
+    roles: [
+      {
+        key: "admin",
+        label: "Admin",
+        description:
+          "Werkstätten anlegen und verwalten, Owner einladen (Setup-Mail), Plan/Status ändern, Team einsehen. Voller KB24-Admin-Zugriff.",
+      },
+      {
+        key: "agent",
+        label: "Agent",
+        description:
+          "Support-Rolle (später): sieht Werkstätten read-only, ohne Plan-/Team-Änderungen. Aktuell nur reserviert, verhält sich wie Admin.",
+      },
+    ],
+  },
+  {
     key: "shopware",
     label: "Shop-Backend",
     description: "Shopware Administration",

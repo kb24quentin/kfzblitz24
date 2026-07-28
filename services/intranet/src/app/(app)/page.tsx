@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   FileSignature,
   Store,
+  Wrench,
   Lock,
   Newspaper,
   BookOpen,
@@ -28,6 +29,7 @@ const ICONS: Record<string, any> = {
   ShieldCheck,
   FileSignature,
   Store,
+  Wrench,
 };
 
 export default async function IntranetLanding() {
