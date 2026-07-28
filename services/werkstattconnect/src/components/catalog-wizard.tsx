@@ -35,10 +35,8 @@ export function CatalogWizard({
     partsToAdd: { name: string; quantity: number }[];
   }) => void;
 }) {
-  const [step, setStep] = useState<"category" | "service" | "parts">("category");
+  const [step, setStep] = useState<"category" | "service">("category");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedService, setSelectedService] = useState<ServiceOpt | null>(null);
-  const [selectedParts, setSelectedParts] = useState<Record<string, number>>({});
   const [query, setQuery] = useState("");
 
   const laborServices = useMemo(
@@ -84,17 +82,30 @@ export function CatalogWizard({
   }, [selectedService]);
 
   function pickService(s: ServiceOpt) {
-    setSelectedService(s);
-    // Auto-select alle vorschlags-teile mit quantity 1
-    if (s.suggestedParts && s.suggestedParts.length > 0) {
-      const initial: Record<string, number> = {};
-      for (const p of s.suggestedParts) initial[p] = 1;
-      setSelectedParts(initial);
-      setStep("parts");
-    } else {
-      // Kein teile-vorschlag → direkt übernehmen
-      onSelect({ labor: s, partsToAdd: [] });
-    }
+    // Immer direkt einfügen — alle vorgeschlagenen teile mit smarter default-menge
+    // Wenn user was ändern will, macht er das in den positionen im composer selbst.
+    const partsToAdd = (s.suggestedParts ?? []).map((name) => ({
+      name,
+      quantity: inferQuantityFromName(name),
+    }));
+    onSelect({ labor: s, partsToAdd });
+  }
+
+  /**
+   * Extrahiert menge aus dem teile-namen:
+   *   "Bremsscheiben vorne (Paar)"        → 2
+   *   "Zündkerzen-Satz (4 Stk)"           → 4
+   *   "Motoröl (5L)" / "Kühlflüssigkeit (5L)" → 5
+   *   sonst                                → 1
+   */
+  function inferQuantityFromName(name: string): number {
+    const lower = name.toLowerCase();
+    if (/\bpaar\b/.test(lower)) return 2;
+    const stkMatch = lower.match(/\((\d+)\s*stk/);
+    if (stkMatch) return parseInt(stkMatch[1], 10);
+    const litMatch = lower.match(/\((\d+)\s*l\b/);
+    if (litMatch) return parseInt(litMatch[1], 10);
+    return 1;
   }
 
   function toggleFooterPart(name: string) {

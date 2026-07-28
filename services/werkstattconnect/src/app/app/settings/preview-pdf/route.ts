@@ -29,6 +29,9 @@ export async function GET(req: Request) {
   const footerCol1 = url.searchParams.get("footerCol1") ?? workshop.footerCol1;
   const footerCol2 = url.searchParams.get("footerCol2") ?? workshop.footerCol2;
   const footerCol3 = url.searchParams.get("footerCol3") ?? workshop.footerCol3;
+  const brandFontFamily = url.searchParams.get("font") || workshop.brandFontFamily;
+  const brandTableStyle = url.searchParams.get("tableStyle") || workshop.brandTableStyle;
+  const brandDensity = url.searchParams.get("density") || workshop.brandDensity;
 
   const positions: InvoicePosition[] = [
     mkPos("labor", "Ölwechsel mit Filter", "Motoröl 5W-30 + Ölfilter", 0.5, "Std", 9500, 19),

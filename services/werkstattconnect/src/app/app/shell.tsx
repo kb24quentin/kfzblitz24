@@ -35,15 +35,18 @@ export async function WorkshopShell({
 }) {
   const session = await auth();
   const u = session?.user as
-    | { email?: string | null; workshopId?: string | null; role?: string | null }
+    | { id?: string; email?: string | null; workshopId?: string | null; role?: string | null }
     | undefined;
-  const workshop = u?.workshopId
-    ? await prisma.workshop.findUnique({
-        where: { id: u.workshopId },
-        select: { name: true, plan: true },
-      })
-    : null;
+  const [workshop, currentUser] = await Promise.all([
+    u?.workshopId
+      ? prisma.workshop.findUnique({ where: { id: u.workshopId }, select: { name: true, plan: true } })
+      : null,
+    u?.id
+      ? prisma.workshopUser.findUnique({ where: { id: u.id }, select: { name: true } })
+      : null,
+  ]);
   const isAdmin = u?.role === "owner" || u?.role === "admin";
+  const displayName = currentUser?.name || u?.email?.split("@")[0] || "";
 
   const NAV: { key: NavKey; label: string; href: string; icon: React.ReactNode; show: boolean }[] = [
     { key: "home", label: "Übersicht", href: "/app", icon: <Home className="w-4 h-4" />, show: true },
@@ -75,8 +78,8 @@ export async function WorkshopShell({
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-xs text-slate-500 hidden sm:block">
-              <span className="font-medium text-slate-900">{u?.email}</span>
+            <div className="text-xs text-slate-500 hidden sm:block" title={u?.email ?? ""}>
+              <span className="font-medium text-slate-900">{displayName}</span>
             </div>
             <form action={signOutWorkshopAction}>
               <button

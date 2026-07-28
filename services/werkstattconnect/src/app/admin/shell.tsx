@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { Home, Wrench, LogOut } from "lucide-react";
 import { signOutAdminAction } from "../actions/auth";
 
@@ -23,6 +24,11 @@ export async function AdminShell({
   children: React.ReactNode;
 }) {
   const session = await auth();
+  const email = session?.user?.email?.toLowerCase() ?? "";
+  const kbAdmin = email
+    ? await prisma.kbAdmin.findUnique({ where: { email }, select: { name: true } })
+    : null;
+  const displayName = kbAdmin?.name || session?.user?.name || email.split("@")[0] || "";
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200">
@@ -40,8 +46,8 @@ export async function AdminShell({
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-xs text-slate-500 hidden sm:block">
-              <span className="font-medium text-slate-900">{session?.user?.email}</span>
+            <div className="text-xs text-slate-500 hidden sm:block" title={email}>
+              <span className="font-medium text-slate-900">{displayName}</span>
             </div>
             <form action={signOutAdminAction}>
               <button

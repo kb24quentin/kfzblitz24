@@ -20,7 +20,29 @@ export type BriefpapierState = {
   footerCol1: string;
   footerCol2: string;
   footerCol3: string;
+  brandFontFamily: string;
+  brandTableStyle: string;
+  brandDensity: string;
 };
+
+const FONT_OPTIONS = [
+  { value: "helvetica", label: "Helvetica (Standard, sans-serif)" },
+  { value: "times", label: "Times (klassisch, serif)" },
+  { value: "courier", label: "Courier (monospace, technisch)" },
+];
+
+const TABLE_STYLES = [
+  { value: "colored", label: "Farbig", desc: "Header-Zeile in Primärfarbe" },
+  { value: "bordered", label: "Umrandet", desc: "Rahmen um jede Zeile" },
+  { value: "zebra", label: "Zebra", desc: "Abwechselnd grauer Hintergrund" },
+  { value: "minimal", label: "Minimal", desc: "Nur eine Linie unter Header" },
+];
+
+const DENSITIES = [
+  { value: "compact", label: "Kompakt", desc: "Wenig Platz zwischen Zeilen" },
+  { value: "normal", label: "Normal", desc: "Standard-Abstand" },
+  { value: "spacious", label: "Luftig", desc: "Viel Weißraum" },
+];
 
 export function BriefpapierEditor({
   templates,
@@ -59,8 +81,12 @@ export function BriefpapierEditor({
     p.set("footerCol1", debouncedState.footerCol1);
     p.set("footerCol2", debouncedState.footerCol2);
     p.set("footerCol3", debouncedState.footerCol3);
+    p.set("font", debouncedState.brandFontFamily);
+    p.set("tableStyle", debouncedState.brandTableStyle);
+    p.set("density", debouncedState.brandDensity);
+    p.set("_r", String(refreshKey));
     return `/app/settings/preview-pdf?${p.toString()}`;
-  }, [debouncedState]);
+  }, [debouncedState, refreshKey]);
 
   const isDirty = JSON.stringify(state) !== JSON.stringify(saved) || logoState !== "keep";
 
@@ -99,12 +125,17 @@ export function BriefpapierEditor({
       fd.set("footerCol1", state.footerCol1);
       fd.set("footerCol2", state.footerCol2);
       fd.set("footerCol3", state.footerCol3);
+      fd.set("brandFontFamily", state.brandFontFamily);
+      fd.set("brandTableStyle", state.brandTableStyle);
+      fd.set("brandDensity", state.brandDensity);
       fd.set("logoState", logoState);
       if (file && logoState === "new") fd.set("letterheadLogo", file);
       await saveBriefpapierAction(fd);
       setSaved(state);
       setLogoState("keep");
       setSavedAt(new Date());
+      // Force iframe reload so logo-upload sofort sichtbar wird
+      setRefreshKey((r) => r + 1);
     });
   }
 
@@ -193,6 +224,65 @@ export function BriefpapierEditor({
                 </div>
               </button>
             ))}
+          </div>
+        </section>
+
+        {/* Typografie & Layout */}
+        <section className="bg-white border border-slate-200 rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-slate-900 mb-3">Typografie &amp; Layout</h2>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Schriftart</label>
+              <select
+                value={state.brandFontFamily}
+                onChange={(e) => update("brandFontFamily", e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              >
+                {FONT_OPTIONS.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Tabellen-Stil</label>
+              <div className="grid grid-cols-2 gap-2">
+                {TABLE_STYLES.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => update("brandTableStyle", t.value)}
+                    className={`p-2 text-left rounded-lg border transition ${
+                      state.brandTableStyle === t.value
+                        ? "border-orange-500 bg-orange-50"
+                        : "border-slate-200 hover:border-slate-400"
+                    }`}
+                  >
+                    <div className="text-xs font-semibold text-slate-900">{t.label}</div>
+                    <div className="text-[10px] text-slate-500">{t.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Dichte</label>
+              <div className="grid grid-cols-3 gap-2">
+                {DENSITIES.map((d) => (
+                  <button
+                    key={d.value}
+                    type="button"
+                    onClick={() => update("brandDensity", d.value)}
+                    className={`p-2 text-center rounded-lg border transition ${
+                      state.brandDensity === d.value
+                        ? "border-orange-500 bg-orange-50"
+                        : "border-slate-200 hover:border-slate-400"
+                    }`}
+                  >
+                    <div className="text-xs font-semibold text-slate-900">{d.label}</div>
+                    <div className="text-[10px] text-slate-500">{d.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 

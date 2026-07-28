@@ -36,6 +36,9 @@ model Workshop {
   footerCol2         String? // spalte 2 (z.B. kontakt: tel/email/web)
   footerCol3         String? // spalte 3 (z.B. bank: iban/bic/inhaber)
   letterheadTemplate String  @default("modern-orange")
+  brandFontFamily    String  @default("helvetica") // 'helvetica' | 'times' | 'courier'
+  brandTableStyle    String  @default("colored") // 'colored' | 'bordered' | 'zebra' | 'minimal'
+  brandDensity       String  @default("normal") // 'compact' | 'normal' | 'spacious'
   iban               String?
   bic                String?
   bankName           String?

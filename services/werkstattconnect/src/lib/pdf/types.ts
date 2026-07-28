@@ -51,6 +51,9 @@ export type PdfDoc = {
     letterheadLogo: Uint8Array | null;
     letterheadLogoMime: string | null;
     letterheadTemplate: string;
+    brandFontFamily: string; // 'helvetica' | 'times' | 'courier'
+    brandTableStyle: string; // 'colored' | 'bordered' | 'zebra' | 'minimal'
+    brandDensity: string; // 'compact' | 'normal' | 'spacious'
   };
 };
 
@@ -62,22 +65,32 @@ export type TemplateDef = {
 };
 
 export const TEMPLATES: TemplateDef[] = [
-  { key: "modern-orange", label: "Modern Orange", category: "Modern", description: "Sauber, orange akzent, adressblock links" },
+  { key: "modern-orange", label: "Modern Orange", category: "Modern", description: "Sauber, Adressblock links" },
   { key: "modern-blue", label: "Modern Blau", category: "Modern", description: "Wie Modern Orange, aber blau" },
   { key: "modern-black", label: "Modern Schwarz", category: "Modern", description: "Elegant monochrom" },
   { key: "modern-green", label: "Modern Grün", category: "Modern", description: "Frisch, öko-feeling" },
   { key: "classic-serif", label: "Klassisch Serif", category: "Klassisch", description: "Traditionell, Times-anmutung" },
   { key: "classic-lines", label: "Klassisch mit Linien", category: "Klassisch", description: "Klare Linien, ruhige Typo" },
-  { key: "minimal-thin", label: "Minimal Dünn", category: "Minimal", description: "Sehr reduziert, dünne linien" },
-  { key: "minimal-mono", label: "Minimal Mono", category: "Minimal", description: "Monospace-touch, technisch" },
-  { key: "bold-band", label: "Bold Farbband", category: "Bold", description: "Farbiges Header-Band voll durch" },
-  { key: "bold-sidebar", label: "Bold Sidebar", category: "Bold", description: "Farbige Sidebar links mit Kontakt" },
+  { key: "letterhead-classic", label: "Klassischer Briefkopf", category: "Klassisch", description: "Zentraler Header, formell" },
+  { key: "executive", label: "Executive", category: "Klassisch", description: "Elegant mit dünnen Linien" },
+  { key: "minimal-thin", label: "Minimal Dünn", category: "Minimal", description: "Sehr reduziert, dünne Linien" },
+  { key: "minimal-mono", label: "Minimal Mono", category: "Minimal", description: "Monospace, technisch" },
+  { key: "compact-dense", label: "Kompakt dicht", category: "Minimal", description: "Viel Platz für viele Positionen" },
+  { key: "bold-band", label: "Bold Farbband", category: "Bold", description: "Farbband voll durch oben" },
+  { key: "bold-sidebar", label: "Bold Sidebar", category: "Bold", description: "Sidebar links mit Kontakt" },
   { key: "bold-centered", label: "Bold Zentriert", category: "Bold", description: "Zentrierter Header, big number" },
-  { key: "farbig-corners", label: "Farbige Ecken", category: "Farbig", description: "Farbige eckakzente" },
-  { key: "farbig-gradient", label: "Verlauf Header", category: "Farbig", description: "Gradient-header oben" },
-  { key: "farbig-frame", label: "Farbiger Rahmen", category: "Farbig", description: "Dünner farbrahmen um seite" },
-  { key: "farbig-split", label: "Zweifarbig geteilt", category: "Farbig", description: "Oberer teil primär, unterer akzent" },
-  { key: "workshop-tools", label: "Werkstatt-Tools", category: "Modern", description: "Mit Werkzeug-icon-akzent" },
-  { key: "compact-dense", label: "Kompakt dicht", category: "Minimal", description: "Viel platz für viele positionen" },
-  { key: "elegant-margins", label: "Elegant weite Ränder", category: "Klassisch", description: "Grosse ränder, ruhig" },
+  { key: "stripe-left", label: "Balken Links", category: "Bold", description: "Durchgehender Balken links (voll)" },
+  { key: "stripe-right", label: "Balken Rechts", category: "Bold", description: "Durchgehender Balken rechts" },
+  { key: "double-stripe", label: "Doppel-Balken", category: "Bold", description: "Zwei Balken links, dick + dünn" },
+  { key: "industrial", label: "Industrial", category: "Bold", description: "Bold Nummer, grosse Typo" },
+  { key: "farbig-corners", label: "Farbige Ecken", category: "Farbig", description: "Farb-Ecken oben/unten" },
+  { key: "farbig-gradient", label: "Verlauf Header", category: "Farbig", description: "Gradient-Header" },
+  { key: "farbig-frame", label: "Farbiger Rahmen", category: "Farbig", description: "Dünner Rahmen um Seite" },
+  { key: "farbig-split", label: "Zweifarbig geteilt", category: "Farbig", description: "Oberer Bereich getönt" },
+  { key: "corner-triangle", label: "Dreieck-Ecke", category: "Farbig", description: "Grosses Dreieck oben-links" },
+  { key: "wave-header", label: "Wellen-Header", category: "Farbig", description: "Geschwungene Trennlinie" },
+  { key: "gradient-sidebar", label: "Gradient-Sidebar", category: "Farbig", description: "Verlauf-Sidebar links" },
+  { key: "fresh-accents", label: "Frische Akzente", category: "Farbig", description: "Farb-Chips über die Seite" },
+  { key: "workshop-tools", label: "Werkstatt-Tools", category: "Modern", description: "Werkzeug-Icon-Akzent" },
+  { key: "elegant-margins", label: "Elegant weite Ränder", category: "Klassisch", description: "Grosse Ränder, ruhig" },
 ];

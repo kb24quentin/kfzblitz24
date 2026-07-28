@@ -27,6 +27,10 @@ export async function saveBriefpapierAction(formData: FormData) {
     }
   }
 
+  const font = String(formData.get("brandFontFamily") || "helvetica");
+  const table = String(formData.get("brandTableStyle") || "colored");
+  const density = String(formData.get("brandDensity") || "normal");
+
   await prisma.workshop.update({
     where: { id: ctx.workshopId },
     data: {
@@ -37,6 +41,9 @@ export async function saveBriefpapierAction(formData: FormData) {
       footerCol1: str(formData.get("footerCol1")),
       footerCol2: str(formData.get("footerCol2")),
       footerCol3: str(formData.get("footerCol3")),
+      brandFontFamily: ["helvetica", "times", "courier"].includes(font) ? font : "helvetica",
+      brandTableStyle: ["colored", "bordered", "zebra", "minimal"].includes(table) ? table : "colored",
+      brandDensity: ["compact", "normal", "spacious"].includes(density) ? density : "normal",
       ...(logoState === "clear"
         ? { letterheadLogo: null, letterheadLogoMime: null }
         : logoBytes
