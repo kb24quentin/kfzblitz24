@@ -31,6 +31,29 @@ export async function nextInvoiceNumber(workshopId: string): Promise<string> {
 }
 
 /**
+ * Gapless order-number für Aufträge.
+ */
+export async function nextOrderNumber(workshopId: string): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const workshop = await tx.workshop.findUnique({
+      where: { id: workshopId },
+      select: { orderPrefix: true, orderNumberYear: true, orderNumberLast: true },
+    });
+    if (!workshop) throw new Error("Werkstatt nicht gefunden");
+    const now = new Date();
+    const year = now.getFullYear();
+    const yy = String(year).slice(-2);
+    const nextSeq = workshop.orderNumberYear === year ? workshop.orderNumberLast + 1 : 1;
+    await tx.workshop.update({
+      where: { id: workshopId },
+      data: { orderNumberYear: year, orderNumberLast: nextSeq },
+    });
+    const prefix = workshop.orderPrefix || "AU-";
+    return `${prefix}${yy}-${String(nextSeq).padStart(4, "0")}`;
+  });
+}
+
+/**
  * Gapless quote-number analog invoice-number, aber unter quotePrefix/quoteNumber*.
  */
 export async function nextQuoteNumber(workshopId: string): Promise<string> {

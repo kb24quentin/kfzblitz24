@@ -54,6 +54,11 @@ model Workshop {
   quoteNumberYear    Int?
   quoteNumberLast    Int     @default(0)
 
+  // Auftrags-nummerierung
+  orderPrefix        String  @default("AU-")
+  orderNumberYear    Int?
+  orderNumberLast    Int     @default(0)
+
   // Preis-basics
   hourlyRateCent     Int     @default(9500) // stundenlohn in cent (95€ default)
   partsMarkupPercent Int     @default(15) // aufschlag auf einkaufspreise für teile (in %)
@@ -74,6 +79,7 @@ model Workshop {
   invoices     Invoice[]
   invoiceJournal InvoiceJournalEntry[]
   quotes       Quote[]
+  orders       Order[]
 }
 
 /**
@@ -96,6 +102,7 @@ model WorkshopUser {
   appointments Appointment[] @relation("MechanicAppointments")
   invoices     Invoice[]     @relation("InvoiceCreator")
   quotes       Quote[]       @relation("QuoteCreator")
+  orders       Order[]       @relation("OrderCreator")
 
   @@index([workshopId])
 }
@@ -142,6 +149,7 @@ model Customer {
   reminders    Reminder[]
   invoices     Invoice[]
   quotes       Quote[]
+  orders       Order[]
 
   @@index([workshopId])
   @@index([workshopId, lastName])
@@ -181,6 +189,7 @@ model Vehicle {
   reminders    Reminder[]
   invoices     Invoice[]
   quotes       Quote[]
+  orders       Order[]
 
   @@index([workshopId])
   @@index([customerId])
@@ -197,22 +206,24 @@ model Appointment {
   workshopId  String
   customerId  String
   vehicleId   String?
+  orderId     String? // FK zu Order — wenn ein auftrag daran hängt
   mechanicId  String?
   title       String
   description String?
   startsAt    DateTime
   endsAt      DateTime
-  status      String    @default("scheduled") // 'scheduled' | 'in_progress' | 'awaiting_approval' | 'approved' | 'completed' | 'cancelled'
+  status      String    @default("scheduled") // 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
 
   // Live-Zeit-Tracking (Mechaniker startet/stoppt am tablet)
   actualStartedAt DateTime?
   actualEndedAt   DateTime?
 
-  // Auftrags-Freigabe durch Kunden (Bar/vor Ort)
-  customerApprovalRequested Boolean   @default(false) // "Auftrag bereit für Freigabe"
-  approvedAmountCent        Int? // Kunde hat freigegeben bis zu … EUR
+  // DEPRECATED — signature-workflow lebt jetzt auf Order. Felder bleiben für
+  // datenkonsistenz-alte-einträge, werden aber nicht mehr befüllt/gelesen.
+  customerApprovalRequested Boolean   @default(false)
+  approvedAmountCent        Int?
   approvedAt                DateTime?
-  approvalSignatureSvg      String? // SVG-path-string der unterschrift
+  approvalSignatureSvg      String?
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -220,12 +231,14 @@ model Appointment {
   workshop  Workshop        @relation(fields: [workshopId], references: [id], onDelete: Cascade)
   customer  Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
   vehicle   Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  order     Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
   mechanic  WorkshopUser?   @relation("MechanicAppointments", fields: [mechanicId], references: [id], onDelete: SetNull)
   workLog   AppointmentWorkLog[]
 
   @@index([workshopId, startsAt])
   @@index([workshopId, mechanicId, startsAt])
   @@index([workshopId, status])
+  @@index([orderId])
 }
 
 /**
@@ -352,9 +365,103 @@ model Invoice {
   creator       WorkshopUser?         @relation("InvoiceCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   journalEntries InvoiceJournalEntry[]
   fromQuotes    Quote[]               @relation("QuoteConvertedToInvoice")
+  fromOrders    Order[]               @relation("OrderConvertedToInvoice")
 
   @@index([workshopId, issuedAt])
   @@index([workshopId, status])
+}
+
+/**
+ * Auftrag — die verbindliche verabredung zwischen werkstatt und kunde.
+ * Entsteht aus einem Angebot ODER wird direkt angelegt. Kunde signiert
+ * einen Freigabe-rahmen ("bis XX EUR reparieren, sonst kontakt").
+ * Nach fertigstellung → Rechnung.
+ *
+ * Signatur zweigeteilt:
+ *   - Vor Ort: Werkstatt-tablet mit signature-pad
+ *   - Remote: Public-token-link per E-Mail oder SMS, kunde signiert
+ *             im eigenen browser (/sign/[token])
+ *
+ * Wenn während der arbeit mehr repariert werden muss, wird eine NEUE
+ * Signatur-anfrage (OrderSignatureRequest) angelegt — history bleibt
+ * erhalten. Order status geht dann auf 'awaiting_reapproval'.
+ */
+model Order {
+  id                    String    @id @default(cuid())
+  workshopId            String
+  orderNumber           String    @unique // z.B. AU-26-0001
+  customerId            String
+  vehicleId             String?
+  basedOnQuoteId        String?
+
+  positions             Json // wie Invoice/Quote positions
+  subtotalNetCent       Int       @default(0)
+  totalVatCent          Int       @default(0)
+  totalGrossCent        Int       @default(0)
+
+  // Freigabe-Rahmen (vom Kunden freigegeben)
+  approvedAmountCent    Int?
+  approvalFreetext      String?   // z.B. "Diagnose + Reparatur bis 500€. Darüber vorher Kontakt."
+
+  // Aktuelle Signatur (die letzte gültige)
+  status                String    @default("draft") // 'draft' | 'sent_for_signature' | 'signed' | 'in_progress' | 'awaiting_reapproval' | 'completed' | 'cancelled' | 'invoiced'
+  signedAt              DateTime?
+  signatureSvg          String?
+  signedByName          String?
+
+  notes                 String?
+  createdBy             String?
+  convertedToInvoiceId  String?
+
+  // Für einfachen zugriff auf jüngste signature-request in UI
+  currentSignatureTokenExpiresAt DateTime?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  workshop            Workshop                @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  customer            Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  vehicle             Vehicle?                @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  quote               Quote?                  @relation(fields: [basedOnQuoteId], references: [id], onDelete: SetNull)
+  creator             WorkshopUser?           @relation("OrderCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  convertedToInvoice  Invoice?                @relation("OrderConvertedToInvoice", fields: [convertedToInvoiceId], references: [id], onDelete: SetNull)
+  signatureRequests   OrderSignatureRequest[]
+  appointments        Appointment[]
+
+  @@index([workshopId, createdAt])
+  @@index([workshopId, status])
+}
+
+/**
+ * Signatur-anfrage — audit-trail. Pro auftrag können mehrere existieren
+ * (re-approval workflow). Nur die letzte 'signed' ist "die aktuelle".
+ */
+model OrderSignatureRequest {
+  id                    String    @id @default(cuid())
+  orderId               String
+  requestedAt           DateTime  @default(now())
+  requestedBy           String?   // WorkshopUser.id
+  sentVia               String    // 'in_person' | 'email' | 'sms'
+  sentTo                String?   // email oder telefon (null bei in_person)
+  approvedAmountCent    Int? // Betrag zum zeitpunkt der anfrage
+  approvalFreetext      String?
+  positionsSnapshot     Json?     // positions-snapshot als proof was gezeigt wurde
+  totalGrossCent        Int?
+
+  status                String    @default("pending") // 'pending' | 'signed' | 'rejected' | 'expired' | 'cancelled'
+  respondedAt           DateTime?
+  signatureSvg          String?
+  signedByName          String?
+  signatureIp           String?
+  rejectionReason       String?
+
+  token                 String    @unique // public-link-token
+  tokenExpiresAt        DateTime
+
+  order                 Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, requestedAt])
+  @@index([token])
 }
 
 /**
@@ -390,6 +497,7 @@ model Quote {
   vehicle             Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   creator             WorkshopUser? @relation("QuoteCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   convertedToInvoice  Invoice?      @relation("QuoteConvertedToInvoice", fields: [convertedToInvoiceId], references: [id], onDelete: SetNull)
+  convertedOrders     Order[] // ein angebot kann in mehrere aufträge münden (theoretisch)
 
   @@index([workshopId, issuedAt])
   @@index([workshopId, status])

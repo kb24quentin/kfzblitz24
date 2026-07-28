@@ -9,9 +9,9 @@ import { WorkshopShell } from "../../shell";
 import {
   sendQuoteAction,
   updateQuoteStatusAction,
-  convertQuoteToInvoiceAction,
   deleteQuoteAction,
 } from "../actions";
+import { convertQuoteToOrderAction } from "../../auftraege/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -68,10 +68,10 @@ export default async function QuoteDetailPage({
               </form>
             )}
             {q.status !== "converted" && q.status !== "rejected" && (
-              <form action={convertQuoteToInvoiceAction}>
-                <input type="hidden" name="id" value={q.id} />
+              <form action={convertQuoteToOrderAction}>
+                <input type="hidden" name="quoteId" value={q.id} />
                 <button className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700">
-                  <ArrowRight className="w-3.5 h-3.5" />In Rechnung umwandeln
+                  <ArrowRight className="w-3.5 h-3.5" />In Auftrag umwandeln
                 </button>
               </form>
             )}

@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Car, Edit3, Trash2, Plus, Calendar as CalendarIcon, FileText, Bell } from "lucide-react";
+import { ArrowLeft, Car, Edit3, Trash2, Calendar as CalendarIcon, FileText, Bell } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireWorkshopUser } from "@/lib/admin-guard";
 import { customerDisplayName, vehicleDisplayName } from "@/lib/customer-name";
 import { formatEur } from "@/lib/money";
 import { WorkshopShell } from "../../shell";
-import { deleteCustomerAction, updateCustomerAction, createVehicleAction } from "../actions";
+import { deleteCustomerAction, updateCustomerAction } from "../actions";
 import { CustomerFormFields } from "../customer-form-fields";
-import { VehicleFormFields } from "./vehicle-form-fields";
+import { AddVehicleButton } from "./add-vehicle-button";
 
 export const dynamic = "force-dynamic";
 
@@ -74,23 +74,7 @@ export default async function CustomerDetailPage({
                   Fahrzeuge ({customer.vehicles.length})
                 </h2>
               </div>
-              <details className="relative">
-                <summary className="list-none cursor-pointer inline-flex items-center gap-1 px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold">
-                  <Plus className="w-3.5 h-3.5" />
-                  Fahrzeug hinzufügen
-                </summary>
-                <div className="absolute right-0 top-full mt-2 w-[520px] max-w-[90vw] bg-white border border-slate-200 rounded-xl shadow-xl p-5 z-10">
-                  <form action={createVehicleAction} className="space-y-3">
-                    <input type="hidden" name="customerId" value={customer.id} />
-                    <VehicleFormFields />
-                    <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                      <button type="submit" className="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-semibold">
-                        Fahrzeug speichern
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </details>
+              <AddVehicleButton customerId={customer.id} />
             </header>
             {customer.vehicles.length === 0 ? (
               <div className="p-8 text-center text-sm text-slate-500">Noch kein Fahrzeug angelegt.</div>
