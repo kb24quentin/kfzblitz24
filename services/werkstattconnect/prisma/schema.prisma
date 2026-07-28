@@ -244,18 +244,19 @@ model Reminder {
  * werkstatt ~50 standard-Kfz-arbeiten mit laborHours ein.
  */
 model ServiceItem {
-  id           String   @id @default(cuid())
-  workshopId   String
-  category     String?  // z.B. 'Wartung' | 'Bremsen' | 'Reifen' | 'Öl/Filter' | 'Diagnose' | 'Elektrik'
-  name         String
-  description  String?
-  laborHours   Float? // arbeitsstunden — wenn gesetzt → netPrice = laborHours × hourlyRate
-  netPriceCent Int      @default(0) // fester nettopreis, wenn laborHours=null
-  vatPercent   Int      @default(19)
-  unit         String   @default("Stk") // 'Stk' | 'Std' | 'Pauschal'
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  workshopId     String
+  category       String?  // z.B. 'Wartung' | 'Bremsen' | 'Reifen' | 'Öl/Filter' | 'Diagnose' | 'Elektrik'
+  name           String
+  description    String?
+  laborHours     Float? // arbeitsstunden — wenn gesetzt → netPrice = laborHours × hourlyRate
+  netPriceCent   Int      @default(0) // fester nettopreis, wenn laborHours=null
+  vatPercent     Int      @default(19)
+  unit           String   @default("Stk") // 'Stk' | 'Std' | 'Pauschal'
+  active         Boolean  @default(true)
+  suggestedParts Json? // string[]: vorschläge für teile die bei dieser leistung gebraucht werden
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   workshop Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
 

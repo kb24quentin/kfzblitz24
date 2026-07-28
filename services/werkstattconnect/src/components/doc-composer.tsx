@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Trash2, Wrench, Package } from "lucide-react";
+import { Plus, Trash2, Wrench, Package, Sparkles } from "lucide-react";
 import { SearchableSelect, type Option } from "./searchable-select";
+import { CatalogWizard } from "./catalog-wizard";
 import { customerDisplayName } from "@/lib/customer-name";
 import { formatEur, calcPosition, parseEurToCent } from "@/lib/money";
 
@@ -25,6 +26,7 @@ export type ServiceOpt = {
   netPriceCent: number;
   vatPercent: number;
   unit: string;
+  suggestedParts?: string[];
 };
 
 type Position = {
@@ -73,9 +75,10 @@ export function DocComposer({
   const [customerId, setCustomerId] = useState(defaultCustomerId);
   const [vehicleId, setVehicleId] = useState(defaultVehicleId);
   const [mileageAtIssue, setMileageAtIssue] = useState("");
-  const [positions, setPositions] = useState<Position[]>([empty("labor"), empty("part")]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [notes, setNotes] = useState("");
   const [dueAt, setDueAt] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
   const selectedVehicle = selectedCustomer?.vehicles.find((v) => v.id === vehicleId);
@@ -116,25 +119,47 @@ export function DocComposer({
     setPositions((p) => p.map((x) => (x.key === key ? { ...x, ...patch } : x)));
   }
   function loadService(key: string, s: ServiceOpt) {
-    const effectivePriceCent =
-      s.laborHours && s.laborHours > 0 ? Math.round(s.laborHours * hourlyRateCent) : s.netPriceCent;
-    const qtyForLabor = s.laborHours && s.laborHours > 0 ? String(s.laborHours).replace(".", ",") : "1";
     const isLaborItem = s.laborHours != null && s.laborHours > 0;
     update(key, {
       kind: isLaborItem ? "labor" : positions.find((p) => p.key === key)?.kind ?? "labor",
       name: s.name,
       description: s.description ?? "",
       unit: isLaborItem ? "Std" : s.unit,
-      quantity: isLaborItem ? "1" : "1",
+      quantity: isLaborItem && s.laborHours ? String(s.laborHours).replace(".", ",") : "1",
       netPrice: isLaborItem
         ? (hourlyRateCent / 100).toFixed(2).replace(".", ",")
         : (s.netPriceCent / 100).toFixed(2).replace(".", ","),
       vatPercent: s.vatPercent,
     });
-    // Für Stunden-basierte services setzen wir menge = laborHours
-    if (isLaborItem && s.laborHours) {
-      setPositions((prev) => prev.map((p) => (p.key === key ? { ...p, quantity: String(s.laborHours).replace(".", ",") } : p)));
-    }
+  }
+
+  /**
+   * Wizard-callback: fügt eine Labor-position + N Teile-positionen ein.
+   * Preise für teile bleiben bei 0€ (user setzt einkaufspreis danach).
+   */
+  function insertFromWizard(payload: { labor: ServiceOpt; partsToAdd: { name: string; quantity: number }[] }) {
+    const laborPos: Position = {
+      key: Math.random().toString(36).slice(2),
+      kind: "labor",
+      name: payload.labor.name,
+      description: payload.labor.description ?? "",
+      quantity: payload.labor.laborHours ? String(payload.labor.laborHours).replace(".", ",") : "1",
+      unit: "Std",
+      netPrice: (hourlyRateCent / 100).toFixed(2).replace(".", ","),
+      vatPercent: payload.labor.vatPercent,
+    };
+    const partPositions: Position[] = payload.partsToAdd.map((p) => ({
+      key: Math.random().toString(36).slice(2),
+      kind: "part",
+      name: p.name,
+      description: "",
+      quantity: String(p.quantity),
+      unit: p.name.toLowerCase().includes("(") && p.name.toLowerCase().includes("l)") ? "l" : "Stk",
+      netPrice: "0,00",
+      vatPercent: 19,
+    }));
+    setPositions((prev) => [...prev, laborPos, ...partPositions]);
+    setWizardOpen(false);
   }
 
   return (
@@ -198,6 +223,37 @@ export function DocComposer({
         )}
       </section>
 
+      <section className="bg-white border-2 border-orange-200 rounded-xl p-6 bg-gradient-to-br from-orange-50/40 to-white">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-orange-600" />
+              Aus Katalog wählen
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Kategorie → Leistung → typische Teile werden automatisch vorgeschlagen
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWizardOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 shadow-sm"
+          >
+            <Sparkles className="w-4 h-4" />
+            Katalog öffnen
+          </button>
+        </div>
+      </section>
+
+      {wizardOpen && (
+        <CatalogWizard
+          services={services}
+          hourlyRateCent={hourlyRateCent}
+          onClose={() => setWizardOpen(false)}
+          onSelect={insertFromWizard}
+        />
+      )}
+
       <section className="bg-white border border-slate-200 rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -212,7 +268,7 @@ export function DocComposer({
             className="inline-flex items-center gap-1 px-2 py-1 border border-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-50"
           >
             <Plus className="w-3 h-3" />
-            Arbeit
+            Manuell
           </button>
         </div>
         {laborPositions.length === 0 && (
@@ -251,7 +307,7 @@ export function DocComposer({
             className="inline-flex items-center gap-1 px-2 py-1 border border-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-50"
           >
             <Plus className="w-3 h-3" />
-            Teil
+            Manuell
           </button>
         </div>
         {partPositions.length === 0 && (

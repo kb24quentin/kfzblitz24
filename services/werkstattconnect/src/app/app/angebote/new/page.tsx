@@ -50,7 +50,17 @@ export default async function NewQuotePage({
         kind="quote"
         action={createQuoteAction}
         customers={customers}
-        services={services}
+        services={services.map((s) => ({
+          id: s.id,
+          category: s.category,
+          name: s.name,
+          description: s.description,
+          laborHours: s.laborHours,
+          netPriceCent: s.netPriceCent,
+          vatPercent: s.vatPercent,
+          unit: s.unit,
+          suggestedParts: Array.isArray(s.suggestedParts) ? (s.suggestedParts as string[]) : undefined,
+        }))}
         hourlyRateCent={workshop?.hourlyRateCent ?? 9500}
         partsMarkupPercent={workshop?.partsMarkupPercent ?? 15}
         defaultCustomerId={customerId ?? ""}

@@ -38,6 +38,7 @@ export async function updateBankAction(formData: FormData) {
   revalidatePath("/app/settings");
 }
 
+// Legacy — jetzt in ./briefpapier/actions.ts (saveBriefpapierAction). Bleibt hier für backward-compat falls externe caller.
 export async function updateBrandingAction(formData: FormData) {
   const ctx = await requireWorkshopAdmin();
 

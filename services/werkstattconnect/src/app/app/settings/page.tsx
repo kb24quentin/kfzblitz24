@@ -1,18 +1,16 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Settings, Palette, Building2, CreditCard, Hash, Wrench } from "lucide-react";
+import { Settings, Palette, Building2, CreditCard, Hash, Wrench, ArrowRight } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireWorkshopUser } from "@/lib/admin-guard";
 import { WorkshopShell } from "../shell";
 import {
   updateBankAction,
-  updateBrandingAction,
   updateInvoicePrefixAction,
   updateQuotePrefixAction,
   updatePricingAction,
   updateWorkshopBasicsAction,
 } from "./actions";
-import { TEMPLATES } from "@/lib/pdf/types";
-import { TemplatePicker } from "./template-picker";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +20,6 @@ export default async function SettingsPage() {
 
   const w = await prisma.workshop.findUnique({ where: { id: ctx.workshopId } });
   if (!w) return null;
-
-  const logoDataUrl =
-    w.letterheadLogo && w.letterheadLogoMime
-      ? `data:${w.letterheadLogoMime};base64,${Buffer.from(w.letterheadLogo).toString("base64")}`
-      : null;
 
   return (
     <WorkshopShell current="settings">
@@ -150,113 +143,24 @@ export default async function SettingsPage() {
         </section>
       </div>
 
-      <section className="bg-white border border-slate-200 rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
-          <Palette className="w-4 h-4" />
-          Briefpapier & Corporate Identity
-        </h2>
-        <p className="text-xs text-slate-500 mb-6">
-          Wird für alle Rechnungen, Angebote und Wartungshefte verwendet. 18 Templates zur Auswahl.
-        </p>
-        <form action={updateBrandingAction} encType="multipart/form-data" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Logo hochladen (PNG/JPG, max 500 KB)</label>
-                <input type="file" name="letterheadLogo" accept="image/png,image/jpeg" className="w-full text-xs" />
-                <p className="text-xs text-slate-400 mt-1">Leer lassen = bestehendes Logo behalten.</p>
-                {logoDataUrl && (
-                  <div className="mt-3 flex items-center gap-3">
-                    <img src={logoDataUrl} alt="Aktuelles Logo" className="h-12 object-contain border border-slate-200 rounded p-1" />
-                    <label className="text-xs text-red-600 flex items-center gap-1">
-                      <input type="checkbox" name="clearLogo" /> Logo entfernen
-                    </label>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Primärfarbe</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      name="brandPrimary"
-                      defaultValue={w.brandPrimary ?? "#fe6503"}
-                      placeholder="#fe6503"
-                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
-                    />
-                    <span className="w-8 h-8 rounded border border-slate-300" style={{ background: w.brandPrimary ?? "#fe6503" }} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Akzentfarbe</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      name="brandAccent"
-                      defaultValue={w.brandAccent ?? ""}
-                      placeholder="optional"
-                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
-                    />
-                    {w.brandAccent && <span className="w-8 h-8 rounded border border-slate-300" style={{ background: w.brandAccent }} />}
-                  </div>
-                </div>
-              </div>
-            </div>
+      <Link
+        href="/app/settings/briefpapier"
+        className="block bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl p-6 hover:from-orange-600 hover:to-orange-700 transition group"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Palette className="w-6 h-6" />
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Fußzeile (3 Spalten)</label>
-              <div className="space-y-2">
-                <textarea
-                  name="footerCol1"
-                  rows={4}
-                  defaultValue={w.footerCol1 ?? ""}
-                  placeholder="Spalte 1 — z.B. Firma&#10;Auto Meier GmbH&#10;Hauptstr. 1&#10;80331 München"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
-                />
-                <textarea
-                  name="footerCol2"
-                  rows={4}
-                  defaultValue={w.footerCol2 ?? ""}
-                  placeholder="Spalte 2 — z.B. Kontakt&#10;Tel: 089/12345&#10;info@auto-meier.de&#10;www.auto-meier.de"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
-                />
-                <textarea
-                  name="footerCol3"
-                  rows={4}
-                  defaultValue={w.footerCol3 ?? ""}
-                  placeholder="Spalte 3 — z.B. Bank / USt-IdNr.&#10;Sparkasse München&#10;IBAN: DE00…&#10;USt-IdNr. DE123…"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
-                />
-              </div>
-              <p className="text-xs text-slate-400 mt-2">Nutze diese Spalten, wenn du eine strukturierte Fußzeile willst. Sonst wird der Freitext unten verwendet.</p>
-              <div className="mt-3">
-                <label className="block text-xs font-medium text-slate-500 mb-1">Freitext-Fußzeile (Fallback)</label>
-                <input
-                  name="brandFooterText"
-                  defaultValue={w.brandFooterText ?? ""}
-                  placeholder={`${w.name}${w.taxId ? ` · USt-IdNr. ${w.taxId}` : ""}`}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
-                />
-              </div>
+              <h2 className="text-base font-semibold">Briefpapier & Design bearbeiten</h2>
+              <p className="text-sm text-orange-100 mt-0.5">
+                18 Templates · Live-Vorschau · Logo · Farben · 3-Spalten-Fußzeile
+              </p>
             </div>
           </div>
+          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition" />
+        </div>
+      </Link>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-3">Template wählen ({TEMPLATES.length} verfügbar)</label>
-            <TemplatePicker
-              templates={TEMPLATES}
-              currentTemplate={w.letterheadTemplate}
-              primary={w.brandPrimary ?? "#fe6503"}
-            />
-          </div>
-
-          <div className="pt-4 border-t border-slate-100">
-            <button type="submit" className="px-6 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700">
-              Briefpapier speichern
-            </button>
-          </div>
-        </form>
-      </section>
     </WorkshopShell>
   );
 }

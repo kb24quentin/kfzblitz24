@@ -86,6 +86,7 @@ export async function createWorkshopAction(formData: FormData) {
         vatPercent: 19,
         unit: "Std",
         active: true,
+        suggestedParts: c.suggestedParts ? (c.suggestedParts as unknown as object) : undefined,
       })),
     });
   } catch (e) {
