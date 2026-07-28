@@ -43,24 +43,29 @@ type WartungsheftInput = {
 export async function buildWartungsheftPdf(input: WartungsheftInput): Promise<Buffer> {
   const pdf = await PDFDocument.create();
   const fonts = await loadFonts(pdf);
-  const brand = hexToRgb(input.workshop.brandPrimary);
+  // HARDCODED WerkstattConnect-branding — nicht durch workshop anpassbar
+  const brand = rgb(0.996, 0.396, 0.012); // #fe6503
 
-  let logo = null as null | { img: any; w: number; h: number };
+  // Workshop-logo (klein, pro entry als "ausführende werkstatt")
+  let workshopLogo = null as null | { img: any; w: number; h: number };
   if (input.workshop.letterheadLogo && input.workshop.letterheadLogo.length > 0) {
-    logo = await embedLogo(pdf, new Uint8Array(input.workshop.letterheadLogo), input.workshop.letterheadLogoMime || "image/png", 120, 55);
+    workshopLogo = await embedLogo(pdf, new Uint8Array(input.workshop.letterheadLogo), input.workshop.letterheadLogoMime || "image/png", 60, 30);
   }
+  const logo = workshopLogo; // für cover-page nutzen wir auch das workshop-logo
 
   // ======================= COVER PAGE =======================
   const cover = pdf.addPage([A4.w, A4.h]);
-  // Header-band
+  // Header-band mit WerkstattConnect-branding
   cover.drawRectangle({ x: 0, y: A4.h - 130, width: A4.w, height: 130, color: brand });
-  if (logo) cover.drawImage(logo.img, { x: 50, y: A4.h - 90, width: logo.w, height: logo.h });
-  drawRight(cover, s(input.workshop.name), A4.w - 50, A4.h - 55, fonts.helvBold, 14, WHITE);
-  drawRight(cover, s(input.workshop.contactEmail), A4.w - 50, A4.h - 75, fonts.helv, 10, WHITE);
+  // WC-text-logo (statt SVG-import da pdf-lib kein SVG kann)
+  cover.drawText("Werkstatt", { x: 50, y: A4.h - 60, size: 22, font: fonts.helvBold, color: WHITE });
+  cover.drawText("Connect", { x: 50 + fonts.helvBold.widthOfTextAtSize("Werkstatt", 22), y: A4.h - 60, size: 22, font: fonts.helvBold, color: rgb(0.09, 0.17, 0.26) });
+  cover.drawText("SERVICE- & WARTUNGSHEFT", { x: 50, y: A4.h - 90, size: 10, font: fonts.helvBold, color: WHITE });
+  drawRight(cover, s(`Erstellt am ${new Date().toLocaleDateString("de-DE")}`), A4.w - 50, A4.h - 60, fonts.helv, 9, WHITE);
 
-  drawCenter(cover, "SERVICE- & WARTUNGSHEFT", A4.w / 2, A4.h - 200, fonts.helvBold, 22, brand);
-  drawCenter(cover, s(vehicleDisplayName(input.vehicle)), A4.w / 2, A4.h - 230, fonts.helvBold, 16, BLACK);
-  drawCenter(cover, s(`für ${customerDisplayName(input.customer)}`), A4.w / 2, A4.h - 250, fonts.helv, 12, GRAY);
+  drawCenter(cover, s(vehicleDisplayName(input.vehicle)), A4.w / 2, A4.h - 200, fonts.helvBold, 22, BLACK);
+  drawCenter(cover, s(`für ${customerDisplayName(input.customer)}`), A4.w / 2, A4.h - 220, fonts.helv, 12, GRAY);
+  drawCenter(cover, "Chronologische Wartungshistorie", A4.w / 2, A4.h - 240, fonts.helvObl, 10, LIGHT);
 
   // Fahrzeug-details in einer schönen box
   const boxY = A4.h - 300;
@@ -91,11 +96,20 @@ export async function buildWartungsheftPdf(input: WartungsheftInput): Promise<Bu
     ky -= 16;
   }
 
-  drawCenter(cover, s(`${input.entries.length} dokumentierte Wartungen`), A4.w / 2, 100, fonts.helvBold, 13, brand);
-  drawCenter(cover, `Erstellt am ${new Date().toLocaleDateString("de-DE")} · ${input.workshop.name}`, A4.w / 2, 80, fonts.helv, 9, GRAY);
-  drawCenter(cover, "Bitte bewahren Sie dieses Heft zusammen mit den Fahrzeugpapieren auf.", A4.w / 2, 62, fonts.helvObl, 9, LIGHT);
+  drawCenter(cover, s(`${input.entries.length} dokumentierte Wartungen`), A4.w / 2, 140, fonts.helvBold, 13, brand);
 
-  drawFooter(cover, mkPdfDoc(input), fonts);
+  // Ausführende werkstatt-info als kleine card unten
+  const boxY = 60;
+  const boxH = 50;
+  cover.drawRectangle({ x: 60, y: boxY, width: A4.w - 120, height: boxH, borderColor: BORDER, borderWidth: 0.5, color: rgb(0.985, 0.985, 0.985) });
+  cover.drawText("Betreut von:", { x: 75, y: boxY + boxH - 15, size: 8, font: fonts.helv, color: LIGHT });
+  cover.drawText(s(input.workshop.name), { x: 75, y: boxY + boxH - 28, size: 11, font: fonts.helvBold, color: BLACK });
+  const wsContact = [input.workshop.street, `${input.workshop.zip ?? ""} ${input.workshop.city ?? ""}`.trim(), input.workshop.contactPhone, input.workshop.contactEmail].filter(Boolean).join(" · ");
+  cover.drawText(s(wsContact), { x: 75, y: boxY + boxH - 42, size: 8, font: fonts.helv, color: GRAY, maxWidth: A4.w - 220 });
+  if (workshopLogo) {
+    cover.drawImage(workshopLogo.img, { x: A4.w - 80 - workshopLogo.w, y: boxY + (boxH - workshopLogo.h) / 2, width: workshopLogo.w, height: workshopLogo.h });
+  }
+  drawCenter(cover, "Bitte bewahren Sie dieses Heft zusammen mit den Fahrzeugpapieren auf.", A4.w / 2, 30, fonts.helvObl, 8, LIGHT);
 
   // ======================= HISTORY-PAGES =======================
   if (input.entries.length === 0) {
@@ -129,13 +143,15 @@ export async function buildWartungsheftPdf(input: WartungsheftInput): Promise<Bu
       y = A4.h - 75;
     }
 
-    // Datum-badge + Rechnung
+    // Datum-badge + Rechnung + Werkstatt-name
     page.drawRectangle({ x: 50, y: y - entryHeaderH, width: A4.w - 100, height: entryHeaderH, color: rgb(0.97, 0.97, 0.97) });
     page.drawText(s(entry.date.toLocaleDateString("de-DE")), { x: 60, y: y - 18, size: 12, font: fonts.helvBold, color: brand });
     page.drawText(s(`Rechnung ${entry.invoiceNumber}`), { x: 160, y: y - 18, size: 10, font: fonts.helv, color: BLACK });
     if (entry.mileage != null) {
-      page.drawText(s(`${entry.mileage.toLocaleString("de-DE")} km`), { x: 340, y: y - 18, size: 10, font: fonts.helv, color: GRAY });
+      page.drawText(s(`${entry.mileage.toLocaleString("de-DE")} km`), { x: 300, y: y - 18, size: 10, font: fonts.helv, color: GRAY });
     }
+    // Ausführende werkstatt (immer input.workshop.name, weil aktuell 1 werkstatt/kunde)
+    page.drawText(s(`Werkstatt: ${input.workshop.name}`), { x: 380, y: y - 18, size: 8, font: fonts.helv, color: GRAY });
     drawRight(page, `${fmt(entry.totalGrossCent)} EUR`, A4.w - 60, y - 18, fonts.helvBold, 10, BLACK);
     y -= entryHeaderH + 4;
 
@@ -174,6 +190,7 @@ function mkPdfDoc(input: WartungsheftInput): PdfDoc {
     subtotalNetCent: 0, totalVatCent: 0, totalGrossCent: 0,
     notes: null,
     mileageAtIssue: null,
+    creatorName: null,
     customer: input.customer,
     vehicle: null,
     workshop: input.workshop,

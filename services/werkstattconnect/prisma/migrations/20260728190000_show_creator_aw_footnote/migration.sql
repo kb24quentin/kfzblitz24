@@ -1,0 +1,2 @@
+ALTER TABLE "Workshop" ADD COLUMN "showCreatorOnDocs" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Workshop" ADD COLUMN "showAwFootnote"    BOOLEAN NOT NULL DEFAULT true;

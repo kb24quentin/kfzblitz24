@@ -99,7 +99,7 @@ export async function createInvoiceAction(formData: FormData) {
 async function generateAndCachePdf(invoiceId: string) {
   const inv = await prisma.invoice.findUnique({
     where: { id: invoiceId },
-    include: { workshop: true, customer: true, vehicle: true },
+    include: { workshop: true, customer: true, vehicle: true, creator: { select: { name: true } } },
   });
   if (!inv) throw new Error("Rechnung nicht gefunden");
   const positions = inv.positions as unknown as InvoicePosition[];
@@ -113,6 +113,7 @@ async function generateAndCachePdf(invoiceId: string) {
     totalGrossCent: inv.totalGrossCent,
     notes: inv.notes,
     mileageAtIssue: inv.mileageAtIssue,
+    creatorName: inv.creator?.name ?? null,
     customer: inv.customer,
     vehicle: inv.vehicle,
     workshop: inv.workshop,
@@ -130,6 +131,7 @@ async function generateAndCachePdf(invoiceId: string) {
     totalGrossCent: inv.totalGrossCent,
     notes: inv.notes,
     mileageAtIssue: inv.mileageAtIssue,
+    creatorName: inv.creator?.name ?? null,
     customer: inv.customer,
     vehicle: inv.vehicle,
     workshop: inv.workshop,

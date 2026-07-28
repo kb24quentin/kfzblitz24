@@ -56,6 +56,7 @@ export async function GET(req: Request) {
     totalGrossCent: totals.totalGrossCent,
     notes: "Vielen Dank für Ihren Auftrag. Bei Rückfragen sind wir gerne für Sie da.",
     mileageAtIssue: 84500,
+    creatorName: "Max Muster (Mechaniker)",
     customer: {
       type: "b2c",
       companyName: null,
@@ -72,6 +73,11 @@ export async function GET(req: Request) {
       licensePlate: "M-AB 1234",
       vin: "WBAAA31090KX12345",
       mileage: 84500,
+      firstRegistration: new Date("2019-03-01"),
+      hsn: "0005",
+      tsn: "BJU",
+      nextTuev: new Date("2028-04-01"),
+      nextInspection: new Date("2027-04-01"),
     },
     workshop: {
       name: workshop.name,
@@ -93,6 +99,12 @@ export async function GET(req: Request) {
       letterheadLogo: workshop.letterheadLogo,
       letterheadLogoMime: workshop.letterheadLogoMime,
       letterheadTemplate: template,
+      brandFontFamily,
+      brandTableStyle,
+      brandDensity,
+      showCreatorOnDocs: (url.searchParams.get("showCreator") ?? String(workshop.showCreatorOnDocs)) === "true",
+      showAwFootnote: (url.searchParams.get("showAw") ?? String(workshop.showAwFootnote)) === "true",
+      hourlyRateCent: workshop.hourlyRateCent,
     },
   };
 

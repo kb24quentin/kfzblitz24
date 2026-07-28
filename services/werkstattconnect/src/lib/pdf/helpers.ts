@@ -186,6 +186,12 @@ export function drawPaymentInfo(
     page.drawText("Alle Preise verstehen sich in EUR zzgl. gesetzlicher MwSt.", { x, y: ry, size: 9, font: body, color });
     ry -= 12;
   }
+  // Bearbeiter (optional)
+  if (doc.workshop.showCreatorOnDocs && doc.creatorName) {
+    ry -= 8;
+    page.drawText(s(`Bearbeitet von: ${doc.creatorName}`), { x, y: ry, size: 9, font: body, color });
+    ry -= 12;
+  }
   return ry;
 }
 
@@ -278,13 +284,16 @@ export function drawPositionsTable(
   const parts = doc.positions.filter((p) => p.kind === "part");
   let ry = y;
 
+  // Rechte spalten von rechts weg positioniert, damit "Summe" komplett reinpasst.
+  // total-column: rechter rand bei x+width, breite ~65pt
+  // vat, price, unit, qty davor mit ausreichend puffer
   const cols = {
     desc: x,
-    qty: x + width - 245,
-    unit: x + width - 200,
-    price: x + width - 155,
-    vat: x + width - 90,
-    total: x + width - 50,
+    qty: x + width - 275,
+    unit: x + width - 225,
+    price: x + width - 170,
+    vat: x + width - 100,
+    total: x + width - 55,
   };
   const headers = ["Bezeichnung", "Menge", "Einh.", "EUR/E", "MwSt", "Summe"];
 
@@ -370,10 +379,20 @@ export function drawPositionsTable(
     if (style === "bordered") {
       page.drawLine({ start: { x, y: ry }, end: { x: x + width, y: ry }, thickness: 0.6, color: brand });
     }
-    ry -= 8;
+    ry -= 24; // deutlich mehr abstand zwischen sections
   }
 
   drawSection("Arbeitsleistung", labor);
+  // AW-Fußnote nach Arbeitsleistung (wenn labor-positionen existieren und aktiviert)
+  if (labor.length > 0 && doc.workshop.showAwFootnote) {
+    const awMin = 5;
+    const awPerHour = 60 / awMin;
+    const centPerAw = Math.round(doc.workshop.hourlyRateCent / awPerHour);
+    const note = `Arbeitszeit gemäß AW-Norm: 1 AW = ${awMin} Min · Stundensatz ${fmt(doc.workshop.hourlyRateCent)} EUR = ${awPerHour} AW/Std · ${fmt(centPerAw)} EUR/AW`;
+    ry += 12;
+    page.drawText(s(note), { x, y: ry, size: 7.5, font: body, color: LIGHT, maxWidth: width });
+    ry -= 20;
+  }
   drawSection("Ersatzteile / Material", parts);
 
   // ------- Summen -------
@@ -428,19 +447,48 @@ export function drawAddressBlock(page: PDFPage, doc: PdfDoc, fonts: Fonts, x: nu
 /**
  * Standard vehicle-info block unterhalb des titels.
  */
+/**
+ * Fahrzeug-info als 2-spaltige mini-tabelle mit label + wert-paaren.
+ * Zeigt: Modell, Kennzeichen, FIN, km-Stand, Erstzulassung, HSN/TSN,
+ * Nächste HU (wenn gesetzt), Nächste Wartung (wenn gesetzt).
+ */
 export function drawVehicleInfo(page: PDFPage, doc: PdfDoc, fonts: Fonts, x: number, y: number): number {
   if (!doc.vehicle) return y;
-  const { body } = pickFonts(fonts, doc.workshop.brandFontFamily);
-  let ry = y;
-  page.drawText(s(`Fahrzeug: ${vehicleDisplayName(doc.vehicle)}`), { x, y: ry, size: 9, font: body, color: GRAY });
-  ry -= 12;
-  if (doc.vehicle.vin) { page.drawText(s(`FIN: ${doc.vehicle.vin}`), { x, y: ry, size: 9, font: body, color: GRAY }); ry -= 12; }
-  const km = doc.mileageAtIssue ?? doc.vehicle.mileage;
-  if (km != null) {
-    page.drawText(s(`km-Stand: ${km.toLocaleString("de-DE")}`), { x, y: ry, size: 9, font: body, color: GRAY });
-    ry -= 12;
-  }
-  return ry - 6;
+  const { body, bold } = pickFonts(fonts, doc.workshop.brandFontFamily);
+  const v = doc.vehicle;
+  const km = doc.mileageAtIssue ?? v.mileage;
+
+  const pairs: [string, string][] = [];
+  const modell = [v.brand, v.model].filter(Boolean).join(" ");
+  if (modell) pairs.push(["Fahrzeug", modell]);
+  if (v.licensePlate) pairs.push(["Kennzeichen", v.licensePlate]);
+  if (v.vin) pairs.push(["FIN", v.vin]);
+  if (v.firstRegistration) pairs.push(["Erstzulassung", v.firstRegistration.toLocaleDateString("de-DE")]);
+  if (v.hsn && v.tsn) pairs.push(["HSN / TSN", `${v.hsn} / ${v.tsn}`]);
+  if (km != null) pairs.push(["km-Stand", `${km.toLocaleString("de-DE")} km`]);
+  if (v.nextTuev) pairs.push(["Nächste HU", v.nextTuev.toLocaleDateString("de-DE", { month: "2-digit", year: "numeric" })]);
+  if (v.nextInspection) pairs.push(["Nächste Wartung", v.nextInspection.toLocaleDateString("de-DE", { month: "2-digit", year: "numeric" })]);
+
+  if (pairs.length === 0) return y;
+
+  const boxW = 495;
+  const colW = boxW / 2;
+  const rowH = 14;
+  const rowsPerCol = Math.ceil(pairs.length / 2);
+  const boxH = rowsPerCol * rowH + 8;
+
+  page.drawRectangle({ x, y: y - boxH, width: boxW, height: boxH, color: rgb(0.985, 0.985, 0.985), borderColor: BORDER, borderWidth: 0.5 });
+
+  pairs.forEach(([label, val], idx) => {
+    const colIdx = Math.floor(idx / rowsPerCol);
+    const rowIdx = idx % rowsPerCol;
+    const cx = x + 8 + colIdx * colW;
+    const cy = y - 12 - rowIdx * rowH;
+    page.drawText(s(label), { x: cx, y: cy, size: 8, font: body, color: LIGHT });
+    page.drawText(s(val), { x: cx + 90, y: cy, size: 9, font: bold, color: BLACK });
+  });
+
+  return y - boxH - 10;
 }
 
 export function metaBlock(page: PDFPage, doc: PdfDoc, fonts: Fonts, x: number, y: number, color: RGB = GRAY) {

@@ -23,6 +23,8 @@ export type BriefpapierState = {
   brandFontFamily: string;
   brandTableStyle: string;
   brandDensity: string;
+  showCreatorOnDocs: boolean;
+  showAwFootnote: boolean;
 };
 
 const FONT_OPTIONS = [
@@ -63,6 +65,7 @@ export function BriefpapierEditor({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logoState, setLogoState] = useState<"keep" | "new" | "clear">("keep");
   const [logoPreview, setLogoPreview] = useState<string | null>(logoDataUrl);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const filtered = category === "all" ? templates : templates.filter((t) => t.category === category);
 
@@ -84,6 +87,8 @@ export function BriefpapierEditor({
     p.set("font", debouncedState.brandFontFamily);
     p.set("tableStyle", debouncedState.brandTableStyle);
     p.set("density", debouncedState.brandDensity);
+    p.set("showCreator", String(debouncedState.showCreatorOnDocs));
+    p.set("showAw", String(debouncedState.showAwFootnote));
     p.set("_r", String(refreshKey));
     return `/app/settings/preview-pdf?${p.toString()}`;
   }, [debouncedState, refreshKey]);
@@ -128,6 +133,8 @@ export function BriefpapierEditor({
       fd.set("brandFontFamily", state.brandFontFamily);
       fd.set("brandTableStyle", state.brandTableStyle);
       fd.set("brandDensity", state.brandDensity);
+      fd.set("showCreatorOnDocs", String(state.showCreatorOnDocs));
+      fd.set("showAwFootnote", String(state.showAwFootnote));
       fd.set("logoState", logoState);
       if (file && logoState === "new") fd.set("letterheadLogo", file);
       await saveBriefpapierAction(fd);
@@ -283,6 +290,37 @@ export function BriefpapierEditor({
                 ))}
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Anzeige-Optionen */}
+        <section className="bg-white border border-slate-200 rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-slate-900 mb-3">Anzeige-Optionen</h2>
+          <div className="space-y-2">
+            <label className="flex items-start gap-2 cursor-pointer p-2 rounded hover:bg-slate-50">
+              <input
+                type="checkbox"
+                checked={state.showCreatorOnDocs}
+                onChange={(e) => update("showCreatorOnDocs", e.target.checked)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="text-xs font-medium text-slate-900">Bearbeiter anzeigen</div>
+                <div className="text-[11px] text-slate-500">„Bearbeitet von: Max Muster" unten am Dokument</div>
+              </div>
+            </label>
+            <label className="flex items-start gap-2 cursor-pointer p-2 rounded hover:bg-slate-50">
+              <input
+                type="checkbox"
+                checked={state.showAwFootnote}
+                onChange={(e) => update("showAwFootnote", e.target.checked)}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="text-xs font-medium text-slate-900">AW-Fußnote</div>
+                <div className="text-[11px] text-slate-500">„1 AW = 5 Min" unter Arbeitsleistungs-Tabelle</div>
+              </div>
+            </label>
           </div>
         </section>
 

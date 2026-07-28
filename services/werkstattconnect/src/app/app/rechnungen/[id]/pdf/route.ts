@@ -19,7 +19,7 @@ export async function GET(
   const { id } = await params;
   const inv = await prisma.invoice.findUnique({
     where: { id },
-    include: { workshop: true, customer: true, vehicle: true },
+    include: { workshop: true, customer: true, vehicle: true, creator: { select: { name: true } } },
   });
   if (!inv || inv.workshopId !== u.workshopId) return new NextResponse("Not found", { status: 404 });
 
@@ -36,6 +36,7 @@ export async function GET(
       totalGrossCent: inv.totalGrossCent,
       notes: inv.notes,
       mileageAtIssue: inv.mileageAtIssue,
+      creatorName: inv.creator?.name ?? null,
       customer: inv.customer,
       vehicle: inv.vehicle,
       workshop: inv.workshop,
@@ -52,6 +53,7 @@ export async function GET(
       totalGrossCent: inv.totalGrossCent,
       notes: inv.notes,
       mileageAtIssue: inv.mileageAtIssue,
+      creatorName: inv.creator?.name ?? null,
       customer: inv.customer,
       vehicle: inv.vehicle,
       workshop: inv.workshop,

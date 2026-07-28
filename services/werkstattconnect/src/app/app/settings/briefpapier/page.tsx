@@ -52,6 +52,8 @@ export default async function BriefpapierPage() {
           brandFontFamily: w.brandFontFamily,
           brandTableStyle: w.brandTableStyle,
           brandDensity: w.brandDensity,
+          showCreatorOnDocs: w.showCreatorOnDocs,
+          showAwFootnote: w.showAwFootnote,
         }}
         logoDataUrl={logoDataUrl}
         workshopName={w.name}

@@ -70,7 +70,7 @@ export async function createQuoteAction(formData: FormData) {
 async function generateAndCacheQuotePdf(quoteId: string) {
   const q = await prisma.quote.findUnique({
     where: { id: quoteId },
-    include: { workshop: true, customer: true, vehicle: true },
+    include: { workshop: true, customer: true, vehicle: true, creator: { select: { name: true } } },
   });
   if (!q) throw new Error("Angebot nicht gefunden");
   const positions = q.positions as unknown as InvoicePosition[];
@@ -84,6 +84,7 @@ async function generateAndCacheQuotePdf(quoteId: string) {
     totalGrossCent: q.totalGrossCent,
     notes: q.notes,
     mileageAtIssue: q.mileageAtIssue,
+    creatorName: q.creator?.name ?? null,
     customer: q.customer,
     vehicle: q.vehicle,
     workshop: q.workshop,

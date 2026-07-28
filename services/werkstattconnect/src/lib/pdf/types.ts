@@ -14,6 +14,7 @@ export type PdfDoc = {
   totalGrossCent: number;
   notes: string | null;
   mileageAtIssue: number | null;
+  creatorName: string | null; // wird nur angezeigt wenn workshop.showCreatorOnDocs === true
   customer: {
     type: string;
     companyName: string | null;
@@ -30,6 +31,11 @@ export type PdfDoc = {
     licensePlate: string | null;
     vin: string | null;
     mileage: number | null;
+    nextTuev?: Date | null;
+    nextInspection?: Date | null;
+    firstRegistration?: Date | null;
+    hsn?: string | null;
+    tsn?: string | null;
   } | null;
   workshop: {
     name: string;
@@ -54,6 +60,9 @@ export type PdfDoc = {
     brandFontFamily: string; // 'helvetica' | 'times' | 'courier'
     brandTableStyle: string; // 'colored' | 'bordered' | 'zebra' | 'minimal'
     brandDensity: string; // 'compact' | 'normal' | 'spacious'
+    showCreatorOnDocs: boolean;
+    showAwFootnote: boolean;
+    hourlyRateCent: number; // für AW-fußnote-berechnung
   };
 };
 

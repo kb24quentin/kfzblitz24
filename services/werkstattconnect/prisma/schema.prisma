@@ -39,6 +39,8 @@ model Workshop {
   brandFontFamily    String  @default("helvetica") // 'helvetica' | 'times' | 'courier'
   brandTableStyle    String  @default("colored") // 'colored' | 'bordered' | 'zebra' | 'minimal'
   brandDensity       String  @default("normal") // 'compact' | 'normal' | 'spacious'
+  showCreatorOnDocs  Boolean @default(false) // "Bearbeitet von: Name" auf pdfs
+  showAwFootnote     Boolean @default(true) // "1 AW = 5 Min" unter arbeits-tabelle
   iban               String?
   bic                String?
   bankName           String?

@@ -44,6 +44,8 @@ export async function saveBriefpapierAction(formData: FormData) {
       brandFontFamily: ["helvetica", "times", "courier"].includes(font) ? font : "helvetica",
       brandTableStyle: ["colored", "bordered", "zebra", "minimal"].includes(table) ? table : "colored",
       brandDensity: ["compact", "normal", "spacious"].includes(density) ? density : "normal",
+      showCreatorOnDocs: String(formData.get("showCreatorOnDocs") || "") === "true",
+      showAwFootnote: String(formData.get("showAwFootnote") || "true") === "true",
       ...(logoState === "clear"
         ? { letterheadLogo: null, letterheadLogoMime: null }
         : logoBytes

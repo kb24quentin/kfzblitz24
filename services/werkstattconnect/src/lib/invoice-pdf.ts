@@ -12,6 +12,7 @@ type InvoiceForPdf = {
   totalGrossCent: number;
   notes: string | null;
   mileageAtIssue?: number | null;
+  creatorName?: string | null;
   customer: PdfDoc["customer"];
   vehicle: PdfDoc["vehicle"];
   workshop: PdfDoc["workshop"];
@@ -30,6 +31,7 @@ export async function buildInvoicePdf(inv: InvoiceForPdf): Promise<Buffer> {
     totalGrossCent: inv.totalGrossCent,
     notes: inv.notes,
     mileageAtIssue: inv.mileageAtIssue ?? null,
+    creatorName: inv.creatorName ?? null,
     customer: inv.customer,
     vehicle: inv.vehicle,
     workshop: inv.workshop,
@@ -46,6 +48,7 @@ export async function buildQuotePdf(q: {
   totalGrossCent: number;
   notes: string | null;
   mileageAtIssue?: number | null;
+  creatorName?: string | null;
   customer: PdfDoc["customer"];
   vehicle: PdfDoc["vehicle"];
   workshop: PdfDoc["workshop"];
@@ -62,6 +65,7 @@ export async function buildQuotePdf(q: {
     totalGrossCent: q.totalGrossCent,
     notes: q.notes,
     mileageAtIssue: q.mileageAtIssue ?? null,
+    creatorName: q.creatorName ?? null,
     customer: q.customer,
     vehicle: q.vehicle,
     workshop: q.workshop,
