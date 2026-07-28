@@ -1,9 +1,9 @@
 import { PDFDocument, rgb, type PDFPage, type RGB } from "pdf-lib";
 import type { PdfDoc } from "./types";
 import {
-  A4, BLACK, WHITE, GRAY, LIGHT, BORDER,
+  A4, BLACK, WHITE, GRAY, LIGHT, BORDER, FOOTER_TOP_Y,
   s, drawRight, drawCenter, drawAddressBlock, drawVehicleInfo, drawPositionsTable,
-  drawPaymentInfo, drawFooter, embedLogo, hexToRgb, lighter, darker, loadFonts, metaBlock, pickFonts,
+  drawPaymentInfo, drawFooter, drawNotes, embedLogo, hexToRgb, lighter, darker, loadFonts, metaBlock, pickFonts, wrap,
   type Fonts,
 } from "./helpers";
 
@@ -49,14 +49,8 @@ function modernBase(brand: RGB): Renderer {
     let by = drawVehicleInfo(page, doc, fonts, 50, 545);
     by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
     by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-    if (doc.notes) {
-      by -= 12;
-      const { bold: b2, body } = pickFonts(fonts, doc.workshop.brandFontFamily);
-      page.drawText("Notizen:", { x: 50, y: by, size: 9, font: b2, color: BLACK });
-      by -= 12;
-      page.drawText(s(doc.notes), { x: 50, y: by, size: 9, font: body, color: GRAY, maxWidth: 495 });
-    }
-    drawFooter(page, doc, fonts);
+    drawNotes(page, doc, fonts, 50, by, 495);
+    drawFooter(page, doc, fonts, LIGHT, 100);
   };
 }
 
@@ -82,7 +76,7 @@ const classicSerif: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 545);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 const classicLines: Renderer = (page, doc, fonts, brand, _accent, logo) => {
@@ -100,7 +94,7 @@ const classicLines: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 545);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: letterhead-classic — traditioneller zentrierter briefkopf
@@ -124,7 +118,7 @@ const letterheadClassic: Renderer = (page, doc, fonts, brand, _accent, logo) => 
   let by = drawVehicleInfo(page, doc, fonts, 50, 530);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: executive — elegant mit dünnen linien und weitem raster
@@ -146,7 +140,7 @@ const executive: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 525);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // ============================================================================
@@ -165,7 +159,7 @@ const minimalThin: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 540);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 const minimalMono: Renderer = (page, doc, fonts, brand, _accent, logo) => {
@@ -180,7 +174,7 @@ const minimalMono: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 545);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 const compactDense: Renderer = (page, doc, fonts, brand, _accent, logo) => {
@@ -194,7 +188,7 @@ const compactDense: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 620);
   by = drawPositionsTable(page, doc, fonts, 50, by - 6, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 20, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // ============================================================================
@@ -213,7 +207,7 @@ const boldBand: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 555);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 const boldSidebar: Renderer = (page, doc, fonts, brand, _accent, logo) => {
@@ -233,7 +227,7 @@ const boldSidebar: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 190, 615);
   by = drawPositionsTable(page, doc, fonts, 190, by - 10, 355, brand);
   by = drawPaymentInfo(page, doc, 190, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 const boldCentered: Renderer = (page, doc, fonts, brand, _accent, logo) => {
@@ -249,7 +243,7 @@ const boldCentered: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 535);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: stripe-left — durchgehender balken links (voll höhe, 30pt breit)
@@ -264,7 +258,7 @@ const stripeLeft: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 60, 545);
   by = drawPositionsTable(page, doc, fonts, 60, by - 10, 485, brand);
   by = drawPaymentInfo(page, doc, 60, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: stripe-right — durchgehender balken rechts
@@ -282,7 +276,7 @@ const stripeRight: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 545);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 485, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: double-stripe — zwei balken links (dick + dünn)
@@ -299,7 +293,7 @@ const doubleStripe: Renderer = (page, doc, fonts, brand, accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 55, 545);
   by = drawPositionsTable(page, doc, fonts, 55, by - 10, 490, brand);
   by = drawPaymentInfo(page, doc, 55, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: industrial — grosse zahlen, bold, industrial-look
@@ -320,7 +314,7 @@ const industrial: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 620);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // ============================================================================
@@ -340,7 +334,7 @@ const farbigCorners: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 555);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 const farbigGradient: Renderer = (page, doc, fonts, brand, _accent, logo) => {
@@ -361,7 +355,7 @@ const farbigGradient: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 555);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 const farbigFrame: Renderer = (page, doc, fonts, brand, _accent, logo) => {
@@ -394,7 +388,7 @@ const farbigSplit: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 545);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: corner-triangle — grosses dreieck oben-links
@@ -412,7 +406,7 @@ const cornerTriangle: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 545);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: wave-header — geschwungene trennlinie via SVG-path
@@ -430,7 +424,7 @@ const waveHeader: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 555);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: gradient-sidebar — verlauf-sidebar links (fake mit stripes)
@@ -458,7 +452,7 @@ const gradientSidebar: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 110, 615);
   by = drawPositionsTable(page, doc, fonts, 110, by - 10, 435, brand);
   by = drawPaymentInfo(page, doc, 110, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // NEW: fresh-accents — mehrere farb-chips über die seite verteilt
@@ -478,7 +472,7 @@ const freshAccents: Renderer = (page, doc, fonts, brand, accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 545);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // ============================================================================
@@ -499,7 +493,7 @@ const workshopTools: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 50, 555);
   by = drawPositionsTable(page, doc, fonts, 50, by - 10, 495, brand);
   by = drawPaymentInfo(page, doc, 50, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 const elegantMargins: Renderer = (page, doc, fonts, brand, _accent, logo) => {
@@ -516,7 +510,7 @@ const elegantMargins: Renderer = (page, doc, fonts, brand, _accent, logo) => {
   let by = drawVehicleInfo(page, doc, fonts, 80, 510);
   by = drawPositionsTable(page, doc, fonts, 80, by - 15, 435, brand);
   by = drawPaymentInfo(page, doc, 80, by - 24, fonts);
-  drawFooter(page, doc, fonts);
+  drawFooter(page, doc, fonts, LIGHT, 100);
 };
 
 // ============================================================================

@@ -3,6 +3,8 @@ import type { PdfDoc } from "./types";
 import { customerDisplayName, vehicleDisplayName } from "../customer-name";
 
 export const A4 = { w: 595.28, h: 841.89 };
+/** Content darf nicht unter diese y-position — sonst kollidiert mit footer */
+export const FOOTER_TOP_Y = 110;
 export const WHITE = rgb(1, 1, 1);
 export const BLACK = rgb(0, 0, 0);
 export const GRAY = rgb(0.35, 0.35, 0.35);
@@ -154,6 +156,26 @@ export function densityMult(density: string) {
  * Standard-payment-block (Zahlungshinweise + IBAN + verwendungszweck).
  * Alle templates rufen das gleiche.
  */
+/**
+ * Rendert notes-block wenn platz da ist. Sonst wird der block weggelassen
+ * (verhindert überlappung mit footer). Return neue y-position.
+ */
+export function drawNotes(page: PDFPage, doc: PdfDoc, fonts: Fonts, x: number, y: number, w: number = 495): number {
+  if (!doc.notes) return y;
+  if (y < FOOTER_TOP_Y + 30) return y;
+  const { body, bold } = pickFonts(fonts, doc.workshop.brandFontFamily);
+  let ry = y - 12;
+  page.drawText("Notizen:", { x, y: ry, size: 9, font: bold, color: BLACK });
+  ry -= 12;
+  const noteLines = wrap(s(doc.notes), w, body, 9, 4);
+  for (const line of noteLines) {
+    if (ry < FOOTER_TOP_Y) break;
+    page.drawText(line, { x, y: ry, size: 9, font: body, color: GRAY });
+    ry -= 11;
+  }
+  return ry;
+}
+
 export function drawPaymentInfo(
   page: PDFPage,
   doc: PdfDoc,
@@ -163,6 +185,17 @@ export function drawPaymentInfo(
   color: RGB = GRAY
 ): number {
   const { body, bold } = pickFonts(fonts, doc.workshop.brandFontFamily);
+  // Wenn zu wenig platz für payment-block (mind. 3 zeilen à 12pt = 36pt + puffer)
+  // gib eine kleine kompakte version aus statt vollem block.
+  if (y < FOOTER_TOP_Y + 50) {
+    if (doc.kind === "invoice" && !doc.paidAt) {
+      const line = doc.workshop.iban
+        ? `Zahlung: ${doc.dueAt ? "bis " + doc.dueAt.toLocaleDateString("de-DE") : "nach erhalt"} auf ${doc.workshop.bankName ?? "Konto"} · IBAN ${doc.workshop.iban} · VZ ${doc.number}`
+        : `Zahlungsziel: ${doc.dueAt ? doc.dueAt.toLocaleDateString("de-DE") : "nach erhalt"}`;
+      page.drawText(s(line), { x, y: Math.max(y, FOOTER_TOP_Y + 5), size: 8, font: body, color, maxWidth: A4.w - 100 });
+    }
+    return Math.max(y - 14, FOOTER_TOP_Y);
+  }
   let ry = y;
   if (doc.kind === "invoice") {
     const pm = doc.paymentMethod || "bank_transfer";
@@ -213,12 +246,6 @@ export function drawPaymentInfo(
     }
     ry -= 12;
     page.drawText("Alle Preise verstehen sich in EUR zzgl. gesetzlicher MwSt.", { x, y: ry, size: 9, font: body, color });
-    ry -= 12;
-  }
-  // Bearbeiter (optional)
-  if (doc.workshop.showCreatorOnDocs && doc.creatorName) {
-    ry -= 8;
-    page.drawText(s(`Bearbeitet von: ${doc.creatorName}`), { x, y: ry, size: 9, font: body, color });
     ry -= 12;
   }
   return ry;
@@ -526,6 +553,10 @@ export function metaBlock(page: PDFPage, doc: PdfDoc, fonts: Fonts, x: number, y
     ? [["Rechnungs-Nr.", doc.number], ["Datum", doc.issuedAt.toLocaleDateString("de-DE")]]
     : [["Angebots-Nr.", doc.number], ["Datum", doc.issuedAt.toLocaleDateString("de-DE")]];
   if (doc.dueAt) labels.push([doc.kind === "invoice" ? "Fällig" : "Gültig bis", doc.dueAt.toLocaleDateString("de-DE")]);
+  // Bearbeiter direkt unter Rechnungs/Angebots-Nr. + Datum + Fällig
+  if (doc.workshop.showCreatorOnDocs && doc.creatorName) {
+    labels.push(["Bearbeiter", doc.creatorName]);
+  }
   let ry = y;
   for (const [label, val] of labels) {
     page.drawText(s(label), { x, y: ry, size: 9, font: body, color });
