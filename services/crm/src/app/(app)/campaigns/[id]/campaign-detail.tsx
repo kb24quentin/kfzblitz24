@@ -4,9 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   Play, Pause, Send, Mail, MailOpen, MessageSquare, AlertTriangle, MousePointerClick,
-  FileText, Phone, CheckCircle2, Clock, XCircle, StopCircle,
+  FileText, Phone, CheckCircle2, Clock, XCircle, StopCircle, Flag,
 } from "lucide-react";
-import { updateCampaignStatus, sendCampaignEmails } from "../actions";
+import { updateCampaignStatus, sendCampaignEmails, completeCampaign } from "../actions";
 
 type Step = {
   id: string;
@@ -129,6 +129,25 @@ export function CampaignDetail({ campaign, contacts, stats, emails, letters }: P
             >
               <Play className="w-4 h-4" /> Fortsetzen
             </button>
+          )}
+          {(campaign.status === "active" || campaign.status === "paused") && (
+            <button
+              onClick={async () => {
+                if (!confirm(
+                  `„${campaign.name}" wirklich abschließen?\n\nAlle noch laufenden Kontakt-Sequenzen werden gestoppt. Weitere Mails/Briefe/Anrufe werden nicht mehr ausgeführt.`
+                )) return;
+                await completeCampaign(campaign.id);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-bg-secondary border border-border text-text rounded-lg text-sm font-medium hover:bg-border/30 transition-colors"
+              title="Kampagne vorzeitig als abgeschlossen markieren"
+            >
+              <Flag className="w-4 h-4" /> Abschließen
+            </button>
+          )}
+          {campaign.status === "completed" && (
+            <span className="flex items-center gap-2 px-4 py-2 bg-success/10 text-success border border-success/30 rounded-lg text-sm font-medium">
+              <CheckCircle2 className="w-4 h-4" /> Abgeschlossen
+            </span>
           )}
         </div>
       </div>

@@ -181,6 +181,21 @@ async function evaluateSteps(now: Date) {
         }
       }
     }
+
+    // Auto-complete: wenn nach dieser Runde JEDER CampaignContact stopped
+    // ist, gibt es nichts mehr zu tun → Kampagne auf "completed" setzen.
+    // Verwendet frischen Query (nicht `campaign.campaignContacts`, weil die
+    // im Loop schon verändert wurden) — leichter count() reicht.
+    const stillActiveCcCount = await prisma.campaignContact.count({
+      where: { campaignId: campaign.id, stopped: false },
+    });
+    if (stillActiveCcCount === 0 && campaign.campaignContacts.length > 0) {
+      await prisma.campaign.update({
+        where: { id: campaign.id },
+        data: { status: "completed" },
+      });
+      console.log(`[send] campaign ${campaign.id} (${campaign.name}) → completed (alle Kontakte durch)`);
+    }
   }
 
   return {

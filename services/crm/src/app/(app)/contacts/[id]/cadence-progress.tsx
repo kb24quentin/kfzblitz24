@@ -207,6 +207,7 @@ function CadenceCard({ cc, contactId }: { cc: Cadence; contactId: string }) {
             Gestoppt nach Schritt {current} / {total}
             {cc.stoppedReason === "replied" && " — Kontakt hat geantwortet"}
             {cc.stoppedReason === "manual" && " — manuell gestoppt"}
+            {cc.stoppedReason === "campaign_ended" && " — Kampagne abgeschlossen"}
             {cc.stoppedReason === "migrated" && " — von altem System migriert"}
             {cc.stoppedAt && ` (${new Date(cc.stoppedAt).toLocaleDateString("de-DE")})`}
           </>
@@ -247,6 +248,7 @@ function StatusPill({
     const label =
       cc.stoppedReason === "replied" ? "Geantwortet"
       : cc.stoppedReason === "manual" ? "Gestoppt"
+      : cc.stoppedReason === "campaign_ended" ? "Kampagne beendet"
       : cc.stoppedReason === "migrated" ? "Migriert"
       : "Gestoppt";
     const color = cc.stoppedReason === "replied" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-700";

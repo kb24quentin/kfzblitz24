@@ -145,6 +145,32 @@ export async function sendCampaignEmails(campaignId: string) {
 }
 
 /**
+ * Kampagne manuell abschließen. Setzt Status auf "completed" und stoppt
+ * alle noch laufenden CampaignContacts mit reason="campaign_ended".
+ * Cron ignoriert Campaigns mit status != active → keine weiteren
+ * Schritte werden mehr gefeuert.
+ */
+export async function completeCampaign(campaignId: string) {
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.campaign.update({
+      where: { id: campaignId },
+      data: { status: "completed" },
+    }),
+    prisma.campaignContact.updateMany({
+      where: { campaignId, stopped: false },
+      data: {
+        stopped: true,
+        stoppedReason: "campaign_ended",
+        stoppedAt: now,
+      },
+    }),
+  ]);
+  revalidatePath("/campaigns");
+  revalidatePath(`/campaigns/${campaignId}`);
+}
+
+/**
  * Manually stop a specific contact's cadence (e.g. "Kunde geantwortet
  * per Telefon, keine weiteren Schritte").
  */
