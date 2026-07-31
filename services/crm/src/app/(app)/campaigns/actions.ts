@@ -34,8 +34,11 @@ export async function createCampaign(formData: FormData) {
     data: {
       name: formData.get("name") as string,
       channels: JSON.stringify(channels),
-      templateAId: formData.get("templateAId") as string,
-      templateBId: templateBId || null,
+      // templateAId nur setzen wenn E-Mail-Kanal aktiv ist
+      templateAId: channels.includes("email")
+        ? ((formData.get("templateAId") as string) || null)
+        : null,
+      templateBId: channels.includes("email") ? (templateBId || null) : null,
       letterTemplateId: (formData.get("letterTemplateId") as string) || null,
       senderId,
       scheduledAt,
@@ -106,9 +109,12 @@ export async function sendCampaignEmails(campaignId: string) {
 
   for (const cc of campaign.campaignContacts) {
     const contact = cc.contact;
-    const template = cc.variant === "B" && campaign.templateB
-      ? campaign.templateB
-      : campaign.templateA;
+    // E-Mail-Template nur wenn wir überhaupt einen E-Mail-Kanal haben
+    const emailTemplate = doEmail
+      ? (cc.variant === "B" && campaign.templateB
+          ? campaign.templateB
+          : campaign.templateA)
+      : null;
 
     const replacements: Record<string, string> = {
       salutation: contact.salutation || "",
@@ -129,15 +135,15 @@ export async function sendCampaignEmails(campaignId: string) {
         s
       );
 
-    const subject = sub(template.subject);
-    const bodyHtml = sub(template.bodyHtml);
-    const signature = sub(template.signature?.html ?? "");
-    const fullBodyHtml = signature.trim()
-      ? `${bodyHtml}<div style="margin-top:24px">${signature}</div>`
-      : bodyHtml;
-
     // ── EMAIL ─────────────────────────────────────────────────────────
-    if (doEmail) {
+    if (doEmail && emailTemplate) {
+      const subject = sub(emailTemplate.subject);
+      const bodyHtml = sub(emailTemplate.bodyHtml);
+      const signature = sub(emailTemplate.signature?.html ?? "");
+      const fullBodyHtml = signature.trim()
+        ? `${bodyHtml}<div style="margin-top:24px">${signature}</div>`
+        : bodyHtml;
+
       const already = await prisma.email.findFirst({
         where: { campaignId, contactId: cc.contactId },
       });
@@ -146,7 +152,7 @@ export async function sendCampaignEmails(campaignId: string) {
           data: {
             campaignId,
             contactId: cc.contactId,
-            templateId: template.id,
+            templateId: emailTemplate.id,
             variant: cc.variant,
             subject,
             body: fullBodyHtml,

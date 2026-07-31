@@ -142,29 +142,29 @@ export function CampaignForm({
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-text mb-1">
-            E-Mail-Template A {channels.has("email") ? "*" : "(nicht benötigt — kein E-Mail-Kanal)"}
-          </label>
-          <select
-            name="templateAId"
-            required
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-          >
-            <option value="">Template wählen...</option>
-            {templates.filter((t) => (t.type ?? "email") === "email").map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} – {t.subject}
-              </option>
-            ))}
-          </select>
-          {templates.filter((t) => (t.type ?? "email") === "email").length === 0 && (
-            <p className="text-xs text-warning mt-1">
-              Noch keine E-Mail-Templates angelegt — bitte zuerst unter{" "}
-              <Link href="/templates/new" className="underline">Templates → Neu</Link> erstellen.
-            </p>
-          )}
-        </div>
+        {channels.has("email") && (
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">E-Mail-Template A *</label>
+            <select
+              name="templateAId"
+              required
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              <option value="">Template wählen...</option>
+              {templates.filter((t) => (t.type ?? "email") === "email").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} – {t.subject}
+                </option>
+              ))}
+            </select>
+            {templates.filter((t) => (t.type ?? "email") === "email").length === 0 && (
+              <p className="text-xs text-warning mt-1">
+                Noch keine E-Mail-Templates angelegt — bitte zuerst unter{" "}
+                <Link href="/templates/new" className="underline">Templates → Neu</Link> erstellen.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Kanäle: E-Mail / Brief / Anruf */}
         <div>

@@ -146,7 +146,7 @@ model Campaign {
   name               String
   status             String    @default("draft")
   channels           String    @default("[\"email\"]")  // JSON-encoded: any of "email"|"letter"|"call"
-  templateAId        String    // email template (Variante A)
+  templateAId        String?   // email template (Variante A) — nullable falls kein E-Mail-Kanal
   templateBId        String?   // email template (Variante B, optional)
   letterTemplateId   String?   // Brief-Template (nur wenn Channel "letter" aktiv)
   senderId           String?   // optional; falls null → env FROM_EMAIL/FROM_NAME
@@ -159,7 +159,7 @@ model Campaign {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  templateA        Template          @relation("TemplateA", fields: [templateAId], references: [id])
+  templateA        Template?         @relation("TemplateA", fields: [templateAId], references: [id])
   templateB        Template?         @relation("TemplateB", fields: [templateBId], references: [id])
   letterTemplate   Template?         @relation("LetterTemplate", fields: [letterTemplateId], references: [id])
   followUpTemplate Template?         @relation("FollowUpTemplate", fields: [followUpTemplateId], references: [id])
