@@ -13,10 +13,28 @@ import { Ob24ModeCard } from "./ob24-mode-card";
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    ob24Toggled?: string;
+    from?: string;
+    to?: string;
+    reason?: string;
+  }>;
 }) {
   const params = await searchParams;
   const tab = params.tab || "config";
+
+  // Flash für OB24-Toggle-Feedback (kommt aus /settings/ob24-apply Redirect)
+  const ob24Flash =
+    params.ob24Toggled === "ok"
+      ? {
+          ok: true,
+          oldMode: (params.from === "live" ? "live" : "test") as "test" | "live",
+          newMode: (params.to === "live" ? "live" : "test") as "test" | "live",
+        }
+      : params.ob24Toggled === "fail"
+      ? { ok: false, reason: params.reason ?? "Unbekannter Fehler" }
+      : null;
 
   const hasResendKey = !!process.env.RESEND_API_KEY;
   const fromEmail = process.env.FROM_EMAIL || "nicht konfiguriert";
@@ -138,6 +156,7 @@ export default async function SettingsPage({
               currentMode={(ob24Cfg?.ob24Mode as "test" | "live") ?? "test"}
               updatedAt={ob24Cfg?.updatedAt ?? null}
               updatedByEmail={ob24Cfg?.updatedByEmail ?? null}
+              applyResult={ob24Flash}
             />
           )}
 

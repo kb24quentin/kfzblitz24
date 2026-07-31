@@ -1,23 +1,44 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { signOut } from "next-auth/react";
-import { AlertTriangle, Info, Lock, ShieldAlert, X } from "lucide-react";
+import { signIn } from "next-auth/react";
+import { AlertTriangle, Info, Lock, ShieldAlert, X, CheckCircle2, XCircle } from "lucide-react";
 import { requestOb24ModeToggle } from "./actions";
 
 export function Ob24ModeCard({
   currentMode,
   updatedAt,
   updatedByEmail,
+  applyResult,
 }: {
   currentMode: "test" | "live";
   updatedAt: Date | null;
   updatedByEmail: string | null;
+  applyResult?: { ok: boolean; oldMode?: "test" | "live"; newMode?: "test" | "live"; reason?: string } | null;
 }) {
   const target: "test" | "live" = currentMode === "live" ? "test" : "live";
   const [showModal, setShowModal] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState(applyResult ?? null);
+
+  // Auto-hide the flash after a few seconds
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 6000);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  // Strip the ?ob24Toggled=... query params from the URL on mount, so a
+  // refresh doesn't re-fire the flash. Keeps only `tab=config`.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("ob24Toggled")) {
+      ["ob24Toggled", "from", "to", "reason"].forEach((k) => url.searchParams.delete(k));
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
   useEffect(() => {
     if (!showModal) return;
@@ -34,18 +55,49 @@ export function Ob24ModeCard({
         setError(res.message ?? "Konnte Aktion nicht anlegen.");
         return;
       }
-      // Landing-URL nach Google-Re-Auth
+      // Landing-URL nach Google-Re-Auth. Wir bleiben eingeloggt und lassen
+      // NextAuth nur einen neuen OAuth-Roundtrip machen — dadurch bekommen
+      // wir einen frischen JWT (signedInAt-Timestamp neu) und Google zeigt
+      // seinen Account-Picker als sichtbare Bestätigung. Kein Full-Logout.
       const callbackUrl = `/settings/ob24-apply?pending=${encodeURIComponent(res.pendingId)}`;
-      // signOut löscht die aktuelle Session; der callbackUrl zeigt auf die
-      // App, die dann ohne Session ist → der NextAuth-Middleware/Route-Guard
-      // schickt automatisch zu /login. Von dort klickt der User "Mit Google
-      // anmelden". So ist ein frischer Sign-In garantiert.
-      await signOut({ redirectTo: callbackUrl });
+      await signIn("google", { redirectTo: callbackUrl });
     });
   };
 
   return (
     <div className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
+      {flash && (
+        <div
+          className={`flex items-start gap-2 p-3 rounded-lg text-sm ${
+            flash.ok
+              ? "bg-green-50 text-green-800 border border-green-200"
+              : "bg-red-50 text-red-800 border border-red-200"
+          }`}
+        >
+          {flash.ok ? (
+            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+          ) : (
+            <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          )}
+          <div className="flex-1">
+            {flash.ok ? (
+              <>
+                OB24-Modus umgeschaltet: <b>{flash.oldMode}</b> → <b>{flash.newMode}</b>
+              </>
+            ) : (
+              <>Umschaltung fehlgeschlagen: {flash.reason}</>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setFlash(null)}
+            className="text-current opacity-60 hover:opacity-100"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold text-text flex items-center gap-2">
@@ -131,10 +183,10 @@ export function Ob24ModeCard({
               )}
 
               <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900">
-                <p className="font-semibold mb-1">Zur Bestätigung erforderlich:</p>
+                <p className="font-semibold mb-1">Zur Bestätigung:</p>
                 <p>
-                  Du wirst gleich <b>ausgeloggt</b> und musst dich <b>erneut mit Google anmelden</b>.
-                  Erst dann greift die Umschaltung. Zeitfenster: 10 Minuten.
+                  Google zeigt dir kurz den Account-Picker — wähl deinen Account,
+                  landst automatisch wieder hier. Bleibst die ganze Zeit eingeloggt.
                 </p>
               </div>
             </div>
@@ -158,7 +210,7 @@ export function Ob24ModeCard({
                     : "bg-accent text-white hover:bg-accent-light"
                 }`}
               >
-                {pending ? "Öffne Google…" : `Ausloggen & zu Google umleiten`}
+                {pending ? "Öffne Google…" : `Mit Google bestätigen`}
               </button>
             </div>
           </div>
