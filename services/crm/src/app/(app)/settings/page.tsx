@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { CheckCircle, XCircle, Key, Mail, Globe, Users, FileSignature, AtSign } from "lucide-react";
 import { UserManagement } from "./user-management";
 import { TestEmailForm } from "./test-email-form";
+import { TestLetterForm } from "./test-letter-form";
 import { SignaturesManager } from "./signatures-manager";
 import { SendersManager } from "./senders-manager";
 
@@ -117,6 +118,8 @@ export default async function SettingsPage({
           </div>
 
           <TestEmailForm />
+
+          <TestLetterForm />
         </>
       )}
 
