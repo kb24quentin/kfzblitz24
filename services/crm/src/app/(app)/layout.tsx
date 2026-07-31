@@ -2,6 +2,12 @@ import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { prisma } from "@/lib/db";
 
+// Layout ist dynamisch, weil wir für den Sidebar-Badge einen DB-Query
+// machen. Ohne diese Anweisung versucht Next während `next build` die
+// Layout-Bestandteile statisch zu prerendern und crasht, weil DATABASE_URL
+// im Build-Container nicht gesetzt ist.
+export const dynamic = "force-dynamic";
+
 export default async function AppLayout({
   children,
 }: {
