@@ -164,7 +164,6 @@ export async function POST() {
               footer:
                 "kfzBlitz24 GmbH · Bomhardstraße 7 · 82031 Grünwald bei München · " +
                 "Geschäftsführer: Christian Engert · HRB 291765 Amtsgericht München · USt-IdNr.: DE367617344",
-              versionCode: "AKQ-KB24 · Rev. 07/2026 · v1.0",
             });
 
             const result = await sendPrintjob({ pdf });
