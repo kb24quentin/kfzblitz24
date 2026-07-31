@@ -3,6 +3,22 @@
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { htmlToPlainText } from "@/lib/email";
+
+export type CampaignChannel = "email" | "letter" | "call";
+
+function parseChannels(raw: string | null | undefined): CampaignChannel[] {
+  try {
+    const arr = JSON.parse(raw || "[\"email\"]") as unknown;
+    if (!Array.isArray(arr)) return ["email"];
+    const filtered = arr.filter((c): c is CampaignChannel =>
+      c === "email" || c === "letter" || c === "call"
+    );
+    return filtered.length > 0 ? filtered : ["email"];
+  } catch {
+    return ["email"];
+  }
+}
 
 export async function createCampaign(formData: FormData) {
   const contactIds = JSON.parse(formData.get("contactIds") as string || "[]") as string[];
@@ -10,10 +26,14 @@ export async function createCampaign(formData: FormData) {
   const senderId = (formData.get("senderId") as string) || null;
   const scheduledAtRaw = (formData.get("scheduledAt") as string) || "";
   const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : null;
+  // channels comes as a JSON-encoded string from the form (multi-select chips)
+  const channelsRaw = (formData.get("channels") as string) || "[\"email\"]";
+  const channels = parseChannels(channelsRaw);
 
   const campaign = await prisma.campaign.create({
     data: {
       name: formData.get("name") as string,
+      channels: JSON.stringify(channels),
       templateAId: formData.get("templateAId") as string,
       templateBId: templateBId || null,
       senderId,
@@ -54,6 +74,11 @@ export async function updateCampaignStatus(campaignId: string, status: string) {
   revalidatePath(`/campaigns/${campaignId}`);
 }
 
+/**
+ * Renamed intent: this now queues everything the campaign's `channels`
+ * config asks for — emails, letters, and/or call reminders. Kept the
+ * "sendCampaignEmails" export name so existing UI buttons keep working.
+ */
 export async function sendCampaignEmails(campaignId: string) {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
@@ -67,21 +92,22 @@ export async function sendCampaignEmails(campaignId: string) {
 
   if (!campaign) throw new Error("Campaign not found");
 
-  let queued = 0;
+  const channels = parseChannels(campaign.channels);
+  const doEmail = channels.includes("email");
+  const doLetter = channels.includes("letter");
+  const doCall = channels.includes("call");
+
+  let queuedEmails = 0;
+  let queuedLetters = 0;
+  let queuedCalls = 0;
+  let skippedNoAddress = 0;
 
   for (const cc of campaign.campaignContacts) {
-    // Check if email already sent
-    const existing = await prisma.email.findFirst({
-      where: { campaignId, contactId: cc.contactId },
-    });
-    if (existing) continue;
-
+    const contact = cc.contact;
     const template = cc.variant === "B" && campaign.templateB
       ? campaign.templateB
       : campaign.templateA;
 
-    // Render template with contact data
-    const contact = cc.contact;
     const replacements: Record<string, string> = {
       salutation: contact.salutation || "",
       first_name: contact.firstName,
@@ -91,36 +117,106 @@ export async function sendCampaignEmails(campaignId: string) {
       position: contact.position || "",
       city: contact.city || "",
       phone: contact.phone || "",
+      street: contact.street || "",
+      zip_code: contact.zipCode || "",
     };
 
-    let subject = template.subject;
-    let body = template.bodyHtml;
-    let signature = template.signature?.html ?? "";
-    for (const [key, value] of Object.entries(replacements)) {
-      const re = new RegExp(`\\{\\{${key}\\}\\}`, "g");
-      subject = subject.replace(re, value);
-      body = body.replace(re, value);
-      signature = signature.replace(re, value);
+    const sub = (s: string) =>
+      Object.entries(replacements).reduce(
+        (acc, [k, v]) => acc.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v),
+        s
+      );
+
+    const subject = sub(template.subject);
+    const bodyHtml = sub(template.bodyHtml);
+    const signature = sub(template.signature?.html ?? "");
+    const fullBodyHtml = signature.trim()
+      ? `${bodyHtml}<div style="margin-top:24px">${signature}</div>`
+      : bodyHtml;
+
+    // ── EMAIL ─────────────────────────────────────────────────────────
+    if (doEmail) {
+      const already = await prisma.email.findFirst({
+        where: { campaignId, contactId: cc.contactId },
+      });
+      if (!already) {
+        await prisma.email.create({
+          data: {
+            campaignId,
+            contactId: cc.contactId,
+            templateId: template.id,
+            variant: cc.variant,
+            subject,
+            body: fullBodyHtml,
+            status: "queued",
+          },
+        });
+        queuedEmails++;
+      }
     }
 
-    // Append the rendered signature with a small vertical gap (no <hr>
-    // separator — the signature card has its own visual identity).
-    const fullBody = signature.trim()
-      ? `${body}<div style="margin-top:24px">${signature}</div>`
-      : body;
+    // ── LETTER ────────────────────────────────────────────────────────
+    if (doLetter) {
+      // Nur wenn Adresse vollständig ist — sonst nicht queuen (Fehler
+      // beim Rendern des Adressblocks vermeiden).
+      const addressOk = !!(contact.street && contact.zipCode && contact.city);
+      if (!addressOk) {
+        skippedNoAddress++;
+      } else {
+        const already = await prisma.letter.findFirst({
+          where: { campaignId, contactId: cc.contactId },
+        });
+        if (!already) {
+          // For letters we store the plain-text body (already substituted).
+          // The signature is appended too — plain text version.
+          const combined = signature.trim()
+            ? `${bodyHtml}\n\n${signature}`
+            : bodyHtml;
+          await prisma.letter.create({
+            data: {
+              campaignId,
+              contactId: cc.contactId,
+              templateId: template.id,
+              subject,
+              body: htmlToPlainText(combined),
+              status: "queued",
+            },
+          });
+          queuedLetters++;
+        }
+      }
+    }
 
-    await prisma.email.create({
-      data: {
-        campaignId,
-        contactId: cc.contactId,
-        templateId: template.id,
-        variant: cc.variant,
-        subject,
-        body: fullBody,
-        status: "queued",
-      },
-    });
-    queued++;
+    // ── CALL ──────────────────────────────────────────────────────────
+    if (doCall) {
+      // Simple approach: create a reminder for the campaign owner (or any
+      // active admin) to call this contact. Assigned-to user preferred.
+      const userId = contact.assignedToId
+        ?? (await prisma.user.findFirst({ where: { active: true, role: "admin" } }))?.id
+        ?? (await prisma.user.findFirst({ where: { active: true } }))?.id;
+      if (userId) {
+        const already = await prisma.reminder.findFirst({
+          where: {
+            contactId: cc.contactId,
+            title: { contains: campaign.name },
+          },
+        });
+        if (!already) {
+          const dueDate = new Date();
+          dueDate.setDate(dueDate.getDate() + 1); // fällig morgen
+          await prisma.reminder.create({
+            data: {
+              contactId: cc.contactId,
+              userId,
+              title: `Anruf: ${campaign.name}`,
+              description: `Kampagnen-Anruf gemäß Channel "call" — Betreff: ${subject}`,
+              dueDate,
+            },
+          });
+          queuedCalls++;
+        }
+      }
+    }
   }
 
   // Update campaign status
@@ -131,5 +227,12 @@ export async function sendCampaignEmails(campaignId: string) {
 
   revalidatePath("/campaigns");
   revalidatePath(`/campaigns/${campaignId}`);
-  return { queued };
+  return {
+    // legacy field for backward compat with the UI:
+    queued: queuedEmails + queuedLetters + queuedCalls,
+    queuedEmails,
+    queuedLetters,
+    queuedCalls,
+    skippedNoAddress,
+  };
 }

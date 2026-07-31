@@ -51,6 +51,7 @@ model Contact {
 
   assignedTo       User?             @relation("AssignedTo", fields: [assignedToId], references: [id])
   emails           Email[]
+  letters          Letter[]
   replies          Reply[]
   campaignContacts CampaignContact[]
   activities       Activity[]
@@ -101,6 +102,7 @@ model Template {
   campaignsB        Campaign[] @relation("TemplateB")
   campaignsFollowUp Campaign[] @relation("FollowUpTemplate")
   emails            Email[]
+  letters           Letter[]
 }
 
 model Signature {
@@ -127,6 +129,7 @@ model Campaign {
   id                 String    @id @default(cuid())
   name               String
   status             String    @default("draft")
+  channels           String    @default("[\"email\"]")  // JSON-encoded: any of "email"|"letter"|"call"
   templateAId        String
   templateBId        String?
   senderId           String?   // optional; falls null → env FROM_EMAIL/FROM_NAME
@@ -144,7 +147,29 @@ model Campaign {
   followUpTemplate Template?         @relation("FollowUpTemplate", fields: [followUpTemplateId], references: [id])
   sender           Sender?           @relation(fields: [senderId], references: [id], onDelete: SetNull)
   emails           Email[]
+  letters          Letter[]
   campaignContacts CampaignContact[]
+}
+
+model Letter {
+  id            String    @id @default(cuid())
+  campaignId    String?
+  contactId     String
+  templateId    String?
+  subject       String    // wird als Brief-Betreff verwendet
+  body          String    // Plain-Text-Body (nach HTML-Stripping)
+  status        String    @default("queued") // queued | sent | done | canceled | failed
+  ob24JobId     Int?      // OB24 printjob id
+  ob24Mode      String?   // "test" | "live"
+  pages         Int?      // aus OB24-response
+  amount        Float?    // EUR
+  trackingCode  String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  template Template? @relation(fields: [templateId], references: [id])
 }
 
 model CampaignContact {

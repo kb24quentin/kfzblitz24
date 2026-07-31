@@ -45,6 +45,13 @@ services:
       GOOGLE_SSO_CLIENT_SECRET: ${GOOGLE_SSO_CLIENT_SECRET}
       SSO_ALLOWED_DOMAIN: ${SSO_ALLOWED_DOMAIN:-kfzblitz24.de}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      # OnlineBrief24 (Brief-Kanal)
+      OB24_API_KEY: ${OB24_API_KEY}
+      OB24_API_SECRET: ${OB24_API_SECRET}
+      OB24_MODE: ${OB24_MODE:-test}
+      LETTER_SENDER_NAME: ${LETTER_SENDER_NAME:-kfzBlitz24 GmbH}
+      LETTER_SENDER_LINE1: ${LETTER_SENDER_LINE1:-Bomhardstraße 7}
+      LETTER_SENDER_LINE2: ${LETTER_SENDER_LINE2:-82031 Grünwald bei München}
     networks:
       - prod_internal
       - traefik_net

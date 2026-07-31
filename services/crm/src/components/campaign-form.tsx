@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Save, ArrowLeft, Users, Zap, Filter, AtSign, Clock } from "lucide-react";
+import { Save, ArrowLeft, Users, Zap, Filter, AtSign, Clock, Mail, FileText, Phone } from "lucide-react";
 import Link from "next/link";
 
 type Template = { id: string; name: string; subject: string };
@@ -52,6 +52,19 @@ export function CampaignForm({
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [enableAB, setEnableAB] = useState(false);
   const [enableSchedule, setEnableSchedule] = useState(false);
+  const [channels, setChannels] = useState<Set<"email" | "letter" | "call">>(
+    new Set(["email"])
+  );
+
+  const toggleChannel = (c: "email" | "letter" | "call") => {
+    const next = new Set(channels);
+    if (next.has(c)) {
+      if (next.size > 1) next.delete(c); // mind. 1 muss aktiv bleiben
+    } else {
+      next.add(c);
+    }
+    setChannels(next);
+  };
   const [enableFollowUp, setEnableFollowUp] = useState(false);
 
   // Filters — defaults: only fresh leads, exclude in-person ("local")
@@ -111,6 +124,7 @@ export function CampaignForm({
     <form
       action={(formData) => {
         formData.set("contactIds", JSON.stringify([...selectedContacts]));
+        formData.set("channels", JSON.stringify([...channels]));
         return action(formData);
       }}
       className="space-y-6"
@@ -142,6 +156,49 @@ export function CampaignForm({
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Kanäle: E-Mail / Brief / Anruf */}
+        <div>
+          <label className="block text-sm font-medium text-text mb-2">Kanäle *</label>
+          <div className="grid grid-cols-3 gap-3">
+            {(
+              [
+                { id: "email", label: "E-Mail", icon: Mail, hint: "Resend-Versand über CRM" },
+                { id: "letter", label: "Brief", icon: FileText, hint: "OnlineBrief24 (Test-Modus)" },
+                { id: "call", label: "Anruf", icon: Phone, hint: "Reminder pro Kontakt" },
+              ] as const
+            ).map(({ id, label, icon: Icon, hint }) => {
+              const on = channels.has(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => toggleChannel(id)}
+                  className={`text-left p-3 rounded-lg border-2 transition-colors ${
+                    on
+                      ? "border-accent bg-accent/5"
+                      : "border-border bg-bg-secondary hover:border-accent/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className={`w-4 h-4 ${on ? "text-accent" : "text-text-light"}`} />
+                    <span className={`text-sm font-semibold ${on ? "text-text" : "text-text-light"}`}>
+                      {label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-light mt-1">{hint}</p>
+                </button>
+              );
+            })}
+          </div>
+          {channels.has("letter") && (
+            <p className="text-xs text-warning mt-2">
+              ⚠ Brief-Kampagnen laufen aktuell im <b>Test-Modus</b> (Briefe landen im
+              OnlineBrief24-Warenkorb, keine echten Kosten). Kontakte ohne Straße + PLZ + Stadt
+              werden beim Versand übersprungen.
+            </p>
+          )}
         </div>
 
         {/* A/B Testing */}
