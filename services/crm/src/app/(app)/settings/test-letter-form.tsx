@@ -39,11 +39,11 @@ export function TestLetterForm({ letterSignatures = [] }: { letterSignatures?: L
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label className="block text-xs font-medium text-text-light mb-1">Firma (optional)</label>
-              <input name="company" placeholder="Kfz-Meister Musterbetrieb" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
+              <input name="company" defaultValue="kfzBlitz24 GmbH" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
             </div>
             <div>
               <label className="block text-xs font-medium text-text-light mb-1">Anrede *</label>
-              <select name="salutation" required defaultValue="" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary">
+              <select name="salutation" required defaultValue="Herr" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary">
                 <option value="" disabled>— wählen —</option>
                 <option value="Herr">Herr</option>
                 <option value="Frau">Frau</option>
@@ -53,31 +53,31 @@ export function TestLetterForm({ letterSignatures = [] }: { letterSignatures?: L
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label className="block text-xs font-medium text-text-light mb-1">Vorname *</label>
-              <input name="firstName" required placeholder="Max" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
+              <input name="firstName" required defaultValue="Christian" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
             </div>
             <div>
               <label className="block text-xs font-medium text-text-light mb-1">Nachname *</label>
-              <input name="lastName" required placeholder="Mustermann" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
+              <input name="lastName" required defaultValue="Engert" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
             </div>
           </div>
           <div className="grid grid-cols-[1fr_100px] gap-3 mb-3">
             <div>
               <label className="block text-xs font-medium text-text-light mb-1">Straße *</label>
-              <input name="street" required placeholder="Bomhardstraße" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
+              <input name="street" required defaultValue="Bomhardstraße" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
             </div>
             <div>
               <label className="block text-xs font-medium text-text-light mb-1">Nr.</label>
-              <input name="houseNumber" placeholder="7a" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
+              <input name="houseNumber" defaultValue="7" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
             </div>
           </div>
           <div className="grid grid-cols-[100px_1fr] gap-3">
             <div>
               <label className="block text-xs font-medium text-text-light mb-1">PLZ *</label>
-              <input name="zipCode" required inputMode="numeric" placeholder="82031" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
+              <input name="zipCode" required inputMode="numeric" defaultValue="82031" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
             </div>
             <div>
               <label className="block text-xs font-medium text-text-light mb-1">Stadt *</label>
-              <input name="city" required placeholder="Grünwald" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
+              <input name="city" required defaultValue="Grünwald" className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary" />
             </div>
           </div>
         </div>
@@ -100,7 +100,7 @@ export function TestLetterForm({ letterSignatures = [] }: { letterSignatures?: L
               <input
                 name="anrede"
                 required
-                defaultValue="Sehr geehrter Herr Mustermann,"
+                defaultValue="Sehr geehrter Herr Engert,"
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary"
               />
             </div>
