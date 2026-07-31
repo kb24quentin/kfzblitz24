@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   Mail, FileText, Phone, CheckCircle2, Clock, XCircle,
-  MessageSquare, StopCircle, Play, Pause,
+  MessageSquare, StopCircle, Play, Pause, Zap, SkipForward,
 } from "lucide-react";
-import { stopContactCadence } from "@/app/(app)/campaigns/actions";
+import { stopContactCadence, fireStepNow, skipCurrentStep } from "@/app/(app)/campaigns/actions";
 
 type Cadence = {
   id: string;
@@ -15,6 +15,7 @@ type Cadence = {
   stopped: boolean;
   stoppedReason: string | null;
   stoppedAt: Date | null;
+  forceFireAt: Date | null;
   campaign: {
     id: string;
     name: string;
@@ -78,6 +79,20 @@ function CadenceCard({ cc, contactId }: { cc: Cadence; contactId: string }) {
       setConfirming(false);
     });
   };
+  const handleFireNow = () => {
+    startTransition(async () => {
+      await fireStepNow(cc.campaign.id, contactId);
+    });
+  };
+  const handleSkip = () => {
+    if (!confirm(`Aktuellen Schritt für ${cc.campaign.name} überspringen?`)) return;
+    startTransition(async () => {
+      await skipCurrentStep(cc.campaign.id, contactId);
+    });
+  };
+
+  const canAct = (isActive || isPaused) && !cc.stopped && nextStep;
+  const forceFirePending = cc.forceFireAt !== null;
 
   return (
     <div className="border border-border rounded-lg p-3">
@@ -91,15 +106,39 @@ function CadenceCard({ cc, contactId }: { cc: Cadence; contactId: string }) {
         </Link>
         <div className="flex items-center gap-2 shrink-0">
           <StatusPill cc={cc} isDone={isDone} isActive={isActive} isPaused={isPaused} />
-          {isActive && !confirming && (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className="text-xs text-text-light hover:text-red-600 transition-colors"
-              title="Sequenz für diesen Kontakt manuell stoppen"
-            >
-              <StopCircle className="w-3.5 h-3.5" />
-            </button>
+          {canAct && !confirming && (
+            <>
+              <button
+                type="button"
+                onClick={handleFireNow}
+                disabled={pending || forceFirePending}
+                className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-accent/10 text-accent hover:bg-accent/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title={forceFirePending
+                  ? "Ist bereits für sofortigen Versand markiert — wartet auf nächsten Cron-Tick (max 1 min)"
+                  : "Aktuellen Schritt sofort feuern (ignoriert Wartezeit + Sendefenster)"}
+              >
+                <Zap className="w-3 h-3" />
+                {forceFirePending ? "Wartet auf Cron" : "Jetzt feuern"}
+              </button>
+              <button
+                type="button"
+                onClick={handleSkip}
+                disabled={pending}
+                className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded text-text-light hover:bg-bg-secondary hover:text-text transition-colors"
+                title="Aktuellen Schritt überspringen und zum nächsten weitergehen"
+              >
+                <SkipForward className="w-3 h-3" />
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="text-xs text-text-light hover:text-red-600 transition-colors"
+                title="Sequenz für diesen Kontakt manuell stoppen"
+              >
+                <StopCircle className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
           {confirming && (
             <>

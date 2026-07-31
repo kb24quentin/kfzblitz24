@@ -44,8 +44,10 @@ const LIGHT_GREY = "#e6e8eb";
 const PAGE_W = 595.27;
 const mm = (n: number) => n * 2.83465;
 
-// Textbereich für Body/Betreff — 25mm links (DIN 5008 § 2)
-const LEFT = mm(25);
+// Textbereich für Body/Betreff — auf 20mm, bündig zum Adressblock.
+// DIN 5008 erlaubt 20–25mm; 20mm sieht sauberer aus weil alles (Adresse,
+// Rücksender-Kleinzeile, Betreff, Body, Datum, Fußzeile) an einer Kante liegt.
+const LEFT = mm(20);
 const RIGHT = mm(20);
 
 // Adressfeld nach DIN 5008 Typ B (Position des Empfänger-Blocks).
@@ -374,9 +376,15 @@ export function LetterDoc({ data }: { data: LetterData }) {
   );
 }
 
+// Common German letter closings — if the body's last paragraph matches one
+// of these, we treat it AS the closing so we don't stamp another "Mit freundlichen
+// Grüßen" on top of the user's.
+const CLOSING_RE = /^(mit freundlichen grüßen|freundliche grüße|beste grüße|herzliche grüße|viele grüße|mit besten grüßen)/i;
+
 export function extractAnredeAndParagraphs(html: string): {
   anrede: string;
   paragraphs: string[];
+  closing?: string;
 } {
   const text = html
     .replace(/<br\s*\/?>/gi, "\n")
@@ -394,10 +402,18 @@ export function extractAnredeAndParagraphs(html: string): {
     .split(/\n{2,}/)
     .map((p) => p.trim().replace(/\n+/g, " "))
     .filter(Boolean);
+
+  // Extract closing from tail if present — prevents "Mit freundlichen Grüßen"
+  // getting rendered twice when the template already includes it.
+  let closing: string | undefined;
+  while (paras.length > 0 && CLOSING_RE.test(paras[paras.length - 1])) {
+    closing = paras.pop();
+  }
+
   const first = paras[0] ?? "";
   const isAnrede = /^(sehr geehrte[rn]?|hallo|liebe[rn]?)/i.test(first);
-  if (isAnrede) return { anrede: first, paragraphs: paras.slice(1) };
-  return { anrede: "Sehr geehrte Damen und Herren,", paragraphs: paras };
+  if (isAnrede) return { anrede: first, paragraphs: paras.slice(1), closing };
+  return { anrede: "Sehr geehrte Damen und Herren,", paragraphs: paras, closing };
 }
 
 export async function renderLetterPdf(data: LetterData): Promise<Buffer> {

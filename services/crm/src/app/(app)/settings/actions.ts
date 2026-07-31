@@ -122,8 +122,9 @@ export async function deleteSignature(formData: FormData) {
 export async function createSender(formData: FormData) {
   const name = (formData.get("name") as string)?.trim();
   const email = (formData.get("email") as string)?.trim().toLowerCase();
+  const replyTo = ((formData.get("replyTo") as string) || "").trim().toLowerCase() || null;
   if (!name || !email) return;
-  await prisma.sender.create({ data: { name, email } });
+  await prisma.sender.create({ data: { name, email, replyTo } });
   revalidatePath("/settings");
 }
 
@@ -131,8 +132,9 @@ export async function updateSender(formData: FormData) {
   const id = formData.get("id") as string;
   const name = (formData.get("name") as string)?.trim();
   const email = (formData.get("email") as string)?.trim().toLowerCase();
+  const replyTo = ((formData.get("replyTo") as string) || "").trim().toLowerCase() || null;
   if (!id || !name || !email) return;
-  await prisma.sender.update({ where: { id }, data: { name, email } });
+  await prisma.sender.update({ where: { id }, data: { name, email, replyTo } });
   revalidatePath("/settings");
 }
 
@@ -219,10 +221,18 @@ export async function sendTestLetter(
     const { renderLetterPdf } = await import("@/lib/letter-pdf");
     const { sendPrintjob, currentMode } = await import("@/lib/ob24");
 
-    const paragraphs = bodyText
+    const rawParas = bodyText
       .split(/\n{2,}/)
       .map((p) => p.trim().replace(/\n+/g, " "))
       .filter(Boolean);
+    // If user's body ends with a closing greeting, use it as `closing` and
+    // don't stamp another one on top.
+    const closingRe = /^(mit freundlichen grüßen|freundliche grüße|beste grüße|herzliche grüße|viele grüße|mit besten grüßen)/i;
+    let extractedClosing: string | undefined;
+    const paragraphs = [...rawParas];
+    while (paragraphs.length > 0 && closingRe.test(paragraphs[paragraphs.length - 1])) {
+      extractedClosing = paragraphs.pop();
+    }
 
     // Optional: Bild-Signatur laden
     let signatureImage: string | null = null;
@@ -249,7 +259,7 @@ export async function sendTestLetter(
       anrede,
       subject,
       bodyParagraphs: paragraphs,
-      closing: "Mit freundlichen Grüßen",
+      closing: extractedClosing ?? "Mit freundlichen Grüßen",
       signatureImage,
       signatureName: signatureName || "kfzBlitz24 Team",
       ps,

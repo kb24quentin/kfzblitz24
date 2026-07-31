@@ -140,7 +140,8 @@ model Signature {
 model Sender {
   id        String   @id @default(cuid())
   name      String   // Display-Name — z.B. "Corinna Wagner - kfzBlitz24"
-  email     String   @unique   // muss auf verifiedResend-Domain sein
+  email     String   @unique   // muss auf verifierter Resend-Domain sein
+  replyTo   String?  // optional; landet als Reply-To-Header, kann eine externe Adresse sein
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -279,6 +280,7 @@ model CampaignContact {
   stopped           Boolean   @default(false)
   stoppedReason     String?   // "replied" | "manual" | "completed" | "migrated"
   stoppedAt         DateTime?
+  forceFireAt       DateTime? // wenn gesetzt: nächster Cron-Tick ignoriert delay + sendWindow und feuert sofort
   createdAt         DateTime  @default(now())
 
   campaign     Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)

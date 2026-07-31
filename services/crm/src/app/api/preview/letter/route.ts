@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   const subject = substitute(body.subject || "Betreff");
   const substitutedBody = substitute(body.bodyHtml || "");
-  const { anrede, paragraphs } = extractAnredeAndParagraphs(substitutedBody);
+  const { anrede, paragraphs, closing } = extractAnredeAndParagraphs(substitutedBody);
   const ps = body.letterPs ? substitute(body.letterPs) : null;
 
   let signatureImage: string | null = null;
@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
     anrede,
     subject,
     bodyParagraphs: paragraphs,
+    closing,
     signatureImage,
     signatureName: body.signatureName || "Corinna Wagner",
     ps,

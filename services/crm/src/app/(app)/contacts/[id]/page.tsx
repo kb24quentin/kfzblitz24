@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Edit, Mail, Phone, Building2, MapPin, Tag,
-  Calendar, User, Clock, AlertCircle, CheckCircle,
+  Calendar, User, Clock, AlertCircle,
   Send, Eye, MousePointerClick, MessageSquare,
 } from "lucide-react";
 import { ActivityTimeline } from "./activity-timeline";
@@ -13,15 +13,6 @@ import { SendEmailForm } from "./send-email-form";
 import { StatusSelect, PrioritySelect, AssignSelect } from "./contact-actions";
 import { completeReminder } from "./actions";
 import { ContactCadenceProgress } from "./cadence-progress";
-
-const statusColors: Record<string, string> = {
-  new: "bg-blue-100 text-blue-700",
-  contacted: "bg-yellow-100 text-yellow-700",
-  replied: "bg-green-100 text-green-700",
-  interested: "bg-emerald-100 text-emerald-700",
-  not_interested: "bg-red-100 text-red-700",
-  customer: "bg-purple-100 text-purple-700",
-};
 
 const priorityColors: Record<string, string> = {
   low: "bg-gray-100 text-gray-600",
@@ -110,6 +101,11 @@ export default async function ContactDetailPage({
   const users = await prisma.user.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
+  });
+
+  const senders = await prisma.sender.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, email: true },
   });
 
   const tags = JSON.parse(contact.tags || "[]") as string[];
@@ -298,6 +294,7 @@ export default async function ContactDetailPage({
 
           {/* Send direct mail */}
           <SendEmailForm
+            senders={senders}
             contactId={id}
             contactEmail={contact.email}
             contactName={`${contact.firstName} ${contact.lastName}`}

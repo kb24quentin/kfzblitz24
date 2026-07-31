@@ -168,3 +168,87 @@ export async function stopAllCadencesForContact(contactId: string, reason: strin
   });
   return res.count;
 }
+
+/**
+ * Force the contact's currently pending step to fire on the NEXT cron tick
+ * (max 1 min), ignoring delay, sendWindow, and per-day cap. Used from the
+ * contact detail "Jetzt feuern"-button.
+ */
+export async function fireStepNow(campaignId: string, contactId: string) {
+  const cc = await prisma.campaignContact.findUnique({
+    where: { campaignId_contactId: { campaignId, contactId } },
+    include: { campaign: { include: { steps: true } } },
+  });
+  if (!cc || cc.stopped) return;
+  if (cc.currentStepIndex >= cc.campaign.steps.length) return;
+
+  await prisma.campaignContact.update({
+    where: { id: cc.id },
+    data: { forceFireAt: new Date() },
+  });
+  await prisma.activity.create({
+    data: {
+      contactId,
+      userId: null,
+      type: "note",
+      content: `Nächster Kadenz-Schritt manuell für sofortigen Versand markiert (${cc.campaign.name}).`,
+    },
+  });
+  revalidatePath(`/campaigns/${campaignId}`);
+  revalidatePath(`/contacts/${contactId}`);
+}
+
+/**
+ * Advance to the next step WITHOUT executing the current one — used e.g.
+ * when the step was handled offline ("den Brief hab ich per Hand geschickt").
+ */
+export async function skipCurrentStep(campaignId: string, contactId: string) {
+  const cc = await prisma.campaignContact.findUnique({
+    where: { campaignId_contactId: { campaignId, contactId } },
+    include: { campaign: { include: { steps: { orderBy: { order: "asc" } } } } },
+  });
+  if (!cc || cc.stopped) return;
+  if (cc.currentStepIndex >= cc.campaign.steps.length) return;
+
+  const skippedStep = cc.campaign.steps[cc.currentStepIndex];
+  const now = new Date();
+
+  // Record the skip in the step-progress table so the UI shows an X, not silence.
+  await prisma.campaignContactStep.upsert({
+    where: {
+      campaignContactId_stepId: {
+        campaignContactId: cc.id,
+        stepId: skippedStep.id,
+      },
+    },
+    create: {
+      campaignContactId: cc.id,
+      stepId: skippedStep.id,
+      status: "skipped",
+      skippedReason: "manual_skip",
+      executedAt: now,
+    },
+    update: { status: "skipped", skippedReason: "manual_skip", executedAt: now },
+  });
+
+  await prisma.campaignContact.update({
+    where: { id: cc.id },
+    data: {
+      currentStepIndex: cc.currentStepIndex + 1,
+      lastStepAt: now,
+      forceFireAt: null,
+    },
+  });
+
+  await prisma.activity.create({
+    data: {
+      contactId,
+      userId: null,
+      type: "note",
+      content: `Kadenz-Schritt "${skippedStep.channel}" manuell übersprungen (${cc.campaign.name}).`,
+    },
+  });
+
+  revalidatePath(`/campaigns/${campaignId}`);
+  revalidatePath(`/contacts/${contactId}`);
+}

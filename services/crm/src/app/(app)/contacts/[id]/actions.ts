@@ -17,6 +17,7 @@ export async function sendDirectEmail(
   const contactId = formData.get("contactId") as string;
   const subject = (formData.get("subject") as string)?.trim();
   const body = (formData.get("body") as string) ?? "";
+  const senderId = ((formData.get("senderId") as string) || "").trim();
 
   if (!contactId || !subject || !body.trim()) {
     return { ok: false, message: "Bitte Betreff und Inhalt ausfüllen." };
@@ -32,6 +33,17 @@ export async function sendDirectEmail(
     return { ok: false, message: "RESEND_API_KEY ist nicht gesetzt." };
   }
 
+  // Resolve `from` + optional `reply_to`: explicit sender wins, else env default.
+  let fromAddress = getFromAddress();
+  let replyToAddress: string | null = null;
+  if (senderId) {
+    const sender = await prisma.sender.findUnique({ where: { id: senderId } });
+    if (sender) {
+      fromAddress = `"${sender.name.replace(/"/g, "")}" <${sender.email}>`;
+      replyToAddress = sender.replyTo ?? null;
+    }
+  }
+
   const htmlWrapped = wrapEmailHtml(body);
 
   let resendId: string | null = null;
@@ -39,8 +51,9 @@ export async function sendDirectEmail(
     const { Resend } = await import("resend");
     const resend = new Resend(process.env.RESEND_API_KEY);
     const result = await resend.emails.send({
-      from: getFromAddress(),
+      from: fromAddress,
       to: [contact.email],
+      ...(replyToAddress ? { replyTo: replyToAddress } : {}),
       subject,
       html: htmlWrapped,
       text: htmlToPlainText(body),

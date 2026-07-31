@@ -96,32 +96,37 @@ async function evaluateSteps(now: Date) {
 
       const step = campaign.steps[stepIndex];
 
-      // Timing
-      const baseTime = stepIndex === 0 ? campaignBase : (cc.lastStepAt ?? campaignBase);
-      const target = stepTargetTime({
-        triggerType: step.triggerType,
-        delayDays: step.delayDays,
-        scheduledAt: step.scheduledAt,
-        baseTime,
-      });
-      if (now < target) {
-        waiting++;
-        continue;
-      }
+      // Manual "fire now": bypass every timing/window/cap check when set.
+      const forced = cc.forceFireAt !== null && cc.forceFireAt <= now;
 
-      // Send-window (day-of-week + per-contact fire time within window)
-      const window = parseSendWindow(step.sendWindow);
-      if (!readyForContact(now, target, window, cc.contactId)) {
-        waiting++;
-        continue;
-      }
-
-      // Per-day cap
-      if (step.maxPerDay != null) {
-        const usedToday = perStepTodayCount.get(step.id) ?? 0;
-        if (usedToday >= step.maxPerDay) {
+      if (!forced) {
+        // Timing
+        const baseTime = stepIndex === 0 ? campaignBase : (cc.lastStepAt ?? campaignBase);
+        const target = stepTargetTime({
+          triggerType: step.triggerType,
+          delayDays: step.delayDays,
+          scheduledAt: step.scheduledAt,
+          baseTime,
+        });
+        if (now < target) {
           waiting++;
           continue;
+        }
+
+        // Send-window (day-of-week + per-contact fire time within window)
+        const window = parseSendWindow(step.sendWindow);
+        if (!readyForContact(now, target, window, cc.contactId)) {
+          waiting++;
+          continue;
+        }
+
+        // Per-day cap
+        if (step.maxPerDay != null) {
+          const usedToday = perStepTodayCount.get(step.id) ?? 0;
+          if (usedToday >= step.maxPerDay) {
+            waiting++;
+            continue;
+          }
         }
       }
 
@@ -160,12 +165,13 @@ async function evaluateSteps(now: Date) {
           update: {},
         });
 
-        // Advance
+        // Advance (and clear any pending manual-fire request)
         await prisma.campaignContact.update({
           where: { id: cc.id },
           data: {
             currentStepIndex: stepIndex + 1,
             lastStepAt: now,
+            forceFireAt: null,
           },
         });
 
@@ -360,6 +366,7 @@ async function dispatchEmails() {
     const fromAddress = campaign.sender
       ? `"${campaign.sender.name.replace(/"/g, "")}" <${campaign.sender.email}>`
       : getFromAddress();
+    const replyToAddress = campaign.sender?.replyTo ?? null;
 
     const queued = await prisma.email.findMany({
       where: { campaignId: campaign.id, status: "queued" },
@@ -375,6 +382,7 @@ async function dispatchEmails() {
           const result = await resend.emails.send({
             from: fromAddress,
             to: [email.contact.email],
+            ...(replyToAddress ? { replyTo: replyToAddress } : {}),
             subject: email.subject,
             html: email.body,
             text: htmlToPlainText(email.body),
@@ -452,7 +460,7 @@ async function dispatchLetters() {
           mainBody = psSplit[0];
           psText = psSplit[1].trim();
         }
-        const { anrede, paragraphs } = extractAnredeAndParagraphs(mainBody);
+        const { anrede, paragraphs, closing } = extractAnredeAndParagraphs(mainBody);
 
         // Load signature image lazily per letter (may differ across templates)
         let signatureImage: string | null = null;
@@ -483,7 +491,7 @@ async function dispatchLetters() {
           anrede,
           subject: letter.subject,
           bodyParagraphs: paragraphs,
-          closing: "Mit freundlichen Grüßen",
+          closing: closing ?? "Mit freundlichen Grüßen",
           signatureImage,
           signatureName: senderConf?.name?.split(" - ")[0] ?? "kfzBlitz24 Team",
           ps: psText,

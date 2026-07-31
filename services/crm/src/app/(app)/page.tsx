@@ -3,24 +3,22 @@ import { prisma } from "@/lib/db";
 import Link from "next/link";
 import {
   Users, Send, Mail, MessageSquare, TrendingUp, Plus,
-  ArrowUpRight, Bell, Clock, AlertCircle, CheckCircle,
+  ArrowUpRight, Bell, Clock, AlertCircle,
 } from "lucide-react";
 
 async function getStats() {
-  const [totalContacts, totalCampaigns, sentEmails, openedEmails, repliedEmails, actionNeeded] = await Promise.all([
+  const [totalContacts, totalCampaigns, sentEmails, openedEmails, repliedEmails] = await Promise.all([
     prisma.contact.count(),
     prisma.campaign.count(),
     prisma.email.count({ where: { status: { not: "queued" } } }),
     prisma.email.count({ where: { openedAt: { not: null } } }),
     prisma.email.count({ where: { repliedAt: { not: null } } }),
-    prisma.reply.count({ where: { status: "action_needed" } }),
   ]);
 
   return {
     totalContacts, totalCampaigns, sentEmails,
     openRate: sentEmails > 0 ? ((openedEmails / sentEmails) * 100).toFixed(1) : "0",
     replyRate: sentEmails > 0 ? ((repliedEmails / sentEmails) * 100).toFixed(1) : "0",
-    actionNeeded,
   };
 }
 
@@ -65,20 +63,6 @@ export default async function Dashboard() {
         ))}
       </div>
 
-      {/* Action Needed */}
-      {stats.actionNeeded > 0 && (
-        <Link href="/inbox?filter=action_needed" className="block bg-accent/10 border border-accent/30 rounded-xl p-4 hover:bg-accent/15 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="bg-accent w-10 h-10 rounded-lg flex items-center justify-center">
-              <MessageSquare className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="font-semibold text-text">{stats.actionNeeded} Antworten erfordern Aktion</p>
-              <p className="text-sm text-text-light">Klicke hier um zur Inbox zu gelangen</p>
-            </div>
-          </div>
-        </Link>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Quick Actions */}

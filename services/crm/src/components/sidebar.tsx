@@ -8,7 +8,6 @@ import {
   Users,
   FileText,
   Send,
-  Inbox,
   BarChart3,
   Settings,
   LogOut,
@@ -19,7 +18,6 @@ const navigation = [
   { name: "Kontakte", href: "/contacts", icon: Users },
   { name: "Templates", href: "/templates", icon: FileText },
   { name: "Kampagnen", href: "/campaigns", icon: Send },
-  { name: "Inbox", href: "/inbox", icon: Inbox },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
 ];
 

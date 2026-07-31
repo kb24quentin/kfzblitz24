@@ -8,6 +8,7 @@ type Sender = {
   id: string;
   name: string;
   email: string;
+  replyTo: string | null;
   updatedAt: Date;
 };
 
@@ -63,6 +64,11 @@ export function SendersManager({ senders }: { senders: Sender[] }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-text">{s.name}</p>
                 <p className="text-xs text-text-light font-mono">{s.email}</p>
+                {s.replyTo && (
+                  <p className="text-[11px] text-text-light font-mono">
+                    ↩ Reply-To: {s.replyTo}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -152,8 +158,25 @@ function SenderForm({
         </div>
       </div>
 
+      <div>
+        <label className="block text-xs font-medium text-text-light mb-1">
+          Reply-To (optional)
+        </label>
+        <input
+          type="email"
+          name="replyTo"
+          defaultValue={sender?.replyTo ?? ""}
+          placeholder="antworten@meinefirma.de"
+          className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 font-mono"
+        />
+        <p className="text-[11px] text-text-light mt-1">
+          Wenn gesetzt: Antworten landen bei dieser Adresse, nicht beim Absender.
+          Darf eine externe Adresse sein (muss NICHT auf Resend-Domain sein).
+        </p>
+      </div>
+
       <p className="text-xs text-text-light">
-        Die Domain muss in Resend verified sein (aktuell: <code>kfzblitz24.de</code>).
+        Die Absender-Domain muss in Resend verified sein (aktuell: <code>kfzblitz24.de</code>).
         Empfänger sehen: <code className="font-mono">&quot;{'{Anzeigename}'}&quot; &lt;{'{Email}'}&gt;</code>
       </p>
 
