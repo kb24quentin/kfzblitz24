@@ -12,7 +12,11 @@ type ContactData = {
   company?: string | null;
   position?: string | null;
   phone?: string | null;
+  street?: string | null;
+  houseNumber?: string | null;
+  zipCode?: string | null;
   city?: string | null;
+  country?: string | null;
   notes?: string | null;
   status?: string;
   tags?: string;
@@ -109,24 +113,69 @@ export function ContactForm({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">Telefon</label>
-            <input
-              name="phone"
-              defaultValue={contact?.phone || ""}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-              placeholder="+49 89 123456"
-            />
+        <div>
+          <label className="block text-sm font-medium text-text mb-1">Telefon</label>
+          <input
+            name="phone"
+            defaultValue={contact?.phone || ""}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+            placeholder="+49 89 123456"
+          />
+        </div>
+
+        {/* Anschrift */}
+        <div className="pt-2 border-t border-border">
+          <p className="text-xs font-semibold text-text-light mb-3 uppercase tracking-wide">Anschrift (für Brief-Versand)</p>
+          <div className="grid grid-cols-[1fr_100px] gap-4 mb-3">
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">Straße</label>
+              <input
+                name="street"
+                defaultValue={contact?.street || ""}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                placeholder="Bomhardstraße"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">Nr.</label>
+              <input
+                name="houseNumber"
+                defaultValue={contact?.houseNumber || ""}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                placeholder="7a"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">Stadt</label>
-            <input
-              name="city"
-              defaultValue={contact?.city || ""}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-              placeholder="Muenchen"
-            />
+          <div className="grid grid-cols-[100px_1fr_100px] gap-4">
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">PLZ</label>
+              <input
+                name="zipCode"
+                defaultValue={contact?.zipCode || ""}
+                inputMode="numeric"
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                placeholder="82031"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">Stadt</label>
+              <input
+                name="city"
+                defaultValue={contact?.city || ""}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                placeholder="Grünwald"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">Land</label>
+              <input
+                name="country"
+                defaultValue={contact?.country || "DE"}
+                maxLength={2}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent uppercase font-mono"
+                placeholder="DE"
+              />
+            </div>
           </div>
         </div>
 

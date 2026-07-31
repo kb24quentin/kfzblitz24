@@ -33,7 +33,11 @@ model Contact {
   company         String?
   position        String?
   phone           String?
+  street          String?   // Straße (ohne Hausnummer)
+  houseNumber     String?   // Hausnummer inkl. Zusatz ("12a")
+  zipCode         String?   // PLZ
   city            String?
+  country         String?   @default("DE")  // ISO 3166 alpha-2
   notes           String?
   status          String    @default("new") // new, contacted, replied, interested, not_interested, customer
   tags            String    @default("[]")

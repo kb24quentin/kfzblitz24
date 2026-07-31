@@ -23,7 +23,11 @@ export async function createContact(formData: FormData) {
       company: (formData.get("company") as string) || null,
       position: (formData.get("position") as string) || null,
       phone: (formData.get("phone") as string) || null,
+      street: (formData.get("street") as string) || null,
+      houseNumber: (formData.get("houseNumber") as string) || null,
+      zipCode: (formData.get("zipCode") as string) || null,
       city: (formData.get("city") as string) || null,
+      country: ((formData.get("country") as string) || "DE").toUpperCase(),
       notes: (formData.get("notes") as string) || null,
       outreach: (formData.get("outreach") as string) || "remote",
       tags: formData.get("tags") ? JSON.stringify((formData.get("tags") as string).split(",").map(t => t.trim()).filter(Boolean)) : "[]",
@@ -54,7 +58,11 @@ export async function updateContact(formData: FormData) {
       company: (formData.get("company") as string) || null,
       position: (formData.get("position") as string) || null,
       phone: (formData.get("phone") as string) || null,
+      street: (formData.get("street") as string) || null,
+      houseNumber: (formData.get("houseNumber") as string) || null,
+      zipCode: (formData.get("zipCode") as string) || null,
       city: (formData.get("city") as string) || null,
+      country: ((formData.get("country") as string) || old?.country || "DE").toUpperCase(),
       notes: (formData.get("notes") as string) || null,
       status: (formData.get("status") as string) || old?.status || "new",
       priority: (formData.get("priority") as string) || old?.priority || "medium",
@@ -98,7 +106,11 @@ export async function importContacts(contacts: Array<{
   company?: string;
   position?: string;
   phone?: string;
+  street?: string;
+  houseNumber?: string;
+  zipCode?: string;
   city?: string;
+  country?: string;
 }>) {
   let imported = 0;
   let skipped = 0;
@@ -123,7 +135,11 @@ export async function importContacts(contacts: Array<{
           company: contact.company || null,
           position: contact.position || null,
           phone: contact.phone || null,
+          street: contact.street || null,
+          houseNumber: contact.houseNumber || null,
+          zipCode: contact.zipCode || null,
           city: contact.city || null,
+          country: contact.country ? contact.country.toUpperCase().slice(0, 2) : "DE",
           source: "import",
         },
       });

@@ -16,7 +16,11 @@ const FIELD_OPTIONS = [
   { value: "company", label: "Firma" },
   { value: "position", label: "Position" },
   { value: "phone", label: "Telefon" },
+  { value: "street", label: "Straße" },
+  { value: "houseNumber", label: "Hausnummer" },
+  { value: "zipCode", label: "PLZ" },
   { value: "city", label: "Stadt" },
+  { value: "country", label: "Land" },
 ];
 
 export default function ImportPage() {
@@ -58,7 +62,12 @@ export default function ImportPage() {
         else if (lower.includes("firma") || lower.includes("company") || lower.includes("unternehmen")) autoMap[col] = "company";
         else if (lower.includes("position") || lower.includes("role")) autoMap[col] = "position";
         else if (lower.includes("telefon") || lower.includes("phone") || lower.includes("tel")) autoMap[col] = "phone";
+        // Address (specific first, generic last)
+        else if (lower.includes("hausnr") || lower.includes("hausnummer") || lower.includes("house_number") || lower === "house number" || lower === "nr") autoMap[col] = "houseNumber";
+        else if (lower.includes("strasse") || lower.includes("straße") || lower.includes("street") || lower === "str.") autoMap[col] = "street";
+        else if (lower === "plz" || lower.includes("postleitzahl") || lower.includes("zip") || lower.includes("postal_code") || lower.includes("postal code") || lower.includes("postcode")) autoMap[col] = "zipCode";
         else if (lower.includes("stadt") || lower.includes("city") || lower.includes("ort")) autoMap[col] = "city";
+        else if (lower === "land" || lower === "country") autoMap[col] = "country";
       }
       setMapping(autoMap);
     } catch {
@@ -89,7 +98,11 @@ export default function ImportPage() {
       company: reverseMap.company ? String(row[reverseMap.company] || "").trim() : undefined,
       position: reverseMap.position ? String(row[reverseMap.position] || "").trim() : undefined,
       phone: reverseMap.phone ? String(row[reverseMap.phone] || "").trim() : undefined,
+      street: reverseMap.street ? String(row[reverseMap.street] || "").trim() : undefined,
+      houseNumber: reverseMap.houseNumber ? String(row[reverseMap.houseNumber] || "").trim() : undefined,
+      zipCode: reverseMap.zipCode ? String(row[reverseMap.zipCode] || "").trim() : undefined,
       city: reverseMap.city ? String(row[reverseMap.city] || "").trim() : undefined,
+      country: reverseMap.country ? String(row[reverseMap.country] || "").trim() : undefined,
     })).filter((c) => c.firstName && c.lastName && c.email);
 
     try {
