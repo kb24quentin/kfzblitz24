@@ -3,37 +3,17 @@
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-
-// Nach wie vielen "nicht erreicht"-Versuchen geben wir auf.
-export const MAX_CALL_RETRIES = 5;
+import {
+  MAX_CALL_RETRIES,
+  OUTCOMES_THAT_RETRY,
+  OUTCOMES_THAT_FINISH,
+  type CallOutcome,
+  type LogCallInput,
+  type LogCallResult,
+} from "./calls-shared";
 
 // Wie viele Tage später soll der nächste Versuch stattfinden.
 const RETRY_DELAY_DAYS = 1;
-
-export type CallOutcome =
-  | "reached"          // erfolgreich gesprochen — done
-  | "voicemail"        // Mailbox erreicht — retry
-  | "wrong_number"     // falsche Nummer — retry, aber User sollte Nummer korrigieren
-  | "not_reached"      // niemand dran, kein AB — retry
-  | "not_interested"   // gesprochen aber Absage — done
-  | "appointment";     // Termin vereinbart — done
-
-const OUTCOMES_THAT_RETRY: CallOutcome[] = ["voicemail", "wrong_number", "not_reached"];
-const OUTCOMES_THAT_FINISH: CallOutcome[] = ["reached", "not_interested", "appointment"];
-
-export type LogCallInput = {
-  reminderId: string;
-  outcome: CallOutcome;
-  notes: string;
-  newContactStatus?: string | null;
-};
-
-export type LogCallResult = {
-  ok: boolean;
-  message: string;
-  // Wenn wir retried haben: neue dueDate für UI-Feedback
-  retryScheduledFor?: Date;
-};
 
 export async function logCall(input: LogCallInput): Promise<LogCallResult> {
   const session = await auth();

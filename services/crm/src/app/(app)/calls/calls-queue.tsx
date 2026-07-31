@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Phone, Clock, AlertCircle, Building2, User, Calendar, RotateCcw } from "lucide-react";
 import { CallLogModal, type CallReminder } from "./call-log-modal";
 import { snoozeCall } from "./actions";
+import { MAX_CALL_RETRIES } from "./calls-shared";
 
 export function CallsQueue({ reminders }: { reminders: CallReminder[] }) {
   const [active, setActive] = useState<CallReminder | null>(null);
@@ -87,7 +88,7 @@ function CallRow({
           )}
           {r.retryCount > 0 && (
             <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 flex items-center gap-1">
-              <RotateCcw className="w-2.5 h-2.5" /> Versuch {r.retryCount + 1}/5
+              <RotateCcw className="w-2.5 h-2.5" /> Versuch {r.retryCount + 1}/{MAX_CALL_RETRIES}
             </span>
           )}
         </div>

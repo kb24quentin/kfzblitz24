@@ -5,7 +5,8 @@ import {
   X, Phone, CheckCircle2, XCircle, PhoneOff, Voicemail,
   CalendarCheck, ThumbsDown, Ban, RotateCcw, Building2, Mail,
 } from "lucide-react";
-import { logCall, type CallOutcome } from "./actions";
+import { logCall } from "./actions";
+import { type CallOutcome, MAX_CALL_RETRIES } from "./calls-shared";
 
 export type CallReminder = {
   id: string;
@@ -104,7 +105,7 @@ export function CallLogModal({ reminder, onClose }: { reminder: CallReminder; on
   const contact = reminder.contact;
   const displayName = `${contact.firstName} ${contact.lastName}`;
   const retryLabel = reminder.retryCount > 0
-    ? `Versuch ${reminder.retryCount + 1}/5`
+    ? `Versuch ${reminder.retryCount + 1}/${MAX_CALL_RETRIES}`
     : "Erster Versuch";
 
   return (
@@ -254,7 +255,7 @@ export function CallLogModal({ reminder, onClose }: { reminder: CallReminder; on
             </div>
             {outcome && OUTCOMES.find((o) => o.value === outcome)?.isRetry && (
               <p className="text-[11px] text-text-light mt-1.5">
-                Reminder wird um +1 Tag verschoben ({reminder.retryCount + 2}/5). Nach 5 vergeblichen Versuchen wird er aufgegeben.
+                Reminder wird um +1 Tag verschoben ({reminder.retryCount + 2}/{MAX_CALL_RETRIES}). Nach {MAX_CALL_RETRIES} vergeblichen Versuchen wird er aufgegeben.
               </p>
             )}
           </div>
