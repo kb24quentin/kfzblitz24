@@ -35,14 +35,17 @@ const mm = (n: number) => n * 2.83465;
 const LEFT = mm(25);
 const RIGHT = mm(20);
 
-// Adressfeld nach DIN 5008 Typ B (Position des Empfänger-Blocks)
-const ADDR_LEFT = mm(20);   // 20mm vom Rand
-const ADDR_TOP = mm(49);    // 49mm von oben
-const ADDR_WIDTH = mm(72);  // 72mm breit
-const ADDR_HEIGHT = mm(42); // 42mm hoch
+// Adressfeld nach DIN 5008 Typ B (Position des Empfänger-Blocks).
+// OB24 SPEC sagt 49mm, ihre visuelle Guide-Box liegt aber bei ~55mm.
+// Wir platzieren bei 55mm damit auch die erste Zeile (bei 4-5-zeiligen
+// Adressen mit Firma) sicher INNERHALB der Guide-Box liegt.
+const ADDR_LEFT = mm(20);
+const ADDR_TOP = mm(55);
+const ADDR_WIDTH = mm(72);
+const ADDR_HEIGHT = mm(42);
 
-// Absender-Kleinzeile darüber — muss ENDEN bevor Adressfeld beginnt
-const SENDER_LINE_TOP = mm(40);  // 40mm — sicher oberhalb 49mm
+// Absender-Kleinzeile darüber — muss ENDEN bevor Adressfeld beginnt.
+const SENDER_LINE_TOP = mm(45);
 
 const styles = StyleSheet.create({
   page: {
@@ -73,7 +76,7 @@ const styles = StyleSheet.create({
   },
   dateLine: {
     position: "absolute",
-    top: mm(97),                  // rechtsbündig oberhalb Betreff
+    top: mm(103),                 // rechtsbündig unterhalb Adressfeld (55+42=97 + Abstand)
     left: LEFT,
     right: RIGHT,
     fontSize: 10,
@@ -82,7 +85,7 @@ const styles = StyleSheet.create({
   },
   betreff: {
     position: "absolute",
-    top: mm(108),
+    top: mm(114),
     left: LEFT,
     right: RIGHT,
     fontSize: 13,
@@ -91,7 +94,7 @@ const styles = StyleSheet.create({
   },
   betreffAccent: {
     position: "absolute",
-    top: mm(116),
+    top: mm(122),
     left: LEFT,
     width: 56,
     height: 3,
@@ -99,7 +102,7 @@ const styles = StyleSheet.create({
   },
   contentArea: {
     position: "absolute",
-    top: mm(125),
+    top: mm(131),
     left: LEFT,
     right: RIGHT,
     bottom: mm(35),
