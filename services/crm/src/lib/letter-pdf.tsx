@@ -1,19 +1,14 @@
 /**
  * kfzBlitz24 Brief-PDF-Renderer.
- * Umsetzung des kfzBlitz24-Brief-Designguides (Stil "dezent", v1.0):
- *   - DIN 5008, A4, linker Rand 71pt (25mm), rechter Rand 57pt (20mm)
- *   - Keine Brand-Bar, kein Farbstreifen
- *   - Logo oben rechts als gesetzter Text: "kfz" NAVY + "blitz" ORANGE + "24" NAVY
- *   - Absender-Kleinzeile 6.5pt MID_GREY oberhalb Anschriftfeld
- *   - Anschriftfeld 10.5pt schwarz, KEINE Leerzeile zwischen Straße und PLZ/Ort
- *   - Ort/Datum rechtsbündig
- *   - Betreff 13pt Helvetica-Bold NAVY (ohne Wort "Betreff"), darunter oranger
- *     3pt hoher, 56pt breiter Akzentbalken
- *   - Fließtext 10pt / 14.5pt Leading, Flattersatz, schwarz
- *   - 62pt Freiraum für handschriftliche Unterschrift
- *   - P.S. mit fettem Label + Text (die einzige CTA)
- *   - Fußzeile 7pt MID_GREY mit §35a-Pflichtangaben, LIGHT_GREY-Trennlinie
- *   - Versionscode 6.5pt MID_GREY um 90° rotiert am rechten Rand
+ * DIN 5008 Typ B (OB24-Anforderung) für das Adressfeld:
+ *   - Fenster: 42mm hoch × 72mm breit
+ *   - Links: 20mm vom linken Rand
+ *   - Oben: 49mm vom oberen Rand
+ * Textbereich (Body/Betreff): 25mm links wie im kfzBlitz24-Brief-Designguide.
+ *
+ * Rest laut Design-Guide (Stil "dezent"): kein Brand-Bar, Logo oben
+ * rechts als gesetzter Text (NAVY/ORANGE/NAVY), Betreff bold NAVY +
+ * oranger Akzentbalken, Fließtext schwarz Flattersatz.
  */
 
 import * as React from "react";
@@ -22,11 +17,11 @@ import {
   Page,
   Text,
   View,
+  Image as PdfImage,
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
 
-// ─── Design-Konstanten ─────────────────────────────────────────────────
 const NAVY = "#0b3756";
 const ORANGE = "#ff6600";
 const BODY = "#000000";
@@ -34,10 +29,20 @@ const MID_GREY = "#8a93a0";
 const LIGHT_GREY = "#e6e8eb";
 
 const PAGE_W = 595.27;
-const PAGE_H = 841.89;
-const LEFT = 71;             // 25mm DIN 5008
-const RIGHT = 57;            // 20mm
-const TEXT_RIGHT = PAGE_W - RIGHT;
+const mm = (n: number) => n * 2.83465;
+
+// Textbereich für Body/Betreff — 25mm links (DIN 5008 § 2)
+const LEFT = mm(25);
+const RIGHT = mm(20);
+
+// Adressfeld nach DIN 5008 Typ B (Position des Empfänger-Blocks)
+const ADDR_LEFT = mm(20);   // 20mm vom Rand
+const ADDR_TOP = mm(49);    // 49mm von oben
+const ADDR_WIDTH = mm(72);  // 72mm breit
+const ADDR_HEIGHT = mm(42); // 42mm hoch
+
+// Absender-Kleinzeile darüber — muss ENDEN bevor Adressfeld beginnt
+const SENDER_LINE_TOP = mm(40);  // 40mm — sicher oberhalb 49mm
 
 const styles = StyleSheet.create({
   page: {
@@ -48,16 +53,18 @@ const styles = StyleSheet.create({
   },
   senderTiny: {
     position: "absolute",
-    top: 128,
-    left: LEFT,
+    top: SENDER_LINE_TOP,
+    left: ADDR_LEFT,
     right: RIGHT,
     fontSize: 6.5,
     color: MID_GREY,
   },
   addressBlock: {
     position: "absolute",
-    top: 142,
-    left: LEFT,
+    top: ADDR_TOP,
+    left: ADDR_LEFT,
+    width: ADDR_WIDTH,
+    height: ADDR_HEIGHT,
   },
   addressLine: {
     fontSize: 10.5,
@@ -66,7 +73,7 @@ const styles = StyleSheet.create({
   },
   dateLine: {
     position: "absolute",
-    top: 270,
+    top: mm(97),                  // rechtsbündig oberhalb Betreff
     left: LEFT,
     right: RIGHT,
     fontSize: 10,
@@ -75,7 +82,7 @@ const styles = StyleSheet.create({
   },
   betreff: {
     position: "absolute",
-    top: 300,
+    top: mm(108),
     left: LEFT,
     right: RIGHT,
     fontSize: 13,
@@ -84,7 +91,7 @@ const styles = StyleSheet.create({
   },
   betreffAccent: {
     position: "absolute",
-    top: 322,
+    top: mm(116),
     left: LEFT,
     width: 56,
     height: 3,
@@ -92,10 +99,10 @@ const styles = StyleSheet.create({
   },
   contentArea: {
     position: "absolute",
-    top: 348,
+    top: mm(125),
     left: LEFT,
     right: RIGHT,
-    bottom: 100,
+    bottom: mm(35),
   },
   anrede: {
     fontSize: 10,
@@ -113,10 +120,21 @@ const styles = StyleSheet.create({
     color: BODY,
     marginTop: 18,
   },
+  // Ohne Bild: Abstand für handschriftliche Unterschrift
+  signatureGap: {
+    height: 62,
+  },
+  // Mit Bild: Bild wird direkt darunter angezeigt, kleiner Freiraum drum
+  signatureImage: {
+    marginTop: 8,
+    width: 130,
+    height: 45,
+    objectFit: "contain",
+  },
   signatureName: {
     fontSize: 10,
     color: BODY,
-    marginTop: 62,   // Freiraum für handschriftliche Unterschrift
+    marginTop: 4,
   },
   psWrap: {
     fontSize: 10,
@@ -131,7 +149,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: LEFT,
     right: RIGHT,
-    bottom: 78,
+    bottom: mm(20),
     borderTopWidth: 0.5,
     borderTopColor: LIGHT_GREY,
     height: 1,
@@ -140,16 +158,15 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: LEFT,
     right: RIGHT,
-    bottom: 55,
+    bottom: mm(12),
     fontSize: 7,
     color: MID_GREY,
     textAlign: "center",
     lineHeight: 1.4,
   },
   versionCode: {
-    // 90° gedreht am rechten Rand
     position: "absolute",
-    top: 400,
+    top: mm(120),
     right: 8,
     fontSize: 6.5,
     color: MID_GREY,
@@ -157,12 +174,11 @@ const styles = StyleSheet.create({
     transformOrigin: "right",
     width: 200,
   },
-  // Logo — 3 Farbabschnitte als inline-Text
   logoWrap: {
     position: "absolute",
-    top: 46,
+    top: mm(15),
     right: RIGHT,
-    fontSize: 37.7, // 26pt × 1.45 lt. Guide
+    fontSize: 32,
     fontFamily: "Helvetica-Bold",
     letterSpacing: -0.5,
   },
@@ -177,23 +193,24 @@ export type LetterData = {
   senderLine2: string;
   recipient: {
     company?: string | null;
-    salutation?: string | null;    // "Herr" | "Frau"
+    salutation?: string | null;
     firstName: string;
     lastName: string;
     street?: string | null;
     houseNumber?: string | null;
     zipCode?: string | null;
     city?: string | null;
-    country?: string | null;       // ISO alpha-2
+    country?: string | null;
   };
-  anrede: string;                  // "Sehr geehrter Herr Flügel," etc.
-  subject: string;                 // Betreff (ohne Wort "Betreff:")
-  bodyParagraphs: string[];        // idealerweise 3 Absätze
-  closing?: string;                // "Mit freundlichen Grüßen"
-  signatureName?: string;          // "Christian Engert"
-  ps?: string | null;              // P.S. Text (ohne "P.S." Prefix)
-  footer?: string;                 // §35a Pflichtangaben
-  versionCode?: string;            // z.B. "AKQ-KB24 · Rev. 07/2026 · v1.0"
+  anrede: string;
+  subject: string;
+  bodyParagraphs: string[];
+  closing?: string;
+  signatureImage?: string | null;   // data:image/png;base64,... (optional)
+  signatureName?: string;
+  ps?: string | null;
+  footer?: string;
+  versionCode?: string;
   date?: Date;
 };
 
@@ -205,11 +222,9 @@ function formatGermanDate(d: Date): string {
   }).format(d);
 }
 
-/** Anschriftfeld nach DIN 5008: Firma / Anrede+Name / Straße / PLZ+Ort / (Land) */
 function buildAddressLines(r: LetterData["recipient"]): string[] {
   const lines: string[] = [];
   if (r.company) lines.push(r.company);
-  // Anrede im Dativ ("Herrn ..."), Frau bleibt
   const anrede = r.salutation === "Herr" ? "Herrn" : r.salutation ?? "";
   const nameLine = [anrede, r.firstName, r.lastName].filter(Boolean).join(" ");
   if (nameLine) lines.push(nameLine);
@@ -229,17 +244,16 @@ export function LetterDoc({ data }: { data: LetterData }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Logo oben rechts (gesetzter Text, 3 Farbabschnitte) */}
         <Text style={styles.logoWrap}>
           <Text style={styles.logoKfz}>kfz</Text>
           <Text style={styles.logoBlitz}>blitz</Text>
           <Text style={styles.logo24}>24</Text>
         </Text>
 
-        {/* Absender-Kleinzeile */}
+        {/* Absender-Kleinzeile — endet bei ~45mm, sicher über 49mm-Adressfeld */}
         <Text style={styles.senderTiny}>{senderKleinzeile}</Text>
 
-        {/* Anschriftfeld */}
+        {/* Adressfeld nach DIN 5008 Typ B: 20mm links, 49mm oben, 72×42mm */}
         <View style={styles.addressBlock}>
           {addressLines.map((line, i) => (
             <Text key={i} style={styles.addressLine}>
@@ -248,16 +262,16 @@ export function LetterDoc({ data }: { data: LetterData }) {
           ))}
         </View>
 
-        {/* Ort, Datum (rechtsbündig) */}
+        {/* Ort, Datum (rechtsbündig, unter Adressfeld) */}
         <Text style={styles.dateLine}>
           {`Grünwald, ${formatGermanDate(date)}`}
         </Text>
 
-        {/* Betreff + Akzentbalken */}
+        {/* Betreff + oranger Akzent */}
         <Text style={styles.betreff}>{data.subject}</Text>
         <View style={styles.betreffAccent} />
 
-        {/* Content-Bereich: Anrede, Absätze, Grußformel, Name, P.S. */}
+        {/* Body */}
         <View style={styles.contentArea}>
           <Text style={styles.anrede}>{data.anrede}</Text>
 
@@ -271,8 +285,21 @@ export function LetterDoc({ data }: { data: LetterData }) {
             {data.closing ?? "Mit freundlichen Grüßen"}
           </Text>
 
-          {data.signatureName && (
-            <Text style={styles.signatureName}>{data.signatureName}</Text>
+          {data.signatureImage ? (
+            <>
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
+              <PdfImage src={data.signatureImage} style={styles.signatureImage} />
+              {data.signatureName && (
+                <Text style={styles.signatureName}>{data.signatureName}</Text>
+              )}
+            </>
+          ) : (
+            <>
+              <View style={styles.signatureGap} />
+              {data.signatureName && (
+                <Text style={{ fontSize: 10, color: BODY }}>{data.signatureName}</Text>
+              )}
+            </>
           )}
 
           {data.ps && data.ps.trim() && (
@@ -283,13 +310,8 @@ export function LetterDoc({ data }: { data: LetterData }) {
           )}
         </View>
 
-        {/* Fußzeilen-Trennlinie */}
         <View style={styles.footerLine} />
-
-        {/* Fußzeile mit §35a-Pflichtangaben */}
         {data.footer && <Text style={styles.footer}>{data.footer}</Text>}
-
-        {/* Versionscode am rechten Rand, 90° gedreht */}
         {data.versionCode && (
           <Text style={styles.versionCode}>{data.versionCode}</Text>
         )}
@@ -298,10 +320,6 @@ export function LetterDoc({ data }: { data: LetterData }) {
   );
 }
 
-/**
- * Strippt HTML aus Template.bodyHtml und teilt in Absätze.
- * Anrede wird herausgezogen wenn erste Zeile mit "Sehr geehrt..." / "Hallo" beginnt.
- */
 export function extractAnredeAndParagraphs(html: string): {
   anrede: string;
   paragraphs: string[];
@@ -318,17 +336,13 @@ export function extractAnredeAndParagraphs(html: string): {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/[ \t]+\n/g, "\n");
-
   const paras = text
     .split(/\n{2,}/)
     .map((p) => p.trim().replace(/\n+/g, " "))
     .filter(Boolean);
-
   const first = paras[0] ?? "";
   const isAnrede = /^(sehr geehrte[rn]?|hallo|liebe[rn]?)/i.test(first);
-  if (isAnrede) {
-    return { anrede: first, paragraphs: paras.slice(1) };
-  }
+  if (isAnrede) return { anrede: first, paragraphs: paras.slice(1) };
   return { anrede: "Sehr geehrte Damen und Herren,", paragraphs: paras };
 }
 

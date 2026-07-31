@@ -86,7 +86,7 @@ export async function sendCampaignEmails(campaignId: string) {
     include: {
       templateA: { include: { signature: true } },
       templateB: { include: { signature: true } },
-      letterTemplate: true, // Brief-Template hat kein signature-FK
+      letterTemplate: { include: { letterSignature: true } },
       sender: true,
       campaignContacts: { include: { contact: true } },
     },

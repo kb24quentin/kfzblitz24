@@ -108,6 +108,17 @@ export async function POST() {
           include: { contact: true },
         });
 
+        // Preload the letter template (with its optional signature image)
+        // once per campaign — sonst laden wir es N-mal.
+        let letterSignatureImage: string | null = null;
+        if (queuedLetters.length > 0) {
+          const t = await prisma.template.findUnique({
+            where: { id: queuedLetters[0].templateId ?? "" },
+            include: { letterSignature: true },
+          });
+          letterSignatureImage = t?.letterSignature?.imageData ?? null;
+        }
+
         for (const letter of queuedLetters) {
           try {
             const c = letter.contact;
@@ -147,6 +158,7 @@ export async function POST() {
               subject: letter.subject,
               bodyParagraphs: paragraphs,
               closing: "Mit freundlichen Grüßen",
+              signatureImage: letterSignatureImage,
               signatureName: senderConf?.name?.split(" - ")[0] ?? "kfzBlitz24 Team",
               ps: psText,
               footer:

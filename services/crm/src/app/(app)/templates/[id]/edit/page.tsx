@@ -11,11 +11,15 @@ export default async function EditTemplatePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [template, signatures] = await Promise.all([
+  const [template, signatures, letterSignatures] = await Promise.all([
     prisma.template.findUnique({ where: { id } }),
     prisma.signature.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, html: true },
+    }),
+    prisma.letterSignature.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, imageData: true },
     }),
   ]);
   if (!template) notFound();
@@ -27,6 +31,7 @@ export default async function EditTemplatePage({
         action={updateTemplate}
         template={template}
         signatures={signatures}
+        letterSignatures={letterSignatures}
       />
     </div>
   );

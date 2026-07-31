@@ -12,9 +12,12 @@ type TemplateData = {
   bodyHtml?: string;
   bodyText?: string | null;
   signatureId?: string | null;
+  letterSignatureId?: string | null;
   type?: string | null;      // "email" | "letter"
   letterPs?: string | null;
 };
+
+type LetterSignatureOption = { id: string; name: string; imageData: string };
 
 type SignatureOption = {
   id: string;
@@ -48,20 +51,26 @@ export function TemplateEditor({
   action,
   template,
   signatures,
+  letterSignatures = [],
 }: {
   action: (formData: FormData) => Promise<void>;
   template?: TemplateData;
   signatures: SignatureOption[];
+  letterSignatures?: LetterSignatureOption[];
 }) {
   const [type, setType] = useState<"email" | "letter">(
     (template?.type as "email" | "letter") ?? "email"
   );
   const [bodyHtml, setBodyHtml] = useState(template?.bodyHtml || "");
   const [signatureId, setSignatureId] = useState<string>(template?.signatureId || "");
+  const [letterSignatureId, setLetterSignatureId] = useState<string>(
+    template?.letterSignatureId || ""
+  );
   const [letterPs, setLetterPs] = useState<string>(template?.letterPs || "");
   const [subject, setSubject] = useState(template?.subject || "");
   const [showPreview, setShowPreview] = useState(false);
   const editorRef = useRef<RichTextEditorHandle>(null);
+  const selectedLetterSig = letterSignatures.find((s) => s.id === letterSignatureId);
 
   const insertVariable = (varName: string) => {
     editorRef.current?.insertText(`{{${varName}}}`);
@@ -87,6 +96,7 @@ export function TemplateEditor({
       {template?.id && <input type="hidden" name="id" value={template.id} />}
       <input type="hidden" name="bodyHtml" value={bodyHtml} />
       <input type="hidden" name="signatureId" value={signatureId} />
+      <input type="hidden" name="letterSignatureId" value={letterSignatureId} />
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="letterPs" value={letterPs} />
 
@@ -281,6 +291,41 @@ export function TemplateEditor({
             placeholder="Ein Anruf unter {{phone}} genügt. Nennen Sie mir einen Tag und eine Uhrzeit, die Ihnen passen."
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 resize-y"
           />
+        </div>
+      )}
+
+      {/* Brief-Unterschrift (Bild) — nur bei Brief-Templates */}
+      {type === "letter" && (
+        <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-text">Bild-Unterschrift</h3>
+            <span className="text-xs text-text-light">— wird zwischen &quot;Mit freundlichen Grüßen&quot; und dem Namen gedruckt</span>
+          </div>
+          <select
+            value={letterSignatureId}
+            onChange={(e) => setLetterSignatureId(e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+          >
+            <option value="">— Keine (nur Freiraum für handschriftliche Unterschrift) —</option>
+            {letterSignatures.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          {selectedLetterSig && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={selectedLetterSig.imageData}
+              alt="Vorschau"
+              className="max-h-16 object-contain bg-white border border-border rounded p-2"
+            />
+          )}
+          <p className="text-xs text-text-light">
+            Verwaltet in{" "}
+            <Link href="/settings?tab=signatures" className="text-accent hover:underline">
+              Einstellungen → Signaturen
+            </Link>
+            {" "}(unten: &quot;Brief-Unterschriften&quot;).
+          </p>
         </div>
       )}
 

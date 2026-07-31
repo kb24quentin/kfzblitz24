@@ -14,9 +14,11 @@ export async function createTemplate(formData: FormData) {
   const type = ((formData.get("type") as string) || "email") as "email" | "letter";
   const bodyHtml = formData.get("bodyHtml") as string;
   const letterPs = (formData.get("letterPs") as string) || null;
-  // Signaturen sind ein Email-Konzept. Bei Brief-Templates ignorieren.
   const signatureId = type === "email"
     ? ((formData.get("signatureId") as string) || null)
+    : null;
+  const letterSignatureId = type === "letter"
+    ? ((formData.get("letterSignatureId") as string) || null)
     : null;
   const variables = extractVariables(bodyHtml + " " + (letterPs ?? ""));
 
@@ -28,6 +30,7 @@ export async function createTemplate(formData: FormData) {
       bodyHtml,
       bodyText: (formData.get("bodyText") as string) || null,
       signatureId,
+      letterSignatureId,
       letterPs: type === "letter" ? letterPs : null,
       variables: JSON.stringify(variables),
     },
@@ -44,6 +47,9 @@ export async function updateTemplate(formData: FormData) {
   const signatureId = type === "email"
     ? ((formData.get("signatureId") as string) || null)
     : null;
+  const letterSignatureId = type === "letter"
+    ? ((formData.get("letterSignatureId") as string) || null)
+    : null;
   const variables = extractVariables(bodyHtml + " " + (letterPs ?? ""));
 
   await prisma.template.update({
@@ -55,6 +61,7 @@ export async function updateTemplate(formData: FormData) {
       bodyHtml,
       bodyText: (formData.get("bodyText") as string) || null,
       signatureId,
+      letterSignatureId,
       letterPs: type === "letter" ? letterPs : null,
       variables: JSON.stringify(variables),
     },

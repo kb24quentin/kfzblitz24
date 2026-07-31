@@ -12,7 +12,9 @@ Bitte einmal die Seite anschauen: Adressfeld korrekt im Fenster? Betreff, Absät
 
 Falls alles passt, können wir den Live-Modus aktivieren.`;
 
-export function TestLetterForm() {
+type LetterSigOption = { id: string; name: string };
+
+export function TestLetterForm({ letterSignatures = [] }: { letterSignatures?: LetterSigOption[] }) {
   const [state, formAction, pending] = useActionState(sendTestLetter, initial);
 
   return (
@@ -129,6 +131,48 @@ export function TestLetterForm() {
                 defaultValue="Corinna Wagner"
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-light mb-1">
+                Bild-Unterschrift (optional)
+              </label>
+              <select
+                name="letterSignatureId"
+                defaultValue=""
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-bg-secondary"
+              >
+                <option value="">— Nur Freiraum für handschriftliche Unterschrift —</option>
+                {letterSignatures.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-text-light mt-1">
+                Verwaltet unter <b>Signaturen → Brief-Unterschriften</b>.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Druck-Optionen */}
+        <div className="pt-2 border-t border-border">
+          <p className="text-xs font-semibold text-text-light uppercase tracking-wide mb-2">Druck</p>
+          <div>
+            <label className="block text-xs font-medium text-text-light mb-2">Farbe</label>
+            <div className="flex gap-2">
+              <label className="flex-1 cursor-pointer">
+                <input type="radio" name="color" value="bw" defaultChecked className="peer sr-only" />
+                <div className="p-3 rounded-lg border-2 border-border peer-checked:border-accent peer-checked:bg-accent/5 text-center transition-colors">
+                  <div className="text-sm font-semibold text-text">Schwarz-Weiß</div>
+                  <div className="text-xs text-text-light mt-0.5">günstiger, für Standard-Briefe</div>
+                </div>
+              </label>
+              <label className="flex-1 cursor-pointer">
+                <input type="radio" name="color" value="color" className="peer sr-only" />
+                <div className="p-3 rounded-lg border-2 border-border peer-checked:border-accent peer-checked:bg-accent/5 text-center transition-colors">
+                  <div className="text-sm font-semibold text-text">Farbe</div>
+                  <div className="text-xs text-text-light mt-0.5">für Logo + oranger Akzent</div>
+                </div>
+              </label>
             </div>
           </div>
         </div>

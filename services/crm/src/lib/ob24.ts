@@ -102,11 +102,19 @@ export async function getPrice(opts: PriceOptions) {
 
 // ─── Send a printjob ────────────────────────────────────────────────────
 export type SendOptions = {
-  pdf: Buffer;                       // full PDF binary (recipient address inside!)
-  color?: "1" | "4";
+  pdf: Buffer;                                    // full PDF binary (recipient address inside!)
+  color?: "1" | "4" | "bw" | "color";             // bw/color = friendly aliases; fallback env LETTER_COLOR_DEFAULT
   mode?: "simplex" | "duplex";
   shipping?: "national" | "international" | "auto";
 };
+
+function resolveColor(c?: SendOptions["color"]): "1" | "4" {
+  if (c === "1" || c === "4") return c;
+  if (c === "bw") return "1";
+  if (c === "color") return "4";
+  const env = (process.env.LETTER_COLOR_DEFAULT || "bw").toLowerCase();
+  return env === "color" ? "4" : "1";
+}
 
 export type SendResult = {
   id: number;                        // OB24 printjob id
@@ -129,7 +137,7 @@ export async function sendPrintjob(opts: SendOptions): Promise<SendResult> {
       base64_file,
       base64_file_checksum,
       specification: {
-        color: opts.color ?? "1",
+        color: resolveColor(opts.color),
         mode: opts.mode ?? "simplex",
         // "national" statt "auto" — auto liest die Adresse aus dem PDF und kann
         // fehlschlagen wenn OB24 sie nicht sauber parsen kann. national ist der

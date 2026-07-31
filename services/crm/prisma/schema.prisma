@@ -87,25 +87,38 @@ model Reminder {
 }
 
 model Template {
-  id          String   @id @default(cuid())
-  name        String
-  subject     String
-  bodyHtml    String
-  bodyText    String?
-  signatureId String?  // optional FK to a managed Signature row (email only)
-  type        String   @default("email") // "email" | "letter"
-  letterPs    String?  // Brief-Templates: P.S. (einzige CTA im Brief)
-  variables   String   @default("[]")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  name              String
+  subject           String
+  bodyHtml          String
+  bodyText          String?
+  signatureId       String?  // optional FK to a managed Signature row (email only)
+  letterSignatureId String?  // optional FK to LetterSignature (letter only) — Bild-Unterschrift
+  type              String   @default("email") // "email" | "letter"
+  letterPs          String?  // Brief-Templates: P.S. (einzige CTA im Brief)
+  variables         String   @default("[]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  signature         Signature? @relation(fields: [signatureId], references: [id], onDelete: SetNull)
+  signature         Signature?       @relation(fields: [signatureId], references: [id], onDelete: SetNull)
+  letterSignature   LetterSignature? @relation(fields: [letterSignatureId], references: [id], onDelete: SetNull)
   campaignsA        Campaign[] @relation("TemplateA")
   campaignsB        Campaign[] @relation("TemplateB")
   campaignsFollowUp Campaign[] @relation("FollowUpTemplate")
   campaignsLetter   Campaign[] @relation("LetterTemplate")
   emails            Email[]
   letters           Letter[]
+}
+
+model LetterSignature {
+  id            String   @id @default(cuid())
+  name          String   @unique   // z.B. "Christian Engert - Unterschrift"
+  imageData     String   // base64 PNG data URI ("data:image/png;base64,...")
+  signerName    String?  // Name der unter dem Bild gedruckt wird (default: name-Feld)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  templates     Template[]
 }
 
 model Signature {

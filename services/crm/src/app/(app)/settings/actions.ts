@@ -142,6 +142,41 @@ export async function deleteSender(formData: FormData) {
   revalidatePath("/settings");
 }
 
+// ─── LetterSignatures (Brief-Unterschriften) ────────────────────────────
+
+export async function createLetterSignature(formData: FormData) {
+  const name = (formData.get("name") as string)?.trim();
+  const signerName = ((formData.get("signerName") as string) || "").trim() || null;
+  const imageData = (formData.get("imageData") as string) || "";
+  if (!name || !imageData.startsWith("data:image/")) return;
+  await prisma.letterSignature.create({ data: { name, signerName, imageData } });
+  revalidatePath("/settings");
+}
+
+export async function updateLetterSignature(formData: FormData) {
+  const id = formData.get("id") as string;
+  const name = (formData.get("name") as string)?.trim();
+  const signerName = ((formData.get("signerName") as string) || "").trim() || null;
+  const imageData = (formData.get("imageData") as string) || "";
+  if (!id || !name) return;
+  const data: { name: string; signerName: string | null; imageData?: string } = {
+    name,
+    signerName,
+  };
+  // Nur überschreiben wenn neues Bild hochgeladen wurde
+  if (imageData.startsWith("data:image/")) {
+    data.imageData = imageData;
+  }
+  await prisma.letterSignature.update({ where: { id }, data });
+  revalidatePath("/settings");
+}
+
+export async function deleteLetterSignature(formData: FormData) {
+  const id = formData.get("id") as string;
+  await prisma.letterSignature.delete({ where: { id } });
+  revalidatePath("/settings");
+}
+
 // ─── Test-Brief ─────────────────────────────────────────────────────────
 
 export type TestLetterState = { ok: boolean; message: string };
@@ -167,6 +202,8 @@ export async function sendTestLetter(
   const bodyText = ((formData.get("body") as string) || "").trim();
   const ps = ((formData.get("ps") as string) || "").trim() || null;
   const signatureName = ((formData.get("signatureName") as string) || "").trim();
+  const color = ((formData.get("color") as string) || "bw") as "bw" | "color";
+  const letterSignatureId = ((formData.get("letterSignatureId") as string) || "").trim() || null;
 
   if (!firstName || !lastName || !street || !zipCode || !city) {
     return { ok: false, message: "Empfänger unvollständig — Vor-/Nachname + Straße + PLZ + Stadt sind Pflicht." };
@@ -187,6 +224,13 @@ export async function sendTestLetter(
       .map((p) => p.trim().replace(/\n+/g, " "))
       .filter(Boolean);
 
+    // Optional: Bild-Signatur laden
+    let signatureImage: string | null = null;
+    if (letterSignatureId) {
+      const sig = await prisma.letterSignature.findUnique({ where: { id: letterSignatureId } });
+      if (sig) signatureImage = sig.imageData;
+    }
+
     const pdf = await renderLetterPdf({
       senderName: process.env.LETTER_SENDER_NAME || "kfzBlitz24 GmbH",
       senderLine1: process.env.LETTER_SENDER_LINE1 || "Bomhardstraße 7",
@@ -206,6 +250,7 @@ export async function sendTestLetter(
       subject,
       bodyParagraphs: paragraphs,
       closing: "Mit freundlichen Grüßen",
+      signatureImage,
       signatureName: signatureName || "kfzBlitz24 Team",
       ps,
       footer:
@@ -214,7 +259,7 @@ export async function sendTestLetter(
       versionCode: "AKQ-KB24 · Rev. 07/2026 · v1.0 (TEST)",
     });
 
-    const result = await sendPrintjob({ pdf });
+    const result = await sendPrintjob({ pdf, color });
     const mode = currentMode();
     const item = result.items?.[0];
     const cost = item ? (item.amount + item.vat).toFixed(2) : "—";

@@ -5,6 +5,7 @@ import { UserManagement } from "./user-management";
 import { TestEmailForm } from "./test-email-form";
 import { TestLetterForm } from "./test-letter-form";
 import { SignaturesManager } from "./signatures-manager";
+import { LetterSignaturesManager } from "./letter-signatures-manager";
 import { SendersManager } from "./senders-manager";
 
 export default async function SettingsPage({
@@ -27,6 +28,9 @@ export default async function SettingsPage({
     : [];
   const signatures = tab === "signatures"
     ? await prisma.signature.findMany({ orderBy: { name: "asc" } })
+    : [];
+  const letterSignatures = (tab === "signatures" || tab === "config")
+    ? await prisma.letterSignature.findMany({ orderBy: { name: "asc" } })
     : [];
   const senders = tab === "senders"
     ? await prisma.sender.findMany({ orderBy: { name: "asc" } })
@@ -119,13 +123,18 @@ export default async function SettingsPage({
 
           <TestEmailForm />
 
-          <TestLetterForm />
+          <TestLetterForm letterSignatures={letterSignatures.map((s) => ({ id: s.id, name: s.name }))} />
         </>
       )}
 
       {tab === "senders" && <SendersManager senders={senders} />}
 
-      {tab === "signatures" && <SignaturesManager signatures={signatures} />}
+      {tab === "signatures" && (
+        <div className="space-y-8">
+          <SignaturesManager signatures={signatures} />
+          <LetterSignaturesManager signatures={letterSignatures} />
+        </div>
+      )}
 
       {tab === "users" && <UserManagement users={users} />}
     </div>
