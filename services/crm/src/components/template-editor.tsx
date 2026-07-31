@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useRef } from "react";
-import { Save, ArrowLeft, Eye, Code, Variable, FileSignature } from "lucide-react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { Save, ArrowLeft, Eye, Code, Variable, FileSignature, FileText, RefreshCw, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { RichTextEditor, type RichTextEditorHandle } from "./rich-text-editor";
 
@@ -71,6 +71,46 @@ export function TemplateEditor({
   const [showPreview, setShowPreview] = useState(false);
   const editorRef = useRef<RichTextEditorHandle>(null);
   const selectedLetterSig = letterSignatures.find((s) => s.id === letterSignatureId);
+
+  // ─── Brief-PDF Live-Preview ────────────────────────────────────────
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    };
+  }, []);
+
+  const regeneratePdf = async () => {
+    if (type !== "letter") return;
+    setPdfLoading(true);
+    setPdfError(null);
+    try {
+      const res = await fetch("/api/preview/letter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          bodyHtml,
+          letterPs,
+          letterSignatureId: letterSignatureId || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      objectUrlRef.current = url;
+      setPdfUrl(url);
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   const insertVariable = (varName: string) => {
     editorRef.current?.insertText(`{{${varName}}}`);
@@ -214,21 +254,88 @@ export function TemplateEditor({
               minHeight={320}
             />
           </div>
-        ) : (
-          <div className="p-6">
-            <div className="mb-4 pb-3 border-b border-border">
-              <p className="text-xs text-text-light mb-1">Betreff:</p>
-              <p className="text-sm font-medium">{renderPreview(subject)}</p>
+        ) : type === "email" ? (
+          // Mail-Client-Style Preview
+          <div className="p-6 bg-bg-secondary/50">
+            <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-sm border border-border overflow-hidden">
+              {/* Mail-Header */}
+              <div className="px-5 py-3 border-b border-border bg-bg-secondary/50">
+                <div className="flex items-baseline gap-2 text-xs text-text-light mb-1">
+                  <span className="font-semibold w-14">Von:</span>
+                  <span className="text-text">Corinna Wagner - kfzBlitz24 &lt;corinna.wagner@kfzblitz24.de&gt;</span>
+                </div>
+                <div className="flex items-baseline gap-2 text-xs text-text-light mb-1">
+                  <span className="font-semibold w-14">An:</span>
+                  <span className="text-text">Max Mustermann &lt;max@musterbetrieb.de&gt;</span>
+                </div>
+                <div className="flex items-baseline gap-2 text-xs text-text-light">
+                  <span className="font-semibold w-14">Betreff:</span>
+                  <span className="text-text font-semibold">{renderPreview(subject) || "—"}</span>
+                </div>
+              </div>
+              {/* Mail-Body */}
+              <div className="px-5 py-6">
+                <div
+                  className="prose prose-sm max-w-none text-text"
+                  dangerouslySetInnerHTML={{ __html: renderPreview(bodyHtml) }}
+                />
+                {selectedSignature && (
+                  <div
+                    className="mt-6"
+                    dangerouslySetInnerHTML={{ __html: renderPreview(selectedSignature.html) }}
+                  />
+                )}
+              </div>
             </div>
-            <div
-              className="prose prose-sm max-w-none text-text"
-              dangerouslySetInnerHTML={{ __html: renderPreview(bodyHtml) }}
-            />
-            {selectedSignature && (
-              <div
-                className="mt-6"
-                dangerouslySetInnerHTML={{ __html: renderPreview(selectedSignature.html) }}
+          </div>
+        ) : (
+          // Brief-PDF Live-Preview
+          <div className="p-4 bg-bg-secondary/50 space-y-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={regeneratePdf}
+                disabled={pdfLoading}
+                className="flex items-center gap-2 px-3 py-1.5 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-light disabled:opacity-50"
+              >
+                {pdfLoading ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Rendere PDF …</>
+                ) : (
+                  <><RefreshCw className="w-4 h-4" /> {pdfUrl ? "PDF neu generieren" : "PDF-Vorschau generieren"}</>
+                )}
+              </button>
+              {pdfUrl && !pdfLoading && (
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-xs text-accent hover:underline"
+                >
+                  In neuem Tab öffnen ↗
+                </a>
+              )}
+              <span className="text-xs text-text-light ml-auto">
+                Rendert mit Sample-Empfänger (Max Mustermann · Musterstraße 42 · 80331 München)
+              </span>
+            </div>
+            {pdfError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-danger">
+                Fehler beim Rendern: {pdfError}
+              </div>
+            )}
+            {pdfUrl ? (
+              <iframe
+                src={pdfUrl}
+                title="Brief-Vorschau"
+                className="w-full border border-border rounded-lg bg-white"
+                style={{ height: 780 }}
               />
+            ) : (
+              <div className="border-2 border-dashed border-border rounded-lg p-12 text-center bg-white">
+                <FileText className="w-10 h-10 text-text-light/40 mx-auto mb-2" />
+                <p className="text-sm text-text-light">Noch keine PDF-Vorschau generiert.</p>
+                <p className="text-xs text-text-light mt-1">Klick auf &quot;PDF-Vorschau generieren&quot; oben.</p>
+              </div>
             )}
           </div>
         )}
