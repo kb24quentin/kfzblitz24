@@ -12,6 +12,8 @@
  */
 
 import * as React from "react";
+import fs from "node:fs";
+import path from "node:path";
 import {
   Document,
   Page,
@@ -21,6 +23,17 @@ import {
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
+
+// Logo (PNG) einmal beim Modul-Load als data-URI cachen. Datei liegt unter
+// public/letter-logo.png und wird im Docker-Build in den standalone-Output
+// kopiert (public/ landet auf /app/public/).
+let LOGO_DATA_URI: string | null = null;
+try {
+  const buf = fs.readFileSync(path.join(process.cwd(), "public", "letter-logo.png"));
+  LOGO_DATA_URI = `data:image/png;base64,${buf.toString("base64")}`;
+} catch (e) {
+  console.warn("[letter-pdf] letter-logo.png not found — falling back to text logo:", e);
+}
 
 const NAVY = "#0b3756";
 const ORANGE = "#ff6600";
@@ -178,6 +191,7 @@ const styles = StyleSheet.create({
     width: 200,
   },
   logoWrap: {
+    // Fallback nur — wird nur genutzt wenn PNG nicht gefunden wurde
     position: "absolute",
     top: mm(15),
     right: RIGHT,
@@ -188,6 +202,14 @@ const styles = StyleSheet.create({
   logoKfz: { color: NAVY },
   logoBlitz: { color: ORANGE },
   logo24: { color: NAVY },
+  logoImage: {
+    position: "absolute",
+    top: mm(15),
+    right: RIGHT,
+    width: mm(55),          // 55mm breit
+    height: mm(11.5),       // AR 4.8:1 → ~11.5mm hoch
+    objectFit: "contain",
+  },
 });
 
 export type LetterData = {
@@ -247,11 +269,16 @@ export function LetterDoc({ data }: { data: LetterData }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.logoWrap}>
-          <Text style={styles.logoKfz}>kfz</Text>
-          <Text style={styles.logoBlitz}>blitz</Text>
-          <Text style={styles.logo24}>24</Text>
-        </Text>
+        {LOGO_DATA_URI ? (
+          /* eslint-disable-next-line jsx-a11y/alt-text */
+          <PdfImage src={LOGO_DATA_URI} style={styles.logoImage} />
+        ) : (
+          <Text style={styles.logoWrap}>
+            <Text style={styles.logoKfz}>kfz</Text>
+            <Text style={styles.logoBlitz}>blitz</Text>
+            <Text style={styles.logo24}>24</Text>
+          </Text>
+        )}
 
         {/* Absender-Kleinzeile — endet bei ~45mm, sicher über 49mm-Adressfeld */}
         <Text style={styles.senderTiny}>{senderKleinzeile}</Text>
