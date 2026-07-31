@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Save, ArrowLeft, Users, Zap, Filter, AtSign, Clock, Mail, FileText, Phone } from "lucide-react";
 import Link from "next/link";
 
-type Template = { id: string; name: string; subject: string };
+type Template = { id: string; name: string; subject: string; type?: string | null };
 type Contact = {
   id: string;
   firstName: string;
@@ -143,19 +143,27 @@ export function CampaignForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-text mb-1">Template A *</label>
+          <label className="block text-sm font-medium text-text mb-1">
+            E-Mail-Template A {channels.has("email") ? "*" : "(nicht benötigt — kein E-Mail-Kanal)"}
+          </label>
           <select
             name="templateAId"
             required
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
           >
             <option value="">Template wählen...</option>
-            {templates.map((t) => (
+            {templates.filter((t) => (t.type ?? "email") === "email").map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name} – {t.subject}
               </option>
             ))}
           </select>
+          {templates.filter((t) => (t.type ?? "email") === "email").length === 0 && (
+            <p className="text-xs text-warning mt-1">
+              Noch keine E-Mail-Templates angelegt — bitte zuerst unter{" "}
+              <Link href="/templates/new" className="underline">Templates → Neu</Link> erstellen.
+            </p>
+          )}
         </div>
 
         {/* Kanäle: E-Mail / Brief / Anruf */}
@@ -201,6 +209,31 @@ export function CampaignForm({
           )}
         </div>
 
+        {/* Brief-Template — nur wenn Brief-Kanal aktiv */}
+        {channels.has("letter") && (
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">Brief-Template *</label>
+            <select
+              name="letterTemplateId"
+              required={channels.has("letter")}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              <option value="">Brief-Template wählen...</option>
+              {templates.filter((t) => t.type === "letter").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} – {t.subject}
+                </option>
+              ))}
+            </select>
+            {templates.filter((t) => t.type === "letter").length === 0 && (
+              <p className="text-xs text-warning mt-1">
+                Noch keine Brief-Templates angelegt — bitte zuerst unter{" "}
+                <Link href="/templates/new" className="underline">Templates → Neu → Typ &quot;Brief&quot;</Link> erstellen.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* A/B Testing */}
         <div className="border-t border-border pt-4">
           <label className="flex items-center gap-2 cursor-pointer">
@@ -217,13 +250,13 @@ export function CampaignForm({
           {enableAB && (
             <div className="mt-3 pl-6 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-text mb-1">Template B</label>
+                <label className="block text-sm font-medium text-text mb-1">Template B (E-Mail)</label>
                 <select
                   name="templateBId"
                   className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
                 >
                   <option value="">Template wählen...</option>
-                  {templates.map((t) => (
+                  {templates.filter((t) => (t.type ?? "email") === "email").map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} – {t.subject}
                     </option>
@@ -360,13 +393,13 @@ export function CampaignForm({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text mb-1">Follow-Up Template</label>
+                <label className="block text-sm font-medium text-text mb-1">Follow-Up Template (E-Mail)</label>
                 <select
                   name="followUpTemplateId"
                   className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
                 >
                   <option value="">Gleiches Template verwenden</option>
-                  {templates.map((t) => (
+                  {templates.filter((t) => (t.type ?? "email") === "email").map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
                     </option>

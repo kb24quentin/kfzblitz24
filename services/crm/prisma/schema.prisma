@@ -92,7 +92,9 @@ model Template {
   subject     String
   bodyHtml    String
   bodyText    String?
-  signatureId String?  // optional FK to a managed Signature row
+  signatureId String?  // optional FK to a managed Signature row (email only)
+  type        String   @default("email") // "email" | "letter"
+  letterPs    String?  // Brief-Templates: P.S. (einzige CTA im Brief)
   variables   String   @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -101,6 +103,7 @@ model Template {
   campaignsA        Campaign[] @relation("TemplateA")
   campaignsB        Campaign[] @relation("TemplateB")
   campaignsFollowUp Campaign[] @relation("FollowUpTemplate")
+  campaignsLetter   Campaign[] @relation("LetterTemplate")
   emails            Email[]
   letters           Letter[]
 }
@@ -130,8 +133,9 @@ model Campaign {
   name               String
   status             String    @default("draft")
   channels           String    @default("[\"email\"]")  // JSON-encoded: any of "email"|"letter"|"call"
-  templateAId        String
-  templateBId        String?
+  templateAId        String    // email template (Variante A)
+  templateBId        String?   // email template (Variante B, optional)
+  letterTemplateId   String?   // Brief-Template (nur wenn Channel "letter" aktiv)
   senderId           String?   // optional; falls null → env FROM_EMAIL/FROM_NAME
   scheduledAt        DateTime? // wenn gesetzt: /api/send skippt bis Zeitpunkt erreicht
   abSplitRatio       Int       @default(50)
@@ -144,6 +148,7 @@ model Campaign {
 
   templateA        Template          @relation("TemplateA", fields: [templateAId], references: [id])
   templateB        Template?         @relation("TemplateB", fields: [templateBId], references: [id])
+  letterTemplate   Template?         @relation("LetterTemplate", fields: [letterTemplateId], references: [id])
   followUpTemplate Template?         @relation("FollowUpTemplate", fields: [followUpTemplateId], references: [id])
   sender           Sender?           @relation(fields: [senderId], references: [id], onDelete: SetNull)
   emails           Email[]

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getFromAddress, getListUnsubscribeHeaders, htmlToPlainText } from "@/lib/email";
 import { sendPrintjob, currentMode } from "@/lib/ob24";
-import { renderLetterPdf } from "@/lib/letter-pdf";
+import { renderLetterPdf, extractAnredeAndParagraphs } from "@/lib/letter-pdf";
 
 // This API route processes the email send queue
 // Call it via cron job or manually to send queued emails
@@ -111,10 +111,17 @@ export async function POST() {
         for (const letter of queuedLetters) {
           try {
             const c = letter.contact;
-            const bodyParagraphs = letter.body
-              .split(/\n{2,}/)
-              .map((p) => p.trim())
-              .filter(Boolean);
+            // Body vs. P.S. splitten (Marker "[P.S.]" — von sendCampaignEmails gesetzt)
+            const rawBody = letter.body;
+            let mainBody = rawBody;
+            let psText: string | null = null;
+            const psSplit = rawBody.split(/\n{2,}\[P\.S\.\]\n/);
+            if (psSplit.length === 2) {
+              mainBody = psSplit[0];
+              psText = psSplit[1].trim();
+            }
+            // Anrede erkennt automatisch "Sehr geehrter ..." — sonst Fallback
+            const { anrede, paragraphs } = extractAnredeAndParagraphs(mainBody);
 
             const senderConf = campaign.sender ?? null;
             const pdf = await renderLetterPdf({
@@ -136,13 +143,16 @@ export async function POST() {
                 city: c.city,
                 country: c.country,
               },
+              anrede,
               subject: letter.subject,
-              bodyParagraphs,
+              bodyParagraphs: paragraphs,
               closing: "Mit freundlichen Grüßen",
               signatureName: senderConf?.name?.split(" - ")[0] ?? "kfzBlitz24 Team",
+              ps: psText,
               footer:
                 "kfzBlitz24 GmbH · Bomhardstraße 7 · 82031 Grünwald bei München · " +
-                "Geschäftsführer: Christian Engert · HRB 291765, AG München · USt-ID: DE367617344",
+                "Geschäftsführer: Christian Engert · HRB 291765 Amtsgericht München · USt-IdNr.: DE367617344",
+              versionCode: "AKQ-KB24 · Rev. 07/2026 · v1.0",
             });
 
             const result = await sendPrintjob({ pdf });

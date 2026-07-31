@@ -36,6 +36,7 @@ export async function createCampaign(formData: FormData) {
       channels: JSON.stringify(channels),
       templateAId: formData.get("templateAId") as string,
       templateBId: templateBId || null,
+      letterTemplateId: (formData.get("letterTemplateId") as string) || null,
       senderId,
       scheduledAt,
       abSplitRatio: parseInt(formData.get("abSplitRatio") as string || "50"),
@@ -85,6 +86,7 @@ export async function sendCampaignEmails(campaignId: string) {
     include: {
       templateA: { include: { signature: true } },
       templateB: { include: { signature: true } },
+      letterTemplate: true, // Brief-Template hat kein signature-FK
       sender: true,
       campaignContacts: { include: { contact: true } },
     },
@@ -156,7 +158,7 @@ export async function sendCampaignEmails(campaignId: string) {
     }
 
     // ── LETTER ────────────────────────────────────────────────────────
-    if (doLetter) {
+    if (doLetter && campaign.letterTemplate) {
       // Nur wenn Adresse vollständig ist — sonst nicht queuen (Fehler
       // beim Rendern des Adressblocks vermeiden).
       const addressOk = !!(contact.street && contact.zipCode && contact.city);
@@ -167,18 +169,23 @@ export async function sendCampaignEmails(campaignId: string) {
           where: { campaignId, contactId: cc.contactId },
         });
         if (!already) {
-          // For letters we store the plain-text body (already substituted).
-          // The signature is appended too — plain text version.
-          const combined = signature.trim()
-            ? `${bodyHtml}\n\n${signature}`
-            : bodyHtml;
+          const lt = campaign.letterTemplate;
+          // Brief-Template hat eigenen subject/body/ps mit ihren eigenen Variablen
+          const lSubject = sub(lt.subject);
+          // Brief-Body: plain-text nach htmlToPlainText, dann Absätze
+          const lBodyText = htmlToPlainText(sub(lt.bodyHtml));
+          const lPs = lt.letterPs ? sub(lt.letterPs) : null;
+          // Store body + ps combined; PDF-Renderer trennt sie wieder
+          const combined = lPs && lPs.trim()
+            ? `${lBodyText}\n\n[P.S.]\n${lPs}`
+            : lBodyText;
           await prisma.letter.create({
             data: {
               campaignId,
               contactId: cc.contactId,
-              templateId: template.id,
-              subject,
-              body: htmlToPlainText(combined),
+              templateId: lt.id,
+              subject: lSubject,
+              body: combined,
               status: "queued",
             },
           });

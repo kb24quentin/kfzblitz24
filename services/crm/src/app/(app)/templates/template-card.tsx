@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, Trash2, Mail, FileText } from "lucide-react";
 import { deleteTemplate } from "./actions";
 
 type Template = {
@@ -10,16 +10,29 @@ type Template = {
   subject: string;
   bodyHtml: string;
   variables: string;
+  type?: string | null;
 };
 
 export function TemplateCard({ template }: { template: Template }) {
   const vars = JSON.parse(template.variables || "[]") as string[];
   const previewText = template.bodyHtml.replace(/<[^>]*>/g, " ").slice(0, 150);
+  const isLetter = template.type === "letter";
+  const TypeIcon = isLetter ? FileText : Mail;
 
   return (
     <div className="bg-bg-card rounded-xl border border-border p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-3">
         <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+                isLetter ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+              }`}
+            >
+              <TypeIcon className="w-3 h-3" />
+              {isLetter ? "Brief" : "E-Mail"}
+            </span>
+          </div>
           <h3 className="font-semibold text-text">{template.name}</h3>
           <p className="text-sm text-text-light mt-0.5 truncate">{template.subject}</p>
         </div>

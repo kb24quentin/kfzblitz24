@@ -12,6 +12,8 @@ type TemplateData = {
   bodyHtml?: string;
   bodyText?: string | null;
   signatureId?: string | null;
+  type?: string | null;      // "email" | "letter"
+  letterPs?: string | null;
 };
 
 type SignatureOption = {
@@ -51,8 +53,12 @@ export function TemplateEditor({
   template?: TemplateData;
   signatures: SignatureOption[];
 }) {
+  const [type, setType] = useState<"email" | "letter">(
+    (template?.type as "email" | "letter") ?? "email"
+  );
   const [bodyHtml, setBodyHtml] = useState(template?.bodyHtml || "");
   const [signatureId, setSignatureId] = useState<string>(template?.signatureId || "");
+  const [letterPs, setLetterPs] = useState<string>(template?.letterPs || "");
   const [subject, setSubject] = useState(template?.subject || "");
   const [showPreview, setShowPreview] = useState(false);
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -81,6 +87,38 @@ export function TemplateEditor({
       {template?.id && <input type="hidden" name="id" value={template.id} />}
       <input type="hidden" name="bodyHtml" value={bodyHtml} />
       <input type="hidden" name="signatureId" value={signatureId} />
+      <input type="hidden" name="type" value={type} />
+      <input type="hidden" name="letterPs" value={letterPs} />
+
+      {/* Template-Typ */}
+      <div className="bg-bg-card rounded-xl border border-border p-6">
+        <label className="block text-sm font-medium text-text mb-2">Template-Typ *</label>
+        <div className="grid grid-cols-2 gap-3">
+          {(
+            [
+              { id: "email", label: "E-Mail-Template", hint: "Für Kampagnen mit Kanal 'E-Mail'. HTML-Editor + Signatur-Dropdown." },
+              { id: "letter", label: "Brief-Template", hint: "Für Kampagnen mit Kanal 'Brief'. Wird via OnlineBrief24 als PDF gerendert (DIN 5008)." },
+            ] as const
+          ).map(({ id, label, hint }) => {
+            const on = type === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setType(id)}
+                className={`text-left p-3 rounded-lg border-2 transition-colors ${
+                  on
+                    ? "border-accent bg-accent/5"
+                    : "border-border bg-bg-secondary hover:border-accent/40"
+                }`}
+              >
+                <div className={`text-sm font-semibold ${on ? "text-text" : "text-text-light"}`}>{label}</div>
+                <p className="text-xs text-text-light mt-1">{hint}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="bg-bg-card rounded-xl border border-border p-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -186,43 +224,79 @@ export function TemplateEditor({
         )}
       </div>
 
-      {/* Signature picker */}
-      <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <FileSignature className="w-4 h-4 text-accent" />
-          <h3 className="text-sm font-semibold text-text">Signatur</h3>
-          <span className="text-xs text-text-light">— wird automatisch unten an jede Mail dieses Templates angehängt</span>
+      {/* Signature picker — nur bei Email-Templates */}
+      {type === "email" && (
+        <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <FileSignature className="w-4 h-4 text-accent" />
+            <h3 className="text-sm font-semibold text-text">Signatur</h3>
+            <span className="text-xs text-text-light">— wird automatisch unten an jede Mail dieses Templates angehängt</span>
+          </div>
+
+          <select
+            value={signatureId}
+            onChange={(e) => setSignatureId(e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+          >
+            <option value="">— Keine Signatur —</option>
+            {signatures.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+
+          {selectedSignature && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-text-light hover:text-text">Vorschau der Signatur</summary>
+              <div
+                className="mt-2 p-3 border border-border rounded-lg bg-white"
+                dangerouslySetInnerHTML={{ __html: renderPreview(selectedSignature.html) }}
+              />
+            </details>
+          )}
+
+          <p className="text-xs text-text-light">
+            Signaturen werden in den{" "}
+            <Link href="/settings?tab=signatures" className="text-accent hover:underline">
+              Einstellungen
+            </Link>{" "}
+            verwaltet.
+          </p>
         </div>
+      )}
 
-        <select
-          value={signatureId}
-          onChange={(e) => setSignatureId(e.target.value)}
-          className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-        >
-          <option value="">— Keine Signatur —</option>
-          {signatures.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
+      {/* P.S. — nur bei Brief-Templates */}
+      {type === "letter" && (
+        <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-text">P.S. (einzige Handlungsaufforderung)</h3>
+            <p className="text-xs text-text-light mt-0.5">
+              Laut Design-Guide: die P.S.-Zeile ist die einzige CTA im Brief. Wird nachweislich häufiger gelesen als der Fließtext.
+              Variablen wie <code>{`{{first_name}}`}</code>, <code>{`{{phone}}`}</code> funktionieren auch hier.
+            </p>
+          </div>
+          <textarea
+            value={letterPs}
+            onChange={(e) => setLetterPs(e.target.value)}
+            rows={3}
+            placeholder="Ein Anruf unter {{phone}} genügt. Nennen Sie mir einen Tag und eine Uhrzeit, die Ihnen passen."
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 resize-y"
+          />
+        </div>
+      )}
 
-        {selectedSignature && (
-          <details className="text-xs">
-            <summary className="cursor-pointer text-text-light hover:text-text">Vorschau der Signatur</summary>
-            <div
-              className="mt-2 p-3 border border-border rounded-lg bg-white"
-              dangerouslySetInnerHTML={{ __html: renderPreview(selectedSignature.html) }}
-            />
-          </details>
-        )}
-
-        <p className="text-xs text-text-light">
-          Signaturen werden in den{" "}
-          <Link href="/settings?tab=signatures" className="text-accent hover:underline">
-            Einstellungen
-          </Link>{" "}
-          verwaltet.
-        </p>
-      </div>
+      {/* Hinweis-Card bei Brief-Templates */}
+      {type === "letter" && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 space-y-1">
+          <p className="font-semibold">Design-Guide: Brief (Stil &quot;dezent&quot;)</p>
+          <ul className="list-disc ml-4 space-y-0.5">
+            <li>Genau 1 Seite, 150-180 Wörter, 3 Absätze + P.S.</li>
+            <li>1. Absatz: wer schreibt + warum · 2. Absatz: was wir wollen · 3. Absatz: konkreter Vorschlag mit Ausstieg</li>
+            <li>Sie-Form, kein Blocksatz, keine Bullets/Boxes/Tabellen im Fließtext</li>
+            <li>Genau 1 CTA — steht im P.S., nicht im Fließtext</li>
+            <li>Anrede wird im Brief oben gerendert; erste Textzeile sollte mit &quot;Sehr geehrter Herr/Frau ...&quot; beginnen</li>
+          </ul>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <button
