@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  Mail, FileText, Phone, Plus, X, Clock, Calendar,
+  Mail, FileText, Phone, Plus, X, Clock,
   Zap, Palette, AlertCircle, ChevronUp, ChevronDown, Timer,
 } from "lucide-react";
 import type { StepInput } from "@/app/(app)/campaigns/actions";
@@ -19,23 +19,65 @@ const DAYS: { label: string; value: number }[] = [
   { label: "So", value: 0 },
 ];
 
-type SendWindow = { days: number[]; slots: { from: string; to: string }[] };
+// Send-window model matches src/lib/cadence.ts. Two modes:
+//   - "exact"  → fire at `from` (HH:MM) on allowed weekdays. `to` == `from`.
+//   - "spread" → per-contact random minute in [from, to] on allowed weekdays.
+// Legacy campaigns with {days, slots[]} shape are read via parseWin.
+type SendWindow = {
+  days: number[];
+  mode: "exact" | "spread";
+  from: string;   // "HH:MM"
+  to: string;     // "HH:MM"
+};
+
+type LegacySlot = { from: string; to: string };
+type LegacyWin = { days?: number[]; slots?: LegacySlot[] };
+
+function defaultWin(): SendWindow {
+  return { days: [], mode: "exact", from: "09:00", to: "09:00" };
+}
 
 function parseWin(raw: string | null): SendWindow {
-  if (!raw) return { days: [], slots: [] };
-  try {
-    const w = JSON.parse(raw) as Partial<SendWindow>;
+  if (!raw) return defaultWin();
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return defaultWin(); }
+  if (!parsed || typeof parsed !== "object") return defaultWin();
+
+  const w = parsed as Partial<SendWindow> & LegacyWin;
+  const days = Array.isArray(w.days) ? w.days : [];
+
+  if (w.mode === "exact" || w.mode === "spread") {
     return {
-      days: Array.isArray(w.days) ? w.days : [],
-      slots: Array.isArray(w.slots) ? w.slots : [],
+      days,
+      mode: w.mode,
+      from: typeof w.from === "string" ? w.from : "09:00",
+      to:   typeof w.to   === "string" ? w.to   : (typeof w.from === "string" ? w.from : "09:00"),
     };
-  } catch {
-    return { days: [], slots: [] };
   }
+  if (Array.isArray(w.slots) && w.slots.length > 0) {
+    const s = w.slots[0];
+    const from = typeof s.from === "string" ? s.from : "09:00";
+    const to   = typeof s.to   === "string" ? s.to   : from;
+    return { days, mode: from === to ? "exact" : "spread", from, to };
+  }
+  return { ...defaultWin(), days };
+}
+
+// Add `hours` to an "HH:MM" string, clamped to 23:59.
+function bumpHour(hhmm: string, hours: number): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const next = Math.min(23, (h || 0) + hours);
+  return `${String(next).padStart(2, "0")}:${String(m || 0).padStart(2, "0")}`;
 }
 
 function stringifyWin(w: SendWindow): string | null {
-  if (w.days.length === 0 && w.slots.length === 0) return null;
+  // Only serialize when the user has actually set something meaningful.
+  const isEmpty =
+    w.days.length === 0 &&
+    w.mode === "spread" &&
+    w.from === "00:00" &&
+    w.to === "23:59";
+  if (isEmpty) return null;
   return JSON.stringify(w);
 }
 
@@ -188,26 +230,22 @@ function StepCard({
     const next = on ? [...window.days, d] : window.days.filter((x) => x !== d);
     onUpdate({ sendWindow: stringifyWin({ ...window, days: next }) });
   };
-  const setWindowSlot = (i: number, key: "from" | "to", v: string) => {
-    const slots = [...window.slots];
-    slots[i] = { ...slots[i], [key]: v };
-    onUpdate({ sendWindow: stringifyWin({ ...window, slots }) });
+  const setWindowMode = (mode: "exact" | "spread") => {
+    // Switching to exact → collapse the range to just `from`.
+    // Switching to spread with equal times → seed a sensible range so the input
+    // makes visual sense.
+    if (mode === "exact") {
+      onUpdate({ sendWindow: stringifyWin({ ...window, mode, to: window.from }) });
+    } else {
+      const to = window.from === window.to ? bumpHour(window.from, 1) : window.to;
+      onUpdate({ sendWindow: stringifyWin({ ...window, mode, to }) });
+    }
   };
-  const addSlot = () => {
-    onUpdate({
-      sendWindow: stringifyWin({
-        ...window,
-        slots: [...window.slots, { from: "09:00", to: "17:00" }],
-      }),
-    });
-  };
-  const removeSlot = (i: number) => {
-    onUpdate({
-      sendWindow: stringifyWin({
-        ...window,
-        slots: window.slots.filter((_, x) => x !== i),
-      }),
-    });
+  const setWindowTime = (key: "from" | "to", v: string) => {
+    const next = { ...window, [key]: v };
+    // exact mode: keep from == to always
+    if (window.mode === "exact" && key === "from") next.to = v;
+    onUpdate({ sendWindow: stringifyWin(next) });
   };
 
   return (
@@ -356,45 +394,63 @@ function StepCard({
                   </div>
                 </div>
 
-                {/* Time slots */}
+                {/* Uhrzeit-Modus */}
                 <div>
-                  <p className="text-xs text-text-light mb-1.5">Zeitfenster (leer = ganztägig)</p>
-                  {window.slots.length === 0 && (
-                    <p className="text-xs text-text-light italic mb-1.5">Keine Zeitfenster gesetzt</p>
-                  )}
-                  <div className="space-y-1.5">
-                    {window.slots.map((s, i) => (
-                      <div key={i} className="flex items-center gap-1.5">
-                        <input
-                          type="time"
-                          value={s.from}
-                          onChange={(e) => setWindowSlot(i, "from", e.target.value)}
-                          className="px-2 py-1 border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
-                        />
-                        <span className="text-xs text-text-light">bis</span>
-                        <input
-                          type="time"
-                          value={s.to}
-                          onChange={(e) => setWindowSlot(i, "to", e.target.value)}
-                          className="px-2 py-1 border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeSlot(i)}
-                          className="p-1 hover:bg-red-50 hover:text-red-600 rounded"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
+                  <p className="text-xs text-text-light mb-1.5">Uhrzeit</p>
+                  <div className="grid grid-cols-2 gap-1.5 mb-2">
+                    {(
+                      [
+                        { m: "exact"  as const, label: "Genau um Uhrzeit",       hint: "z.B. Di 07:56 (handgeschrieben-Look)" },
+                        { m: "spread" as const, label: "Verteilt in Zeitfenster", hint: "pro Kontakt zufällige Minute im Bereich" },
+                      ]
+                    ).map((opt) => (
+                      <button
+                        key={opt.m}
+                        type="button"
+                        onClick={() => setWindowMode(opt.m)}
+                        className={`p-2 rounded-lg text-left text-xs border transition-colors ${
+                          window.mode === opt.m
+                            ? "bg-accent/5 border-accent text-text"
+                            : "bg-bg-card border-border text-text-light hover:border-accent/50"
+                        }`}
+                      >
+                        <div className="font-semibold">{opt.label}</div>
+                        <div className="text-[10px] mt-0.5 opacity-80">{opt.hint}</div>
+                      </button>
                     ))}
                   </div>
-                  <button
-                    type="button"
-                    onClick={addSlot}
-                    className="mt-2 text-xs text-accent hover:underline flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Fenster hinzufügen
-                  </button>
+
+                  {window.mode === "exact" ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-light">Um</span>
+                      <input
+                        type="time"
+                        value={window.from}
+                        onChange={(e) => setWindowTime("from", e.target.value)}
+                        className="px-2 py-1 border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+                      />
+                      <span className="text-[10px] text-text-light italic">
+                        Tipp: krumme Minuten (07:56 statt 08:00) wirken weniger automatisiert.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-light">Zwischen</span>
+                      <input
+                        type="time"
+                        value={window.from}
+                        onChange={(e) => setWindowTime("from", e.target.value)}
+                        className="px-2 py-1 border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+                      />
+                      <span className="text-xs text-text-light">und</span>
+                      <input
+                        type="time"
+                        value={window.to}
+                        onChange={(e) => setWindowTime("to", e.target.value)}
+                        className="px-2 py-1 border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Max per day */}
@@ -414,7 +470,10 @@ function StepCard({
                 </div>
 
                 <p className="text-[11px] text-text-light">
-                  Wenn ein Kontakt außerhalb des Fensters fällig wird oder das Tageslimit voll ist,
+                  Cron läuft alle 10 Minuten. „Genau um 07:56" heißt: gesendet beim ersten Cron-Tick
+                  ab 07:56. Bei „Verteilt" bekommt jeder Kontakt seine eigene Minute im Bereich
+                  (deterministisch aus Kontakt-ID) — sieht organischer aus als Batch-Versand.
+                  Fällt ein Kontakt außerhalb der erlaubten Tage oder ist das Tageslimit voll,
                   wartet der Cron bis zum nächsten passenden Zeitpunkt.
                 </p>
               </div>

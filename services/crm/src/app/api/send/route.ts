@@ -5,7 +5,7 @@ import { sendPrintjob, currentMode } from "@/lib/ob24";
 import { renderLetterPdf, extractAnredeAndParagraphs } from "@/lib/letter-pdf";
 import {
   parseSendWindow,
-  isInSendWindow,
+  readyForContact,
   stepTargetTime,
   pickVariant,
 } from "@/lib/cadence";
@@ -109,9 +109,9 @@ async function evaluateSteps(now: Date) {
         continue;
       }
 
-      // Send-window
+      // Send-window (day-of-week + per-contact fire time within window)
       const window = parseSendWindow(step.sendWindow);
-      if (!isInSendWindow(now, window)) {
+      if (!readyForContact(now, target, window, cc.contactId)) {
         waiting++;
         continue;
       }
