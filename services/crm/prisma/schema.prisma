@@ -81,6 +81,8 @@ model Reminder {
   description String?
   dueDate     DateTime
   status      String   @default("pending") // pending, done, overdue
+  retryCount  Int      @default(0)   // Anzahl bisheriger "nicht erreicht"-Versuche (nur relevant für Anrufe)
+  resolution  String?  // "reached" | "voicemail" | "wrong_number" | "not_interested" | "appointment" | "gave_up" | "manual_done"
   createdAt   DateTime @default(now())
 
   contact Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)

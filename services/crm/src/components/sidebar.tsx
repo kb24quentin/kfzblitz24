@@ -8,21 +8,26 @@ import {
   Users,
   FileText,
   Send,
+  Phone,
   BarChart3,
   Settings,
   LogOut,
 } from "lucide-react";
 
-const navigation = [
+type NavItem = { name: string; href: string; icon: typeof LayoutDashboard; badgeKey?: "pendingCalls" };
+
+const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Kontakte", href: "/contacts", icon: Users },
   { name: "Templates", href: "/templates", icon: FileText },
   { name: "Kampagnen", href: "/campaigns", icon: Send },
+  { name: "Anrufe", href: "/calls", icon: Phone, badgeKey: "pendingCalls" },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
 ];
 
-export function Sidebar() {
+export function Sidebar({ pendingCalls = 0 }: { pendingCalls?: number }) {
   const pathname = usePathname();
+  const badges: Record<string, number> = { pendingCalls };
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-primary text-white flex flex-col">
@@ -57,7 +62,14 @@ export function Sidebar() {
               }`}
             >
               <item.icon className="w-5 h-5 shrink-0" />
-              {item.name}
+              <span className="flex-1">{item.name}</span>
+              {item.badgeKey && badges[item.badgeKey] > 0 && (
+                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                  isActive ? "bg-white/20 text-white" : "bg-accent text-white"
+                }`}>
+                  {badges[item.badgeKey]}
+                </span>
+              )}
             </Link>
           );
         })}
