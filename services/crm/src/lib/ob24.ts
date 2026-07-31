@@ -27,21 +27,49 @@ function getAuth(): Auth {
   return { apiKey, apiSecret, mode };
 }
 
+function formatObErrors(raw: unknown): string {
+  if (!raw) return "";
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "object") {
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        parts.push(`${k}: ${v.map(String).join("; ")}`);
+      } else if (typeof v === "object" && v !== null) {
+        parts.push(`${k}: ${formatObErrors(v)}`);
+      } else {
+        parts.push(`${k}: ${String(v)}`);
+      }
+    }
+    return parts.join(" | ");
+  }
+  return String(raw);
+}
+
 async function call<T = unknown>(path: string, body: object): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ auth: getAuth(), ...body }),
   });
-  const json = (await res.json()) as {
-    status: number;
-    message: string;
+  const raw = await res.text();
+  let json: {
+    status?: number;
+    message?: unknown;   // kann string ODER object (Field-Errors) sein
     data?: T;
     errors?: unknown;
-  };
-  if (!res.ok || json.status >= 400) {
-    const err = json.message || JSON.stringify(json.errors ?? json);
-    throw new Error(`OB24 API ${res.status}: ${err}`);
+  } = {};
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    // Response ist kein JSON
+  }
+  if (!res.ok || (json.status && json.status >= 400)) {
+    const msg = formatObErrors(json.message);
+    const errs = formatObErrors(json.errors);
+    const combined = [msg, errs].filter(Boolean).join(" | ") || raw.slice(0, 300);
+    console.error(`[ob24] ${path} → HTTP ${res.status}:`, raw.slice(0, 500));
+    throw new Error(`OB24 API ${res.status}: ${combined}`);
   }
   return json.data as T;
 }
@@ -61,12 +89,14 @@ export type PriceOptions = {
 
 export async function getPrice(opts: PriceOptions) {
   return call<{ amount: number; vat: number; currency: string }>("/price", {
-    specification: {
-      color: opts.color,
-      mode: opts.mode,
-      shipping: opts.shipping,
+    letter: {
+      specification: {
+        color: opts.color,
+        mode: opts.mode,
+        shipping: opts.shipping,
+      },
+      pages: opts.pages,
     },
-    pages: opts.pages,
   });
 }
 
@@ -95,12 +125,17 @@ export async function sendPrintjob(opts: SendOptions): Promise<SendResult> {
   const base64_file_checksum = crypto.createHash("md5").update(base64_file).digest("hex");
 
   return call<SendResult>("/printjobs", {
-    base64_file,
-    base64_file_checksum,
-    specification: {
-      color: opts.color ?? "1",
-      mode: opts.mode ?? "simplex",
-      shipping: opts.shipping ?? "auto",
+    letter: {
+      base64_file,
+      base64_file_checksum,
+      specification: {
+        color: opts.color ?? "1",
+        mode: opts.mode ?? "simplex",
+        // "national" statt "auto" — auto liest die Adresse aus dem PDF und kann
+        // fehlschlagen wenn OB24 sie nicht sauber parsen kann. national ist der
+        // Regelfall bei uns (Deutschland → Deutschland).
+        shipping: opts.shipping ?? "national",
+      },
     },
   });
 }
