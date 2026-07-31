@@ -109,23 +109,36 @@ model Signature {
   templates Template[]
 }
 
+model Sender {
+  id        String   @id @default(cuid())
+  name      String   // Display-Name — z.B. "Corinna Wagner - kfzBlitz24"
+  email     String   @unique   // muss auf verifiedResend-Domain sein
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns Campaign[]
+}
+
 model Campaign {
-  id                 String   @id @default(cuid())
+  id                 String    @id @default(cuid())
   name               String
-  status             String   @default("draft")
+  status             String    @default("draft")
   templateAId        String
   templateBId        String?
-  abSplitRatio       Int      @default(50)
-  sendRatePerDay     Int      @default(50)
-  followUpEnabled    Boolean  @default(false)
-  followUpDelayDays  Int      @default(3)
+  senderId           String?   // optional; falls null → env FROM_EMAIL/FROM_NAME
+  scheduledAt        DateTime? // wenn gesetzt: /api/send skippt bis Zeitpunkt erreicht
+  abSplitRatio       Int       @default(50)
+  sendRatePerDay     Int       @default(50)
+  followUpEnabled    Boolean   @default(false)
+  followUpDelayDays  Int       @default(3)
   followUpTemplateId String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   templateA        Template          @relation("TemplateA", fields: [templateAId], references: [id])
   templateB        Template?         @relation("TemplateB", fields: [templateBId], references: [id])
   followUpTemplate Template?         @relation("FollowUpTemplate", fields: [followUpTemplateId], references: [id])
+  sender           Sender?           @relation(fields: [senderId], references: [id], onDelete: SetNull)
   emails           Email[]
   campaignContacts CampaignContact[]
 }

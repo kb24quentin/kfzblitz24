@@ -116,3 +116,28 @@ export async function deleteSignature(formData: FormData) {
   await prisma.signature.delete({ where: { id } });
   revalidatePath("/settings");
 }
+
+// ─── Senders (Absender) ─────────────────────────────────────────────────
+
+export async function createSender(formData: FormData) {
+  const name = (formData.get("name") as string)?.trim();
+  const email = (formData.get("email") as string)?.trim().toLowerCase();
+  if (!name || !email) return;
+  await prisma.sender.create({ data: { name, email } });
+  revalidatePath("/settings");
+}
+
+export async function updateSender(formData: FormData) {
+  const id = formData.get("id") as string;
+  const name = (formData.get("name") as string)?.trim();
+  const email = (formData.get("email") as string)?.trim().toLowerCase();
+  if (!id || !name || !email) return;
+  await prisma.sender.update({ where: { id }, data: { name, email } });
+  revalidatePath("/settings");
+}
+
+export async function deleteSender(formData: FormData) {
+  const id = formData.get("id") as string;
+  await prisma.sender.delete({ where: { id } });
+  revalidatePath("/settings");
+}

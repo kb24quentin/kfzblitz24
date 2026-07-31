@@ -7,12 +7,17 @@ import { redirect } from "next/navigation";
 export async function createCampaign(formData: FormData) {
   const contactIds = JSON.parse(formData.get("contactIds") as string || "[]") as string[];
   const templateBId = formData.get("templateBId") as string;
+  const senderId = (formData.get("senderId") as string) || null;
+  const scheduledAtRaw = (formData.get("scheduledAt") as string) || "";
+  const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : null;
 
   const campaign = await prisma.campaign.create({
     data: {
       name: formData.get("name") as string,
       templateAId: formData.get("templateAId") as string,
       templateBId: templateBId || null,
+      senderId,
+      scheduledAt,
       abSplitRatio: parseInt(formData.get("abSplitRatio") as string || "50"),
       sendRatePerDay: parseInt(formData.get("sendRatePerDay") as string || "50"),
       followUpEnabled: formData.get("followUpEnabled") === "true",
@@ -55,6 +60,7 @@ export async function sendCampaignEmails(campaignId: string) {
     include: {
       templateA: { include: { signature: true } },
       templateB: { include: { signature: true } },
+      sender: true,
       campaignContacts: { include: { contact: true } },
     },
   });

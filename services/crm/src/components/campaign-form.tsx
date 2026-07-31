@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Save, ArrowLeft, Users, Zap, Filter } from "lucide-react";
+import { Save, ArrowLeft, Users, Zap, Filter, AtSign, Clock } from "lucide-react";
 import Link from "next/link";
 
 type Template = { id: string; name: string; subject: string };
@@ -14,6 +14,7 @@ type Contact = {
   status: string;
   outreach: string;
 };
+type Sender = { id: string; name: string; email: string };
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "new", label: "Neu" },
@@ -41,13 +42,16 @@ export function CampaignForm({
   action,
   templates,
   contacts,
+  senders,
 }: {
   action: (formData: FormData) => Promise<void>;
   templates: Template[];
   contacts: Contact[];
+  senders: Sender[];
 }) {
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [enableAB, setEnableAB] = useState(false);
+  const [enableSchedule, setEnableSchedule] = useState(false);
   const [enableFollowUp, setEnableFollowUp] = useState(false);
 
   // Filters — defaults: only fresh leads, exclude in-person ("local")
@@ -196,7 +200,66 @@ export function CampaignForm({
       {/* Send Settings */}
       <div className="bg-bg-card rounded-xl border border-border p-6 space-y-4">
         <h3 className="font-semibold text-text">Versand-Einstellungen</h3>
+
+        {/* Sender */}
         <div>
+          <label className="text-sm font-medium text-text mb-1 flex items-center gap-1.5">
+            <AtSign className="w-3.5 h-3.5 text-accent" /> Absender
+          </label>
+          <select
+            name="senderId"
+            defaultValue=""
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+          >
+            <option value="">— Standard-Absender (aus Konfiguration) —</option>
+            {senders.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} — {s.email}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-text-light mt-1">
+            Verwaltet in{" "}
+            <Link href="/settings?tab=senders" className="text-accent hover:underline">
+              Einstellungen → Absender
+            </Link>
+            . Ohne Auswahl wird der System-Default benutzt.
+          </p>
+        </div>
+
+        {/* Scheduled send */}
+        <div className="border-t border-border pt-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enableSchedule}
+              onChange={(e) => setEnableSchedule(e.target.checked)}
+              className="rounded border-border"
+            />
+            <Clock className="w-4 h-4 text-accent" />
+            <span className="text-sm font-medium text-text">Zeitgesteuerter Versand</span>
+          </label>
+
+          {enableSchedule && (
+            <div className="mt-3 pl-6 space-y-1">
+              <label className="block text-sm font-medium text-text mb-1">
+                Frühester Versandzeitpunkt
+              </label>
+              <input
+                name="scheduledAt"
+                type="datetime-local"
+                required={enableSchedule}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+              />
+              <p className="text-xs text-text-light">
+                Mails werden erst nach diesem Zeitpunkt vom Cron abgeschickt (Auflösung: 10 Min).
+                Ohne Angabe wird sofort gesendet sobald die Kampagne aktiv ist.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-border pt-4">
           <label className="block text-sm font-medium text-text mb-1">
             Emails pro Tag (max)
           </label>

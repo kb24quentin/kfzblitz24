@@ -1,9 +1,10 @@
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
-import { CheckCircle, XCircle, Key, Mail, Globe, Users, FileSignature } from "lucide-react";
+import { CheckCircle, XCircle, Key, Mail, Globe, Users, FileSignature, AtSign } from "lucide-react";
 import { UserManagement } from "./user-management";
 import { TestEmailForm } from "./test-email-form";
 import { SignaturesManager } from "./signatures-manager";
+import { SendersManager } from "./senders-manager";
 
 export default async function SettingsPage({
   searchParams,
@@ -26,9 +27,13 @@ export default async function SettingsPage({
   const signatures = tab === "signatures"
     ? await prisma.signature.findMany({ orderBy: { name: "asc" } })
     : [];
+  const senders = tab === "senders"
+    ? await prisma.sender.findMany({ orderBy: { name: "asc" } })
+    : [];
 
   const tabs = [
     { id: "config", label: "API & Konfiguration", icon: Key },
+    { id: "senders", label: "Absender", icon: AtSign },
     { id: "signatures", label: "Signaturen", icon: FileSignature },
     { id: "users", label: "Benutzer", icon: Users },
   ];
@@ -114,6 +119,8 @@ export default async function SettingsPage({
           <TestEmailForm />
         </>
       )}
+
+      {tab === "senders" && <SendersManager senders={senders} />}
 
       {tab === "signatures" && <SignaturesManager signatures={signatures} />}
 

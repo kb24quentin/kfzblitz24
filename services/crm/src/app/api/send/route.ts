@@ -6,14 +6,24 @@ import { getFromAddress, getListUnsubscribeHeaders, htmlToPlainText } from "@/li
 // Call it via cron job or manually to send queued emails
 export async function POST() {
   try {
-    // Get active campaigns
+    const now = new Date();
+    // Get active campaigns whose scheduledAt has passed (or is null = send-now)
     const activeCampaigns = await prisma.campaign.findMany({
-      where: { status: "active" },
+      where: {
+        status: "active",
+        OR: [{ scheduledAt: null }, { scheduledAt: { lte: now } }],
+      },
+      include: { sender: true },
     });
 
     let totalSent = 0;
 
     for (const campaign of activeCampaigns) {
+      // Per-campaign sender falls back to the env FROM_* pair
+      const fromAddress = campaign.sender
+        ? `"${campaign.sender.name.replace(/"/g, "")}" <${campaign.sender.email}>`
+        : getFromAddress();
+
       // Get queued emails for this campaign, respecting rate limit
       const queuedEmails = await prisma.email.findMany({
         where: { campaignId: campaign.id, status: "queued" },
@@ -29,7 +39,7 @@ export async function POST() {
             const resend = new Resend(process.env.RESEND_API_KEY);
 
             const result = await resend.emails.send({
-              from: getFromAddress(),
+              from: fromAddress,
               to: [email.contact.email],
               subject: email.subject,
               html: email.body,
