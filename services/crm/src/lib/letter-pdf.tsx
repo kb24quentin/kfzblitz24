@@ -161,24 +161,28 @@ const styles = StyleSheet.create({
   psLabel: {
     fontFamily: "Helvetica-Bold",
   },
-  footerLine: {
+  footerBlock: {
     position: "absolute",
     left: LEFT,
     right: RIGHT,
-    bottom: mm(20),
+    bottom: mm(10),
     borderTopWidth: 0.5,
     borderTopColor: LIGHT_GREY,
-    height: 1,
+    paddingTop: mm(2.5),
+    flexDirection: "row",
   },
-  footer: {
-    position: "absolute",
-    left: LEFT,
-    right: RIGHT,
-    bottom: mm(12),
+  footerCol: {
+    flex: 1,
     fontSize: 7,
     color: MID_GREY,
-    textAlign: "center",
-    lineHeight: 1.4,
+    lineHeight: 1.45,
+    paddingRight: mm(3),
+  },
+  footerColHead: {
+    fontSize: 6.5,
+    color: MID_GREY,
+    fontFamily: "Helvetica-Bold",
+    marginBottom: 1,
   },
   versionCode: {
     position: "absolute",
@@ -340,8 +344,28 @@ export function LetterDoc({ data }: { data: LetterData }) {
           )}
         </View>
 
-        <View style={styles.footerLine} />
-        {data.footer && <Text style={styles.footer}>{data.footer}</Text>}
+        {/* Fußzeilenblock nach §35a GmbHG — 4 strukturierte Spalten */}
+        <View style={styles.footerBlock}>
+          <View style={styles.footerCol}>
+            <Text style={styles.footerColHead}>kfzBlitz24 GmbH</Text>
+            <Text>Bomhardstraße 7</Text>
+            <Text>82031 Grünwald bei München</Text>
+          </View>
+          <View style={styles.footerCol}>
+            <Text style={styles.footerColHead}>Geschäftsführer</Text>
+            <Text>Christian Engert</Text>
+          </View>
+          <View style={styles.footerCol}>
+            <Text style={styles.footerColHead}>Handelsregister</Text>
+            <Text>Amtsgericht München</Text>
+            <Text>HRB 291765</Text>
+          </View>
+          <View style={styles.footerCol}>
+            <Text style={styles.footerColHead}>USt-IdNr.</Text>
+            <Text>DE367617344</Text>
+            <Text style={{ marginTop: 3 }}>kfzblitz24.de</Text>
+          </View>
+        </View>
         {data.versionCode && (
           <Text style={styles.versionCode}>{data.versionCode}</Text>
         )}
