@@ -269,7 +269,7 @@ export async function sendTestLetter(
     });
 
     const result = await sendPrintjob({ pdf, color });
-    const mode = currentMode();
+    const mode = await currentMode();
     const item = result.items?.[0];
     const cost = item ? (item.amount + item.vat).toFixed(2) : "—";
     const cartHint =
@@ -284,4 +284,43 @@ export async function sendTestLetter(
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, message: `Versand fehlgeschlagen: ${msg}` };
   }
+}
+
+// ─── OB24-Modus (Admin only, requires re-auth) ──────────────────────────
+
+/**
+ * Schritt 1: Admin klickt "Umschalten". Wir legen eine PendingAdminAction
+ * mit 10-min TTL an und geben ihre id zurück. Der Client leitet dann via
+ * signOut() + signIn(google) um, damit der User sich erneut authentifiziert.
+ * Nach dem Google-Login landet er auf /settings/ob24-apply?pending=<id>,
+ * das dann Schritt 2 macht.
+ */
+export async function requestOb24ModeToggle(): Promise<{
+  ok: boolean;
+  pendingId?: string;
+  message?: string;
+  target?: "test" | "live";
+}> {
+  const session = await auth();
+  if (!session?.user?.email) return { ok: false, message: "Nicht eingeloggt." };
+  const me = await prisma.user.findUnique({ where: { email: session.user.email } });
+  if (!me || me.role !== "admin") return { ok: false, message: "Nur Admins dürfen den OB24-Modus umschalten." };
+
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: "singleton" } });
+  const current = (cfg?.ob24Mode as "test" | "live") ?? "test";
+  const target: "test" | "live" = current === "live" ? "test" : "live";
+
+  // Purge abgelaufene Pending-Actions (Housekeeping)
+  await prisma.pendingAdminAction.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+
+  const pending = await prisma.pendingAdminAction.create({
+    data: {
+      userEmail: session.user.email,
+      action: "ob24-mode-toggle",
+      payload: JSON.stringify({ newMode: target, fromMode: current }),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 min
+    },
+  });
+
+  return { ok: true, pendingId: pending.id, target };
 }

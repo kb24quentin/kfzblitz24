@@ -148,6 +148,29 @@ model Sender {
   campaigns Campaign[]
 }
 
+// Global-Config (single-row). Aktuell nur OB24-Modus. Wenn wir mal mehr
+// system-weite Settings brauchen, hier ergänzen — bleibt ein Row.
+model SystemConfig {
+  id             String   @id @default("singleton")
+  ob24Mode       String   @default("test")  // "test" | "live"
+  updatedAt      DateTime @updatedAt
+  updatedByEmail String?
+}
+
+// Kurzlebige Aktionen, die eine Re-Authentifizierung erfordern (z.B.
+// OB24-Modus umschalten). Wird beim Klick angelegt, nach Google-Re-Auth
+// verifiziert und ausgeführt, dann gelöscht.
+model PendingAdminAction {
+  id             String   @id @default(cuid())
+  userEmail      String
+  action         String   // "ob24-mode-toggle"
+  payload        String?  // JSON — z.B. {"newMode": "live"}
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model Campaign {
   id                 String    @id @default(cuid())
   name               String

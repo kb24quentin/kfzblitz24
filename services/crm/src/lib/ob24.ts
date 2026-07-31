@@ -8,6 +8,7 @@
  */
 
 import crypto from "node:crypto";
+import { prisma } from "@/lib/db";
 
 const BASE_URL = "https://api.onlinebrief24.de/v1";
 
@@ -17,13 +18,25 @@ type Auth = {
   mode: "test" | "live";
 };
 
-function getAuth(): Auth {
+// Modus kommt aus DB (SystemConfig). Env-Var OB24_MODE dient nur noch als
+// Notnagel für den allerersten Boot bevor die Row angelegt ist.
+async function readModeFromDb(): Promise<"test" | "live"> {
+  try {
+    const cfg = await prisma.systemConfig.findUnique({ where: { id: "singleton" } });
+    if (cfg && (cfg.ob24Mode === "test" || cfg.ob24Mode === "live")) return cfg.ob24Mode;
+  } catch {
+    // DB-Query kann in Test-Envs schiefgehen — Fallback env.
+  }
+  return (process.env.OB24_MODE?.trim() as "test" | "live") || "test";
+}
+
+async function getAuth(): Promise<Auth> {
   const apiKey = process.env.OB24_API_KEY?.trim();
   const apiSecret = process.env.OB24_API_SECRET?.trim();
-  const mode = (process.env.OB24_MODE?.trim() as "test" | "live") || "test";
   if (!apiKey || !apiSecret) {
     throw new Error("OB24_API_KEY / OB24_API_SECRET are not set on the server");
   }
+  const mode = await readModeFromDb();
   return { apiKey, apiSecret, mode };
 }
 
@@ -47,10 +60,11 @@ function formatObErrors(raw: unknown): string {
 }
 
 async function call<T = unknown>(path: string, body: object): Promise<T> {
+  const auth = await getAuth();
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ auth: getAuth(), ...body }),
+    body: JSON.stringify({ auth, ...body }),
   });
   const raw = await res.text();
   let json: {
@@ -153,6 +167,6 @@ export async function getJobStatus(jobId: number) {
   return call<SendResult>(`/printjobs/${jobId}`, {});
 }
 
-export function currentMode(): "test" | "live" {
-  return getAuth().mode;
+export async function currentMode(): Promise<"test" | "live"> {
+  return readModeFromDb();
 }

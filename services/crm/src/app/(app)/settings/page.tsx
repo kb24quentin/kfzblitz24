@@ -1,12 +1,14 @@
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
 import { CheckCircle, XCircle, Key, Mail, Globe, Users, FileSignature, AtSign } from "lucide-react";
+import { auth } from "@/lib/auth";
 import { UserManagement } from "./user-management";
 import { TestEmailForm } from "./test-email-form";
 import { TestLetterForm } from "./test-letter-form";
 import { SignaturesManager } from "./signatures-manager";
 import { LetterSignaturesManager } from "./letter-signatures-manager";
 import { SendersManager } from "./senders-manager";
+import { Ob24ModeCard } from "./ob24-mode-card";
 
 export default async function SettingsPage({
   searchParams,
@@ -35,6 +37,16 @@ export default async function SettingsPage({
   const senders = tab === "senders"
     ? await prisma.sender.findMany({ orderBy: { name: "asc" } })
     : [];
+
+  // Only admins see the OB24-Modus card + toggle.
+  const session = await auth();
+  const me = session?.user?.email
+    ? await prisma.user.findUnique({ where: { email: session.user.email } })
+    : null;
+  const isAdmin = me?.role === "admin";
+  const ob24Cfg = (tab === "config" && isAdmin)
+    ? await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
+    : null;
 
   const tabs = [
     { id: "config", label: "API & Konfiguration", icon: Key },
@@ -120,6 +132,14 @@ export default async function SettingsPage({
             </div>
             <div className="p-3 bg-bg-secondary rounded-lg font-mono text-xs">POST https://crm.kfzblitz24-group.com/api/webhook/resend</div>
           </div>
+
+          {isAdmin && (
+            <Ob24ModeCard
+              currentMode={(ob24Cfg?.ob24Mode as "test" | "live") ?? "test"}
+              updatedAt={ob24Cfg?.updatedAt ?? null}
+              updatedByEmail={ob24Cfg?.updatedByEmail ?? null}
+            />
+          )}
 
           <TestEmailForm />
 

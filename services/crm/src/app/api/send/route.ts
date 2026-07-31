@@ -507,13 +507,14 @@ async function dispatchLetters() {
         const result = await sendPrintjob({ pdf, color: colorArg });
         const item = result.items?.[0];
 
+        const dispatchedMode = await currentMode();
         await prisma.letter.update({
           where: { id: letter.id },
           data: {
             status: "sent",
             sentAt: new Date(),
             ob24JobId: result.id,
-            ob24Mode: currentMode(),
+            ob24Mode: dispatchedMode,
             pages: item?.pages ?? null,
             amount: item ? item.amount + item.vat : null,
             trackingCode: item?.tracking_code ?? null,
@@ -534,7 +535,7 @@ async function dispatchLetters() {
             userId: null,
             type: "email_sent",
             content:
-              `Brief-Kampagne (${currentMode()}-Modus): ${campaign.name} — ` +
+              `Brief-Kampagne (${dispatchedMode}-Modus): ${campaign.name} — ` +
               `OB24-Job #${result.id}, ${item?.pages ?? "?"} Seiten`,
           },
         });

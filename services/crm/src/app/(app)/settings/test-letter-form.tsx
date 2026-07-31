@@ -187,8 +187,8 @@ export function TestLetterForm({ letterSignatures = [] }: { letterSignatures?: L
             {pending ? "Sende…" : "Testbrief absenden"}
           </button>
           <span className="text-xs text-text-light">
-            OB24-Modus wird serverseitig aus <code>OB24_MODE</code> gelesen — aktuell{" "}
-            <b>test</b> (Brief landet im Warenkorb, keine Kosten).
+            OB24-Modus (Test/Live) wird oben in der Karte „OB24 · Modus" verwaltet —
+            Admins können dort umschalten (mit Google-Re-Auth).
           </span>
         </div>
 

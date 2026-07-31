@@ -91,12 +91,17 @@ const config: NextAuthConfig = {
     async jwt({ token, user }) {
       if (user) {
         token.id = (user as { id: string }).id;
+        // Track sign-in time so downstream code can require "fresh" auth
+        // for sensitive admin actions (e.g. OB24-Modus umschalten).
+        token.signedInAt = Math.floor(Date.now() / 1000);
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.id) {
-        (session.user as { id?: string }).id = token.id as string;
+        (session.user as { id?: string; signedInAt?: number }).id = token.id as string;
+        (session.user as { id?: string; signedInAt?: number }).signedInAt =
+          token.signedInAt as number | undefined;
       }
       return session;
     },
