@@ -12,6 +12,7 @@ import { ReminderForm } from "./reminder-form";
 import { SendEmailForm } from "./send-email-form";
 import { StatusSelect, PrioritySelect, AssignSelect } from "./contact-actions";
 import { completeReminder } from "./actions";
+import { ContactCadenceProgress } from "./cadence-progress";
 
 const statusColors: Record<string, string> = {
   new: "bg-blue-100 text-blue-700",
@@ -82,6 +83,28 @@ export default async function ContactDetailPage({
     where: { contactId: id },
     orderBy: { receivedAt: "desc" },
     include: { email: { select: { id: true, subject: true } } },
+  });
+
+  // Every campaign this contact is enrolled in, incl. step definitions + progress
+  const cadences = await prisma.campaignContact.findMany({
+    where: { contactId: id },
+    include: {
+      campaign: {
+        include: {
+          steps: {
+            orderBy: { order: "asc" },
+            include: {
+              emailTemplateA: { select: { name: true } },
+              letterTemplateA: { select: { name: true } },
+            },
+          },
+        },
+      },
+      stepProgress: {
+        include: { step: { select: { id: true, order: true } } },
+      },
+    },
+    orderBy: { createdAt: "desc" },
   });
 
   const users = await prisma.user.findMany({
@@ -254,6 +277,11 @@ export default async function ContactDetailPage({
             )}
             <ReminderForm contactId={id} />
           </div>
+
+          {/* Kadenz-Progress: alle Kampagnen, in denen dieser Kontakt läuft */}
+          {cadences.length > 0 && (
+            <ContactCadenceProgress cadences={cadences} contactId={id} />
+          )}
 
           {/* Email Stats */}
           {emailStats.sent > 0 && (

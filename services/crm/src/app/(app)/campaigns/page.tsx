@@ -103,7 +103,7 @@ export default async function CampaignsPage() {
                     <span className="font-medium">{stats.bounced}</span>
                   </div>
                   <div className="ml-auto text-xs text-text-light">
-                    Template: {campaign.templateA.name}
+                    Template: {campaign.templateA?.name ?? "(Kadenz)"}
                     {campaign.templateB && ` / ${campaign.templateB.name}`}
                   </div>
                 </div>

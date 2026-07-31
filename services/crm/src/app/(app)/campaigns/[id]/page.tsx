@@ -13,10 +13,19 @@ export default async function CampaignDetailPage({
   const campaign = await prisma.campaign.findUnique({
     where: { id },
     include: {
-      templateA: true,
-      templateB: true,
-      followUpTemplate: true,
-      campaignContacts: { include: { contact: true } },
+      steps: {
+        orderBy: { order: "asc" },
+        include: {
+          emailTemplateA: { select: { name: true } },
+          emailTemplateB: { select: { name: true } },
+          letterTemplateA: { select: { name: true } },
+          letterTemplateB: { select: { name: true } },
+        },
+      },
+      campaignContacts: {
+        include: { contact: true },
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
 
@@ -26,42 +35,64 @@ export default async function CampaignDetailPage({
     where: { campaignId: id },
     include: { contact: true },
     orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  const letters = await prisma.letter.findMany({
+    where: { campaignId: id },
+    include: { contact: true },
+    orderBy: { createdAt: "desc" },
+    take: 200,
   });
 
-  // Stats
-  const sent = emails.filter((e) => e.status !== "queued").length;
-  const opened = emails.filter((e) => e.openedAt).length;
-  const clicked = emails.filter((e) => e.clickedAt).length;
-  const replied = emails.filter((e) => e.repliedAt).length;
-  const bounced = emails.filter((e) => e.status === "bounced").length;
-  const queued = emails.filter((e) => e.status === "queued").length;
+  // Contact progress rows
+  const contactRows = campaign.campaignContacts.map((cc) => ({
+    ccId: cc.id,
+    contact: {
+      id: cc.contact.id,
+      firstName: cc.contact.firstName,
+      lastName: cc.contact.lastName,
+      email: cc.contact.email,
+    },
+    currentStepIndex: cc.currentStepIndex,
+    lastStepAt: cc.lastStepAt,
+    stopped: cc.stopped,
+    stoppedReason: cc.stoppedReason,
+    stoppedAt: cc.stoppedAt,
+  }));
 
-  // A/B Stats
-  const variantA = emails.filter((e) => e.variant === "A");
-  const variantB = emails.filter((e) => e.variant === "B");
-  const abStats = campaign.templateBId
-    ? {
-        a: {
-          sent: variantA.filter((e) => e.status !== "queued").length,
-          opened: variantA.filter((e) => e.openedAt).length,
-          clicked: variantA.filter((e) => e.clickedAt).length,
-          replied: variantA.filter((e) => e.repliedAt).length,
-        },
-        b: {
-          sent: variantB.filter((e) => e.status !== "queued").length,
-          opened: variantB.filter((e) => e.openedAt).length,
-          clicked: variantB.filter((e) => e.clickedAt).length,
-          replied: variantB.filter((e) => e.repliedAt).length,
-        },
-      }
-    : null;
+  const stats = {
+    total: contactRows.length,
+    active: contactRows.filter((c) => !c.stopped && c.currentStepIndex < campaign.steps.length).length,
+    completed: contactRows.filter(
+      (c) => (c.stopped && c.stoppedReason === "completed") ||
+             (!c.stopped && c.currentStepIndex >= campaign.steps.length)
+    ).length,
+    stopped: contactRows.filter((c) => c.stopped && c.stoppedReason !== "completed" && c.stoppedReason !== "replied").length,
+    replied: contactRows.filter((c) => c.stopped && c.stoppedReason === "replied").length,
+    perStep: await Promise.all(
+      campaign.steps.map(async (s) => ({
+        stepId: s.id,
+        executed: await prisma.campaignContactStep.count({
+          where: { stepId: s.id, status: "executed" },
+        }),
+      }))
+    ),
+  };
 
   return (
     <CampaignDetail
-      campaign={campaign}
+      campaign={{
+        id: campaign.id,
+        name: campaign.name,
+        status: campaign.status,
+        sendRatePerDay: campaign.sendRatePerDay,
+        scheduledAt: campaign.scheduledAt,
+        steps: campaign.steps,
+      }}
+      contacts={contactRows}
+      stats={stats}
       emails={emails}
-      stats={{ sent, opened, clicked, replied, bounced, queued, total: emails.length }}
-      abStats={abStats}
+      letters={letters}
     />
   );
 }

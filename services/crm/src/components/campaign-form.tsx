@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Save, ArrowLeft, Users, Zap, Filter, AtSign, Clock, Mail, FileText, Phone } from "lucide-react";
+import { Save, ArrowLeft, Users, Filter, AtSign, Clock } from "lucide-react";
 import Link from "next/link";
+import { StepBuilder } from "./step-builder";
+import type { StepInput } from "@/app/(app)/campaigns/actions";
 
 type Template = { id: string; name: string; subject: string; type?: string | null };
 type Contact = {
@@ -50,30 +52,12 @@ export function CampaignForm({
   senders: Sender[];
 }) {
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
-  const [enableAB, setEnableAB] = useState(false);
   const [enableSchedule, setEnableSchedule] = useState(false);
-  const [channels, setChannels] = useState<Set<"email" | "letter" | "call">>(
-    new Set(["email"])
-  );
+  const [steps, setSteps] = useState<StepInput[]>([]);
 
-  const toggleChannel = (c: "email" | "letter" | "call") => {
-    const next = new Set(channels);
-    if (next.has(c)) {
-      if (next.size > 1) next.delete(c); // mind. 1 muss aktiv bleiben
-    } else {
-      next.add(c);
-    }
-    setChannels(next);
-  };
-  const [enableFollowUp, setEnableFollowUp] = useState(false);
-
-  // Filters — defaults: only fresh leads, exclude in-person ("local")
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(
-    new Set(["new", "contacted"])
-  );
-  const [outreachFilter, setOutreachFilter] = useState<"remote" | "local" | "all">(
-    "remote"
-  );
+  // Filters
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set(["new", "contacted"]));
+  const [outreachFilter, setOutreachFilter] = useState<"remote" | "local" | "all">("remote");
 
   const visibleContacts = useMemo(() => {
     return contacts.filter((c) => {
@@ -112,19 +96,27 @@ export function CampaignForm({
   };
 
   const counts = useMemo(() => {
-    const localCount = contacts.filter((c) => c.outreach === "local").length;
-    const totalSelected = selectedContacts.size;
     const localSelected = contacts.filter(
       (c) => c.outreach === "local" && selectedContacts.has(c.id)
     ).length;
-    return { localCount, totalSelected, localSelected };
+    return { localSelected };
   }, [contacts, selectedContacts]);
+
+  // Validate steps client-side before submit
+  const stepsValid = steps.length > 0 && steps.every((s) => {
+    if (s.channel === "email") return !!s.emailTemplateAId;
+    if (s.channel === "letter") return !!s.letterTemplateAId;
+    if (s.channel === "call") return true;
+    return false;
+  });
+
+  const canSubmit = selectedContacts.size > 0 && stepsValid;
 
   return (
     <form
       action={(formData) => {
         formData.set("contactIds", JSON.stringify([...selectedContacts]));
-        formData.set("channels", JSON.stringify([...channels]));
+        formData.set("steps", JSON.stringify(steps));
         return action(formData);
       }}
       className="space-y-6"
@@ -141,157 +133,30 @@ export function CampaignForm({
             placeholder="Erstansprache Autohäuser München Q2"
           />
         </div>
-
-        {channels.has("email") && (
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">E-Mail-Template A *</label>
-            <select
-              name="templateAId"
-              required
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-            >
-              <option value="">Template wählen...</option>
-              {templates.filter((t) => (t.type ?? "email") === "email").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} – {t.subject}
-                </option>
-              ))}
-            </select>
-            {templates.filter((t) => (t.type ?? "email") === "email").length === 0 && (
-              <p className="text-xs text-warning mt-1">
-                Noch keine E-Mail-Templates angelegt — bitte zuerst unter{" "}
-                <Link href="/templates/new" className="underline">Templates → Neu</Link> erstellen.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Kanäle: E-Mail / Brief / Anruf */}
-        <div>
-          <label className="block text-sm font-medium text-text mb-2">Kanäle *</label>
-          <div className="grid grid-cols-3 gap-3">
-            {(
-              [
-                { id: "email", label: "E-Mail", icon: Mail, hint: "Resend-Versand über CRM" },
-                { id: "letter", label: "Brief", icon: FileText, hint: "OnlineBrief24 (Test-Modus)" },
-                { id: "call", label: "Anruf", icon: Phone, hint: "Reminder pro Kontakt" },
-              ] as const
-            ).map(({ id, label, icon: Icon, hint }) => {
-              const on = channels.has(id);
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => toggleChannel(id)}
-                  className={`text-left p-3 rounded-lg border-2 transition-colors ${
-                    on
-                      ? "border-accent bg-accent/5"
-                      : "border-border bg-bg-secondary hover:border-accent/40"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Icon className={`w-4 h-4 ${on ? "text-accent" : "text-text-light"}`} />
-                    <span className={`text-sm font-semibold ${on ? "text-text" : "text-text-light"}`}>
-                      {label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-text-light mt-1">{hint}</p>
-                </button>
-              );
-            })}
-          </div>
-          {channels.has("letter") && (
-            <p className="text-xs text-warning mt-2">
-              ⚠ Brief-Kampagnen laufen aktuell im <b>Test-Modus</b> (Briefe landen im
-              OnlineBrief24-Warenkorb, keine echten Kosten). Kontakte ohne Straße + PLZ + Stadt
-              werden beim Versand übersprungen.
-            </p>
-          )}
-        </div>
-
-        {/* Brief-Template — nur wenn Brief-Kanal aktiv */}
-        {channels.has("letter") && (
-          <div>
-            <label className="block text-sm font-medium text-text mb-1">Brief-Template *</label>
-            <select
-              name="letterTemplateId"
-              required={channels.has("letter")}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-            >
-              <option value="">Brief-Template wählen...</option>
-              {templates.filter((t) => t.type === "letter").map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} – {t.subject}
-                </option>
-              ))}
-            </select>
-            {templates.filter((t) => t.type === "letter").length === 0 && (
-              <p className="text-xs text-warning mt-1">
-                Noch keine Brief-Templates angelegt — bitte zuerst unter{" "}
-                <Link href="/templates/new" className="underline">Templates → Neu → Typ &quot;Brief&quot;</Link> erstellen.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* A/B Testing */}
-        <div className="border-t border-border pt-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={enableAB}
-              onChange={(e) => setEnableAB(e.target.checked)}
-              className="rounded border-border"
-            />
-            <Zap className="w-4 h-4 text-accent" />
-            <span className="text-sm font-medium text-text">A/B Testing aktivieren</span>
-          </label>
-
-          {enableAB && (
-            <div className="mt-3 pl-6 space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">Template B (E-Mail)</label>
-                <select
-                  name="templateBId"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-                >
-                  <option value="">Template wählen...</option>
-                  {templates.filter((t) => (t.type ?? "email") === "email").map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} – {t.subject}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">
-                  Split-Verhältnis (% Template A)
-                </label>
-                <input
-                  name="abSplitRatio"
-                  type="range"
-                  min="10"
-                  max="90"
-                  step="10"
-                  defaultValue="50"
-                  className="w-full accent-accent"
-                />
-                <div className="flex justify-between text-xs text-text-light">
-                  <span>10% A / 90% B</span>
-                  <span>50/50</span>
-                  <span>90% A / 10% B</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Send Settings */}
-      <div className="bg-bg-card rounded-xl border border-border p-6 space-y-4">
-        <h3 className="font-semibold text-text">Versand-Einstellungen</h3>
+      {/* Cadence — the sequence of steps */}
+      <div className="bg-bg-card rounded-xl border border-border p-6 space-y-3">
+        <div>
+          <h3 className="font-semibold text-text">Kadenz (Schritt-Abfolge)</h3>
+          <p className="text-xs text-text-light mt-1">
+            Baue deine Sequenz auf: z.B. <b>Brief → 14 Tage → E-Mail → 14 Tage → Anruf</b>.
+            Jeder Schritt hat eigene Timing- und Volumen-Regeln.
+            Wenn der Kontakt antwortet, stoppen alle weiteren Schritte automatisch.
+          </p>
+        </div>
+        <StepBuilder templates={templates} value={steps} onChange={setSteps} />
+        {!stepsValid && steps.length > 0 && (
+          <p className="text-xs text-warning">
+            ⚠ Jeder E-Mail- und Brief-Schritt braucht ein Template A.
+          </p>
+        )}
+      </div>
 
-        {/* Sender */}
+      {/* Send Settings — global (sender + campaign schedule + rate) */}
+      <div className="bg-bg-card rounded-xl border border-border p-6 space-y-4">
+        <h3 className="font-semibold text-text">Versand-Einstellungen (global)</h3>
+
         <div>
           <label className="text-sm font-medium text-text mb-1 flex items-center gap-1.5">
             <AtSign className="w-3.5 h-3.5 text-accent" /> Absender
@@ -313,11 +178,10 @@ export function CampaignForm({
             <Link href="/settings?tab=senders" className="text-accent hover:underline">
               Einstellungen → Absender
             </Link>
-            . Ohne Auswahl wird der System-Default benutzt.
+            .
           </p>
         </div>
 
-        {/* Scheduled send */}
         <div className="border-t border-border pt-4">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -327,13 +191,13 @@ export function CampaignForm({
               className="rounded border-border"
             />
             <Clock className="w-4 h-4 text-accent" />
-            <span className="text-sm font-medium text-text">Zeitgesteuerter Versand</span>
+            <span className="text-sm font-medium text-text">Kampagne erst ab bestimmtem Zeitpunkt starten</span>
           </label>
 
           {enableSchedule && (
             <div className="mt-3 pl-6 space-y-1">
               <label className="block text-sm font-medium text-text mb-1">
-                Frühester Versandzeitpunkt
+                Frühester Kampagnenstart
               </label>
               <input
                 name="scheduledAt"
@@ -342,8 +206,8 @@ export function CampaignForm({
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
               />
               <p className="text-xs text-text-light">
-                Mails werden erst nach diesem Zeitpunkt vom Cron abgeschickt (Auflösung: 10 Min).
-                Ohne Angabe wird sofort gesendet sobald die Kampagne aktiv ist.
+                Vor diesem Zeitpunkt wird nichts geschickt. Timing pro Schritt (relativ / absolut)
+                wird ab dann berechnet.
               </p>
             </div>
           )}
@@ -351,63 +215,19 @@ export function CampaignForm({
 
         <div className="border-t border-border pt-4">
           <label className="block text-sm font-medium text-text mb-1">
-            Emails pro Tag (max)
+            Global-Rate: max Items pro Kampagne pro Cron-Lauf
           </label>
           <input
             name="sendRatePerDay"
             type="number"
             min="1"
-            max="100"
+            max="500"
             defaultValue="50"
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
-        </div>
-
-        {/* Follow-Up */}
-        <div className="border-t border-border pt-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              name="followUpEnabled"
-              value="true"
-              checked={enableFollowUp}
-              onChange={(e) => setEnableFollowUp(e.target.checked)}
-              className="rounded border-border"
-            />
-            <span className="text-sm font-medium text-text">Automatisches Follow-Up</span>
-          </label>
-
-          {enableFollowUp && (
-            <div className="mt-3 pl-6 space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">
-                  Follow-Up nach X Tagen (ohne Antwort)
-                </label>
-                <input
-                  name="followUpDelayDays"
-                  type="number"
-                  min="1"
-                  max="30"
-                  defaultValue="3"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">Follow-Up Template (E-Mail)</label>
-                <select
-                  name="followUpTemplateId"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-                >
-                  <option value="">Gleiches Template verwenden</option>
-                  {templates.filter((t) => (t.type ?? "email") === "email").map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
+          <p className="text-xs text-text-light mt-1">
+            Zusätzlich zu den per-Schritt-Limits. Cron läuft alle 10 min.
+          </p>
         </div>
       </div>
 
@@ -432,7 +252,6 @@ export function CampaignForm({
           )}
         </div>
 
-        {/* Filters */}
         <div className="bg-bg-secondary/60 rounded-lg p-3 space-y-3">
           <div className="flex items-center gap-2 text-xs font-medium text-text-light">
             <Filter className="w-3.5 h-3.5" /> Filter
@@ -489,10 +308,9 @@ export function CampaignForm({
           </div>
         </div>
 
-        {/* Warning if local selected */}
         {counts.localSelected > 0 && (
           <div className="bg-orange-50 border border-orange-200 text-orange-800 rounded-lg p-3 text-xs">
-            ⚠️ Du hast {counts.localSelected} Kontakt(e) mit Outreach-Typ <b>Local</b> ausgewählt — das sind welche, die ihr normalerweise <b>vor Ort besucht</b>. Sicher dass die eine Mail bekommen sollen?
+            ⚠️ {counts.localSelected} Kontakt(e) mit Outreach-Typ <b>Local</b> ausgewählt.
           </div>
         )}
 
@@ -547,7 +365,7 @@ export function CampaignForm({
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={selectedContacts.size === 0}
+          disabled={!canSubmit}
           className="flex items-center gap-2 px-5 py-2.5 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Save className="w-4 h-4" />

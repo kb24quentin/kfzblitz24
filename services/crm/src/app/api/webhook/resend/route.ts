@@ -233,11 +233,22 @@ async function handleInbound(data: ResendEvent["data"]) {
     },
   });
 
+  // 6. Auto-stop ALL active cadences for this contact — they replied,
+  //    we don't want to keep sending follow-ups.
+  const stoppedCount = await prisma.campaignContact.updateMany({
+    where: { contactId: contact.id, stopped: false },
+    data: { stopped: true, stoppedReason: "replied", stoppedAt: new Date() },
+  });
+  if (stoppedCount.count > 0) {
+    console.log(`[resend-webhook] auto-stopped ${stoppedCount.count} cadence(s) for ${fromEmail}`);
+  }
+
   console.log(`[resend-webhook] inbound: reply ${reply.id} from ${fromEmail} linked to email ${original.id}`);
   return NextResponse.json({
     received: true,
     type: "inbound",
     replyId: reply.id,
     inReplyTo,
+    cadencesStopped: stoppedCount.count,
   });
 }

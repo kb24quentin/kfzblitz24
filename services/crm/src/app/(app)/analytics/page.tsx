@@ -145,7 +145,7 @@ export default async function AnalyticsPage() {
                   <h3 className="font-medium text-text mb-3">{s.campaign.name}</h3>
                   <div className="grid grid-cols-2 gap-4">
                     {[
-                      { label: `A: ${s.campaign.templateA.name}`, data: s.ab!.a, color: "border-blue-300" },
+                      { label: `A: ${s.campaign.templateA?.name ?? "(Kadenz)"}`, data: s.ab!.a, color: "border-blue-300" },
                       { label: `B: ${s.campaign.templateB?.name}`, data: s.ab!.b, color: "border-purple-300" },
                     ].map((v) => {
                       const openRate = v.data.sent > 0 ? ((v.data.opened / v.data.sent) * 100).toFixed(1) : "0";

@@ -3,64 +3,100 @@
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { htmlToPlainText } from "@/lib/email";
 
-export type CampaignChannel = "email" | "letter" | "call";
+// A step as posted from the campaign form (client-side StepBuilder).
+export type StepInput = {
+  channel: "email" | "letter" | "call";
+  triggerType: "relative" | "absolute";
+  delayDays: number;
+  scheduledAt: string | null;         // ISO string or null
+  sendWindow: string | null;          // JSON blob or null
+  maxPerDay: number | null;
+  emailTemplateAId: string | null;
+  emailTemplateBId: string | null;
+  abSplitRatio: number | null;
+  letterTemplateAId: string | null;
+  letterTemplateBId: string | null;
+  letterAbSplitRatio: number | null;
+  letterColor: string | null;
+  callNote: string | null;
+};
 
-function parseChannels(raw: string | null | undefined): CampaignChannel[] {
+function parseSteps(raw: string | null | undefined): StepInput[] {
   try {
-    const arr = JSON.parse(raw || "[\"email\"]") as unknown;
-    if (!Array.isArray(arr)) return ["email"];
-    const filtered = arr.filter((c): c is CampaignChannel =>
-      c === "email" || c === "letter" || c === "call"
-    );
-    return filtered.length > 0 ? filtered : ["email"];
+    const arr = JSON.parse(raw || "[]") as unknown;
+    if (!Array.isArray(arr)) return [];
+    return arr as StepInput[];
   } catch {
-    return ["email"];
+    return [];
   }
 }
 
 export async function createCampaign(formData: FormData) {
   const contactIds = JSON.parse(formData.get("contactIds") as string || "[]") as string[];
-  const templateBId = formData.get("templateBId") as string;
   const senderId = (formData.get("senderId") as string) || null;
   const scheduledAtRaw = (formData.get("scheduledAt") as string) || "";
   const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : null;
-  // channels comes as a JSON-encoded string from the form (multi-select chips)
-  const channelsRaw = (formData.get("channels") as string) || "[\"email\"]";
-  const channels = parseChannels(channelsRaw);
+  const steps = parseSteps(formData.get("steps") as string);
+
+  if (steps.length === 0) {
+    throw new Error("Mindestens ein Schritt erforderlich");
+  }
+
+  // Derive legacy `channels` JSON from steps so old UIs / stats still work
+  const channelSet = new Set(steps.map((s) => s.channel));
+  const channelsJson = JSON.stringify(Array.from(channelSet));
 
   const campaign = await prisma.campaign.create({
     data: {
       name: formData.get("name") as string,
-      channels: JSON.stringify(channels),
-      // templateAId nur setzen wenn E-Mail-Kanal aktiv ist
-      templateAId: channels.includes("email")
-        ? ((formData.get("templateAId") as string) || null)
-        : null,
-      templateBId: channels.includes("email") ? (templateBId || null) : null,
-      letterTemplateId: (formData.get("letterTemplateId") as string) || null,
+      channels: channelsJson,
       senderId,
       scheduledAt,
-      abSplitRatio: parseInt(formData.get("abSplitRatio") as string || "50"),
       sendRatePerDay: parseInt(formData.get("sendRatePerDay") as string || "50"),
-      followUpEnabled: formData.get("followUpEnabled") === "true",
-      followUpDelayDays: parseInt(formData.get("followUpDelayDays") as string || "3"),
-      followUpTemplateId: (formData.get("followUpTemplateId") as string) || null,
+      // legacy A/B fields kept as null — per-step config is authoritative now
+      templateAId: null,
+      templateBId: null,
+      letterTemplateId: null,
+      abSplitRatio: 50,
+      followUpEnabled: false,
+      followUpDelayDays: 3,
+      followUpTemplateId: null,
     },
   });
 
-  // Assign contacts with A/B variant
-  const abRatio = parseInt(formData.get("abSplitRatio") as string || "50");
-  const shuffled = [...contactIds].sort(() => Math.random() - 0.5);
-  const splitIndex = Math.floor(shuffled.length * (abRatio / 100));
+  // Create the steps
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    await prisma.campaignStep.create({
+      data: {
+        campaignId: campaign.id,
+        order: i,
+        channel: s.channel,
+        triggerType: s.triggerType,
+        delayDays: s.delayDays ?? 0,
+        scheduledAt: s.scheduledAt ? new Date(s.scheduledAt) : null,
+        sendWindow: s.sendWindow || null,
+        maxPerDay: s.maxPerDay,
+        emailTemplateAId: s.emailTemplateAId,
+        emailTemplateBId: s.emailTemplateBId,
+        abSplitRatio: s.abSplitRatio,
+        letterTemplateAId: s.letterTemplateAId,
+        letterTemplateBId: s.letterTemplateBId,
+        letterAbSplitRatio: s.letterAbSplitRatio,
+        letterColor: s.letterColor,
+        callNote: s.callNote,
+      },
+    });
+  }
 
-  for (let i = 0; i < shuffled.length; i++) {
+  // Enrol contacts — every contact starts at step 0
+  for (const contactId of contactIds) {
     await prisma.campaignContact.create({
       data: {
         campaignId: campaign.id,
-        contactId: shuffled[i],
-        variant: templateBId ? (i < splitIndex ? "A" : "B") : "A",
+        contactId,
+        currentStepIndex: 0,
       },
     });
   }
@@ -79,160 +115,21 @@ export async function updateCampaignStatus(campaignId: string, status: string) {
 }
 
 /**
- * Renamed intent: this now queues everything the campaign's `channels`
- * config asks for — emails, letters, and/or call reminders. Kept the
- * "sendCampaignEmails" export name so existing UI buttons keep working.
+ * "Start" a campaign — sets it active. From here the cron picks it up and
+ * evaluates steps per contact. Kept the export name for backward compat
+ * with existing UI buttons.
  */
 export async function sendCampaignEmails(campaignId: string) {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
-    include: {
-      templateA: { include: { signature: true } },
-      templateB: { include: { signature: true } },
-      letterTemplate: { include: { letterSignature: true } },
-      sender: true,
-      campaignContacts: { include: { contact: true } },
-    },
+    include: { steps: true, campaignContacts: true },
   });
-
   if (!campaign) throw new Error("Campaign not found");
 
-  const channels = parseChannels(campaign.channels);
-  const doEmail = channels.includes("email");
-  const doLetter = channels.includes("letter");
-  const doCall = channels.includes("call");
-
-  let queuedEmails = 0;
-  let queuedLetters = 0;
-  let queuedCalls = 0;
-  let skippedNoAddress = 0;
-
-  for (const cc of campaign.campaignContacts) {
-    const contact = cc.contact;
-    // E-Mail-Template nur wenn wir überhaupt einen E-Mail-Kanal haben
-    const emailTemplate = doEmail
-      ? (cc.variant === "B" && campaign.templateB
-          ? campaign.templateB
-          : campaign.templateA)
-      : null;
-
-    const replacements: Record<string, string> = {
-      salutation: contact.salutation || "",
-      first_name: contact.firstName,
-      last_name: contact.lastName,
-      email: contact.email,
-      company: contact.company || "",
-      position: contact.position || "",
-      city: contact.city || "",
-      phone: contact.phone || "",
-      street: contact.street || "",
-      zip_code: contact.zipCode || "",
-    };
-
-    const sub = (s: string) =>
-      Object.entries(replacements).reduce(
-        (acc, [k, v]) => acc.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v),
-        s
-      );
-
-    // ── EMAIL ─────────────────────────────────────────────────────────
-    if (doEmail && emailTemplate) {
-      const subject = sub(emailTemplate.subject);
-      const bodyHtml = sub(emailTemplate.bodyHtml);
-      const signature = sub(emailTemplate.signature?.html ?? "");
-      const fullBodyHtml = signature.trim()
-        ? `${bodyHtml}<div style="margin-top:24px">${signature}</div>`
-        : bodyHtml;
-
-      const already = await prisma.email.findFirst({
-        where: { campaignId, contactId: cc.contactId },
-      });
-      if (!already) {
-        await prisma.email.create({
-          data: {
-            campaignId,
-            contactId: cc.contactId,
-            templateId: emailTemplate.id,
-            variant: cc.variant,
-            subject,
-            body: fullBodyHtml,
-            status: "queued",
-          },
-        });
-        queuedEmails++;
-      }
-    }
-
-    // ── LETTER ────────────────────────────────────────────────────────
-    if (doLetter && campaign.letterTemplate) {
-      // Nur wenn Adresse vollständig ist — sonst nicht queuen (Fehler
-      // beim Rendern des Adressblocks vermeiden).
-      const addressOk = !!(contact.street && contact.zipCode && contact.city);
-      if (!addressOk) {
-        skippedNoAddress++;
-      } else {
-        const already = await prisma.letter.findFirst({
-          where: { campaignId, contactId: cc.contactId },
-        });
-        if (!already) {
-          const lt = campaign.letterTemplate;
-          // Brief-Template hat eigenen subject/body/ps mit ihren eigenen Variablen
-          const lSubject = sub(lt.subject);
-          // Brief-Body: plain-text nach htmlToPlainText, dann Absätze
-          const lBodyText = htmlToPlainText(sub(lt.bodyHtml));
-          const lPs = lt.letterPs ? sub(lt.letterPs) : null;
-          // Store body + ps combined; PDF-Renderer trennt sie wieder
-          const combined = lPs && lPs.trim()
-            ? `${lBodyText}\n\n[P.S.]\n${lPs}`
-            : lBodyText;
-          await prisma.letter.create({
-            data: {
-              campaignId,
-              contactId: cc.contactId,
-              templateId: lt.id,
-              subject: lSubject,
-              body: combined,
-              status: "queued",
-            },
-          });
-          queuedLetters++;
-        }
-      }
-    }
-
-    // ── CALL ──────────────────────────────────────────────────────────
-    if (doCall) {
-      // Simple approach: create a reminder for the campaign owner (or any
-      // active admin) to call this contact. Assigned-to user preferred.
-      const userId = contact.assignedToId
-        ?? (await prisma.user.findFirst({ where: { active: true, role: "admin" } }))?.id
-        ?? (await prisma.user.findFirst({ where: { active: true } }))?.id;
-      if (userId) {
-        const already = await prisma.reminder.findFirst({
-          where: {
-            contactId: cc.contactId,
-            title: { contains: campaign.name },
-          },
-        });
-        if (!already) {
-          const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 1); // fällig morgen
-          await prisma.reminder.create({
-            data: {
-              contactId: cc.contactId,
-              userId,
-              title: `Anruf: ${campaign.name}`,
-              description: `Kampagnen-Anruf gemäß Channel "call" — Betreff: ${subject}`,
-              dueDate,
-            },
-          });
-          queuedCalls++;
-        }
-      }
-    }
+  if (campaign.steps.length === 0) {
+    throw new Error("Diese Kampagne hat keine Schritte — bitte in Bearbeitung ergänzen.");
   }
 
-  // Update campaign status
   await prisma.campaign.update({
     where: { id: campaignId },
     data: { status: "active" },
@@ -241,11 +138,33 @@ export async function sendCampaignEmails(campaignId: string) {
   revalidatePath("/campaigns");
   revalidatePath(`/campaigns/${campaignId}`);
   return {
-    // legacy field for backward compat with the UI:
-    queued: queuedEmails + queuedLetters + queuedCalls,
-    queuedEmails,
-    queuedLetters,
-    queuedCalls,
-    skippedNoAddress,
+    queued: 0, // legacy field kept for UI compat; real work happens in cron
+    contacts: campaign.campaignContacts.length,
+    steps: campaign.steps.length,
   };
+}
+
+/**
+ * Manually stop a specific contact's cadence (e.g. "Kunde geantwortet
+ * per Telefon, keine weiteren Schritte").
+ */
+export async function stopContactCadence(campaignId: string, contactId: string, reason: string = "manual") {
+  await prisma.campaignContact.updateMany({
+    where: { campaignId, contactId, stopped: false },
+    data: { stopped: true, stoppedReason: reason, stoppedAt: new Date() },
+  });
+  revalidatePath(`/campaigns/${campaignId}`);
+  revalidatePath(`/contacts/${contactId}`);
+}
+
+/**
+ * Stop ALL of a contact's active cadences at once — used by the webhook
+ * when a reply comes in.
+ */
+export async function stopAllCadencesForContact(contactId: string, reason: string = "replied") {
+  const res = await prisma.campaignContact.updateMany({
+    where: { contactId, stopped: false },
+    data: { stopped: true, stoppedReason: reason, stoppedAt: new Date() },
+  });
+  return res.count;
 }

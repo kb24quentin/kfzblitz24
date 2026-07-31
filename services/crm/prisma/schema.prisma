@@ -76,14 +76,16 @@ model Reminder {
   id          String   @id @default(cuid())
   contactId   String
   userId      String
+  stepId      String?  // set when created by a CampaignStep (cadence)
   title       String
   description String?
   dueDate     DateTime
   status      String   @default("pending") // pending, done, overdue
   createdAt   DateTime @default(now())
 
-  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id])
+  contact Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id])
+  step    CampaignStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
 }
 
 model Template {
@@ -106,6 +108,10 @@ model Template {
   campaignsB        Campaign[] @relation("TemplateB")
   campaignsFollowUp Campaign[] @relation("FollowUpTemplate")
   campaignsLetter   Campaign[] @relation("LetterTemplate")
+  stepsEmailA       CampaignStep[] @relation("StepEmailA")
+  stepsEmailB       CampaignStep[] @relation("StepEmailB")
+  stepsLetterA      CampaignStep[] @relation("StepLetterA")
+  stepsLetterB      CampaignStep[] @relation("StepLetterB")
   emails            Email[]
   letters           Letter[]
 }
@@ -164,9 +170,78 @@ model Campaign {
   letterTemplate   Template?         @relation("LetterTemplate", fields: [letterTemplateId], references: [id])
   followUpTemplate Template?         @relation("FollowUpTemplate", fields: [followUpTemplateId], references: [id])
   sender           Sender?           @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  steps            CampaignStep[]
   emails           Email[]
   letters          Letter[]
   campaignContacts CampaignContact[]
+}
+
+// A step in a campaign's cadence. Steps execute in `order`, one at a time
+// per contact, with configurable delays and per-channel settings.
+model CampaignStep {
+  id                 String   @id @default(cuid())
+  campaignId         String
+  order              Int      // 0-indexed; 0 = first step
+  channel            String   // "email" | "letter" | "call"
+
+  // Timing
+  triggerType        String   @default("relative")  // "relative" (delayDays after previous step) | "absolute" (scheduledAt)
+  delayDays          Int      @default(0)
+  scheduledAt        DateTime?
+
+  // Send-window constraints (optional). JSON: {days:[0..6], slots:[{from:"HH:MM",to:"HH:MM"}]}
+  // days: 0=Sun..6=Sat. Empty/null sendWindow = anytime.
+  sendWindow         String?
+  maxPerDay          Int?
+
+  // Email
+  emailTemplateAId   String?
+  emailTemplateBId   String?  // optional A/B
+  abSplitRatio       Int?     // % to A (default 50)
+
+  // Letter
+  letterTemplateAId  String?
+  letterTemplateBId  String?
+  letterAbSplitRatio Int?
+  letterColor        String?  // "1" (S/W) | "4" (Farbig) | null = env default
+
+  // Call
+  callNote           String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  campaign           Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  emailTemplateA     Template? @relation("StepEmailA",  fields: [emailTemplateAId],  references: [id], onDelete: SetNull)
+  emailTemplateB     Template? @relation("StepEmailB",  fields: [emailTemplateBId],  references: [id], onDelete: SetNull)
+  letterTemplateA    Template? @relation("StepLetterA", fields: [letterTemplateAId], references: [id], onDelete: SetNull)
+  letterTemplateB    Template? @relation("StepLetterB", fields: [letterTemplateBId], references: [id], onDelete: SetNull)
+
+  emails             Email[]
+  letters            Letter[]
+  reminders          Reminder[]
+  progress           CampaignContactStep[]
+
+  @@unique([campaignId, order])
+  @@index([campaignId])
+}
+
+// Per-contact tracking of step execution — one row per (contact, step)
+// once the step has fired (or been skipped) for that contact.
+model CampaignContactStep {
+  id                String    @id @default(cuid())
+  campaignContactId String
+  stepId            String
+  variant           String?   // "A" | "B" for this specific step
+  executedAt        DateTime?
+  status            String    @default("executed") // executed | skipped
+  skippedReason     String?
+  createdAt         DateTime  @default(now())
+
+  campaignContact   CampaignContact @relation(fields: [campaignContactId], references: [id], onDelete: Cascade)
+  step              CampaignStep    @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignContactId, stepId])
 }
 
 model Letter {
@@ -174,8 +249,11 @@ model Letter {
   campaignId    String?
   contactId     String
   templateId    String?
+  stepId        String?   // set when queued by a CampaignStep (cadence)
+  variant       String?   // "A" | "B" — for per-step letter A/B
   subject       String    // wird als Brief-Betreff verwendet
   body          String    // Plain-Text-Body (nach HTML-Stripping)
+  color         String?   // per-letter override ("1"|"4"); null = env default
   status        String    @default("queued") // queued | sent | done | canceled | failed
   ob24JobId     Int?      // OB24 printjob id
   ob24Mode      String?   // "test" | "live"
@@ -185,20 +263,27 @@ model Letter {
   sentAt        DateTime?
   createdAt     DateTime  @default(now())
 
-  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  template Template? @relation(fields: [templateId], references: [id])
+  campaign Campaign?     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  template Template?     @relation(fields: [templateId], references: [id])
+  step     CampaignStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
 }
 
 model CampaignContact {
-  id         String   @id @default(cuid())
-  campaignId String
-  contactId  String
-  variant    String?
-  createdAt  DateTime @default(now())
+  id                String    @id @default(cuid())
+  campaignId        String
+  contactId         String
+  variant           String?   // legacy: campaign-level variant assignment (kept for old campaigns)
+  currentStepIndex  Int       @default(0)  // next step to process; equals steps.length → completed
+  lastStepAt        DateTime?               // when the last step executed (base for relative-delay)
+  stopped           Boolean   @default(false)
+  stoppedReason     String?   // "replied" | "manual" | "completed" | "migrated"
+  stoppedAt         DateTime?
+  createdAt         DateTime  @default(now())
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  campaign     Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact      Contact               @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  stepProgress CampaignContactStep[]
 
   @@unique([campaignId, contactId])
 }
@@ -208,6 +293,7 @@ model Email {
   campaignId    String?
   contactId     String
   templateId    String?
+  stepId        String?   // set when queued by a CampaignStep (cadence)
   variant       String?
   subject       String
   body          String
@@ -219,9 +305,10 @@ model Email {
   resendEmailId String?
   createdAt     DateTime  @default(now())
 
-  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  template Template? @relation(fields: [templateId], references: [id])
+  campaign Campaign?     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  template Template?     @relation(fields: [templateId], references: [id])
+  step     CampaignStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
   replies  Reply[]
 }
 
